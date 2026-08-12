@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Generated Linux Defragger version. Do not edit this installed file."""
+VERSION = "@LINUX_DEFRAGGER_PACKAGE_VERSION@"

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Desktop Entry]
+Type=Application
+Name=Linux Defragger
+Comment=Analyse filesystems and create packed or growth-reserved layouts
+Exec=linux-defragger
+Icon=io.github.linuxdefragger
+Terminal=false
+Categories=System;Utility;Filesystem;
+Keywords=defrag;defragment;growth;optimise;filesystem;disk;fat;allocation;
+StartupNotify=true

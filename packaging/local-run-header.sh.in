@@ -1,0 +1,125 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Linux Defragger local hardware-optimised compile-and-install program.
+set -eu
+
+PROGRAM='Linux Defragger local compiler'
+APP_VERSION='@APP_VERSION@'
+NATIVE_PACKAGE_VERSION='@NATIVE_PACKAGE_VERSION@'
+PAYLOAD_SHA256='@PAYLOAD_SHA256@'
+
+fail() {
+    printf '%s: %s\n' "$PROGRAM" "$*" >&2
+    exit 1
+}
+
+as_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+[ "$(uname -s)" = Linux ] || fail 'Linux is required.'
+[ "$(uname -m)" = x86_64 ] || fail 'This release supports AMD64/x86-64 machines only.'
+command -v dpkg >/dev/null 2>&1 || fail 'A Debian-compatible system is required.'
+command -v dpkg-query >/dev/null 2>&1 || fail 'dpkg-query is required.'
+command -v apt-get >/dev/null 2>&1 || fail 'APT is required.'
+command -v sha256sum >/dev/null 2>&1 || fail 'sha256sum is required.'
+command -v tar >/dev/null 2>&1 || fail 'tar is required.'
+if [ "$(id -u)" -ne 0 ]; then
+    command -v sudo >/dev/null 2>&1 || fail 'sudo is required when not running as root.'
+fi
+
+ARCH=$(dpkg --print-architecture)
+[ "$ARCH" = amd64 ] || fail "dpkg architecture is $ARCH; amd64 is required."
+
+INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' linux-defragger 2>/dev/null || true)
+if [ -n "$INSTALLED_VERSION" ] && \
+   dpkg --compare-versions "$INSTALLED_VERSION" gt "$NATIVE_PACKAGE_VERSION"; then
+    fail "Installed version $INSTALLED_VERSION is newer than $NATIVE_PACKAGE_VERSION; refusing to downgrade it."
+fi
+
+MISSING=''
+for package in build-essential cmake dpkg-dev python3 python3-gi python3-cairo \
+               gir1.2-gtk-3.0 policykit-1 udisks2 util-linux \
+               libext2fs-dev libsqlite3-dev libssl-dev; do
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | \
+         grep -q '^install ok installed$'; then
+        MISSING="$MISSING $package"
+    fi
+done
+
+if [ -n "$MISSING" ]; then
+    printf '%s\n' 'Installing required build and runtime packages through APT...'
+    as_root apt-get update
+    # Package names above are fixed by this signed release script.
+    # shellcheck disable=SC2086
+    as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y $MISSING
+fi
+
+for command_name in cmake gcc make dpkg-deb; do
+    command -v "$command_name" >/dev/null 2>&1 || \
+        fail "$command_name is unavailable after dependency installation."
+done
+
+PAYLOAD_LINE=$(awk '/^__LINUX_DEFRAGGER_PAYLOAD_BELOW__$/ { print NR + 1; exit }' "$0")
+[ -n "$PAYLOAD_LINE" ] || fail 'Embedded source marker is missing.'
+ACTUAL_SHA256=$(tail -n +"$PAYLOAD_LINE" "$0" | sha256sum | awk '{print $1}')
+[ "$ACTUAL_SHA256" = "$PAYLOAD_SHA256" ] || fail 'Embedded source checksum is invalid.'
+
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-native.XXXXXX")
+cleanup() {
+    case "$WORK" in
+        "${TMPDIR:-/tmp}"/linux-defragger-native.*) rm -rf -- "$WORK" ;;
+    esac
+}
+trap cleanup EXIT HUP INT TERM
+
+tail -n +"$PAYLOAD_LINE" "$0" | tar -xzf - -C "$WORK"
+SOURCE="$WORK/linux-defragger-$APP_VERSION"
+[ -f "$SOURCE/VERSION" ] || fail 'Embedded source did not extract correctly.'
+[ "$(tr -d '\r\n' <"$SOURCE/VERSION")" = "$APP_VERSION" ] || \
+    fail 'Embedded source version does not match the installer.'
+
+JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '2')
+case "$JOBS" in
+    ''|*[!0-9]*) JOBS=2 ;;
+esac
+[ "$JOBS" -gt 0 ] || JOBS=2
+
+BUILD="$WORK/native-build"
+PACKAGE="$WORK/linux-defragger_${NATIVE_PACKAGE_VERSION}_amd64.deb"
+printf 'Compiling Linux Defragger %s for this machine with -march=native and -mtune=native...\n' \
+    "$APP_VERSION"
+env LD_BUILD_FLAVOR=native \
+    LD_BUILD_TESTING=OFF \
+    DEB_PACKAGE_VERSION="$NATIVE_PACKAGE_VERSION" \
+    BUILD_DIR="$BUILD" \
+    OUTPUT_PATH="$PACKAGE" \
+    BUILD_JOBS="$JOBS" \
+    "$SOURCE/packaging/build-deb.sh"
+
+[ "$(dpkg-deb -f "$PACKAGE" Package)" = linux-defragger ] || \
+    fail 'Compiled package identity is invalid.'
+[ "$(dpkg-deb -f "$PACKAGE" Version)" = "$NATIVE_PACKAGE_VERSION" ] || \
+    fail 'Compiled package version is invalid.'
+[ "$(dpkg-deb -f "$PACKAGE" Architecture)" = amd64 ] || \
+    fail 'Compiled package architecture is invalid.'
+[ "$(dpkg-deb -f "$PACKAGE" X-Linux-Defragger-Build)" = native ] || \
+    fail 'Compiled package is not marked as a native build.'
+
+printf '%s\n' 'Installing the locally compiled package through dpkg...'
+as_root dpkg --install "$PACKAGE"
+
+FINAL_VERSION=$(dpkg-query -W -f='${Version}' linux-defragger 2>/dev/null || true)
+[ "$FINAL_VERSION" = "$NATIVE_PACKAGE_VERSION" ] || \
+    fail 'Package installation could not be verified.'
+
+printf '\nLinux Defragger %s is installed.\n' "$FINAL_VERSION"
+printf '%s\n' 'The native package replaced the generic package in Debian package management.'
+printf '%s\n' 'A later Linux Defragger release can upgrade it normally through APT.'
+exit 0
+
+__LINUX_DEFRAGGER_PAYLOAD_BELOW__

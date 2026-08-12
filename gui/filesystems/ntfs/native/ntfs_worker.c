@@ -1,0 +1,648 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "ntfs_native.h"
+
+#include "ld_device.h"
+#include "ld_io.h"
+#include "ld_runtime.h"
+#include "ld_stop.h"
+#include "version.h"
+
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <sys/sysmacros.h>
+#include <unistd.h>
+
+#define PROGRAM_NAME "linux-defragger-ntfs-worker"
+#define JOURNAL_MAGIC "LINUX-DEFRAGGER-NTFS-JOURNAL-1"
+#define JOURNAL_CLUSTER_INTERVAL UINT64_C(16384)
+
+typedef struct {
+    char *device;
+    char *target_identity;
+    char serial[17];
+    char operation[24];
+    char phase[32];
+    char *stage;
+    char *plan;
+    uint64_t physical_bytes;
+    uint64_t filesystem_bytes;
+    uint64_t commit_cluster;
+    uint64_t move_clusters;
+} NtfsJournal;
+
+static void usage(FILE *stream) {
+    fprintf(stream,
+            "Usage:\n"
+            "  %s --version\n"
+            "  %s identify DEVICE\n"
+            "  %s analyse-json DEVICE\n"
+            "  %s defrag|growth-defrag|recover DEVICE --write --confirm DEVICE --journal PATH [--live-updates]\n",
+            PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME);
+}
+
+static void emit_result(const char *operation, const char *status, const char *message) {
+    printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"%s\"}\n",
+           operation, status, message == NULL ? "" : message);
+    fflush(stdout);
+}
+
+static char *append_suffix(const char *base, const char *suffix) {
+    size_t a = strlen(base), b = strlen(suffix);
+    char *result = ld_xmalloc(a + b + 1U);
+    memcpy(result, base, a);
+    memcpy(result + a, suffix, b + 1U);
+    return result;
+}
+
+static char *parent_directory(const char *path) {
+    char *copy = ld_xstrdup(path);
+    char *slash = strrchr(copy, '/');
+    if (slash == NULL) { free(copy); return ld_xstrdup("."); }
+    if (slash == copy) slash[1] = '\0'; else *slash = '\0';
+    return copy;
+}
+
+static int ensure_directory_tree(const char *path, char **error) {
+    char *copy = ld_xstrdup(path);
+    size_t length = strlen(copy);
+    for (size_t i = 1; i <= length; ++i) {
+        if (copy[i] != '/' && copy[i] != '\0') continue;
+        char saved = copy[i]; copy[i] = '\0';
+        if (copy[0] != '\0' && mkdir(copy, 0700) != 0 && errno != EEXIST) {
+            ntfs_set_error(error, "cannot create NTFS journal directory %s: %s", copy, strerror(errno));
+            free(copy); return -1;
+        }
+        copy[i] = saved;
+    }
+    free(copy); return 0;
+}
+
+static void fsync_parent(const char *path) {
+    char *parent = parent_directory(path);
+    int fd = open(parent, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd >= 0) { (void)fsync(fd); (void)close(fd); }
+    free(parent);
+}
+
+static void unlink_if_exists(const char *path) {
+    if (path == NULL || *path == '\0') return;
+    if (unlink(path) != 0 && errno != ENOENT)
+        fprintf(stderr, "%s: warning: cannot remove %s: %s\n", PROGRAM_NAME, path, strerror(errno));
+}
+
+static void journal_free(NtfsJournal *state) {
+    if (state == NULL) return;
+    free(state->device); free(state->target_identity); free(state->stage); free(state->plan);
+    memset(state, 0, sizeof(*state));
+}
+
+static bool safe_journal_value(const char *value) {
+    return value != NULL && strchr(value, '\n') == NULL && strchr(value, '\r') == NULL && strchr(value, '=') == NULL;
+}
+
+static int journal_save(const char *path, const NtfsJournal *state, char **error) {
+    if (!safe_journal_value(state->device) || !safe_journal_value(state->target_identity) ||
+        !safe_journal_value(state->stage) || !safe_journal_value(state->plan)) {
+        ntfs_set_error(error, "NTFS transaction paths contain unsupported journal characters");
+        return -1;
+    }
+    char *parent = parent_directory(path);
+    if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
+    free(parent);
+    char *temporary = append_suffix(path, ".tmp");
+    FILE *file = fopen(temporary, "w");
+    if (file == NULL) {
+        ntfs_set_error(error, "cannot create NTFS journal: %s", strerror(errno));
+        free(temporary); return -1;
+    }
+    fprintf(file, "%s\n", JOURNAL_MAGIC);
+    fprintf(file, "device=%s\n", state->device);
+    fprintf(file, "target_identity=%s\n", state->target_identity);
+    fprintf(file, "serial=%s\n", state->serial);
+    fprintf(file, "operation=%s\n", state->operation);
+    fprintf(file, "phase=%s\n", state->phase);
+    fprintf(file, "stage=%s\n", state->stage);
+    fprintf(file, "plan=%s\n", state->plan);
+    fprintf(file, "physical_bytes=%" PRIu64 "\n", state->physical_bytes);
+    fprintf(file, "filesystem_bytes=%" PRIu64 "\n", state->filesystem_bytes);
+    fprintf(file, "commit_cluster=%" PRIu64 "\n", state->commit_cluster);
+    fprintf(file, "move_clusters=%" PRIu64 "\n", state->move_clusters);
+    if (fflush(file) != 0 || fsync(fileno(file)) != 0 || fclose(file) != 0) {
+        ntfs_set_error(error, "cannot sync NTFS journal: %s", strerror(errno));
+        unlink_if_exists(temporary); free(temporary); return -1;
+    }
+    if (rename(temporary, path) != 0) {
+        ntfs_set_error(error, "cannot publish NTFS journal: %s", strerror(errno));
+        unlink_if_exists(temporary); free(temporary); return -1;
+    }
+    free(temporary); fsync_parent(path); return 0;
+}
+
+static char *value_copy(const char *value) {
+    size_t length = strlen(value);
+    while (length != 0 && (value[length - 1] == '\n' || value[length - 1] == '\r')) length--;
+    return ld_xstrndup(value, length);
+}
+
+static int parse_u64(const char *text, uint64_t *value) {
+    errno = 0; char *end = NULL;
+    unsigned long long parsed = strtoull(text, &end, 10);
+    if (errno != 0 || end == text || (*end != '\0' && *end != '\n' && *end != '\r')) return -1;
+    *value = (uint64_t)parsed; return 0;
+}
+
+static int journal_load(const char *path, NtfsJournal *state, char **error) {
+    memset(state, 0, sizeof(*state));
+    FILE *file = fopen(path, "r");
+    if (file == NULL) { ntfs_set_error(error, "cannot open NTFS recovery journal: %s", strerror(errno)); return -1; }
+    char *line = NULL; size_t capacity = 0;
+    if (getline(&line, &capacity, file) < 0) goto invalid;
+    line[strcspn(line, "\r\n")] = '\0';
+    if (strcmp(line, JOURNAL_MAGIC) != 0) goto invalid;
+    while (getline(&line, &capacity, file) >= 0) {
+        char *equals = strchr(line, '='); if (equals == NULL) goto invalid;
+        *equals++ = '\0'; equals[strcspn(equals, "\r\n")] = '\0';
+        if (strcmp(line, "device") == 0) { free(state->device); state->device = value_copy(equals); }
+        else if (strcmp(line, "target_identity") == 0) { free(state->target_identity); state->target_identity = value_copy(equals); }
+        else if (strcmp(line, "serial") == 0) snprintf(state->serial, sizeof(state->serial), "%s", equals);
+        else if (strcmp(line, "operation") == 0) snprintf(state->operation, sizeof(state->operation), "%s", equals);
+        else if (strcmp(line, "phase") == 0) snprintf(state->phase, sizeof(state->phase), "%s", equals);
+        else if (strcmp(line, "stage") == 0) { free(state->stage); state->stage = value_copy(equals); }
+        else if (strcmp(line, "plan") == 0) { free(state->plan); state->plan = value_copy(equals); }
+        else if (strcmp(line, "physical_bytes") == 0 && parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
+        else if (strcmp(line, "filesystem_bytes") == 0 && parse_u64(equals, &state->filesystem_bytes) != 0) goto invalid;
+        else if (strcmp(line, "commit_cluster") == 0 && parse_u64(equals, &state->commit_cluster) != 0) goto invalid;
+        else if (strcmp(line, "move_clusters") == 0 && parse_u64(equals, &state->move_clusters) != 0) goto invalid;
+    }
+    free(line); fclose(file);
+    if (state->device == NULL || state->target_identity == NULL || state->stage == NULL || state->plan == NULL ||
+        state->serial[0] == '\0' || state->operation[0] == '\0' || state->phase[0] == '\0' ||
+        state->physical_bytes == 0 || state->filesystem_bytes == 0) goto invalid_state;
+    return 0;
+invalid:
+    free(line); fclose(file);
+invalid_state:
+    journal_free(state); ntfs_set_error(error, "NTFS recovery journal is malformed or incomplete"); return -1;
+}
+
+static int journal_phase(const char *path, NtfsJournal *state, const char *phase, char **error) {
+    snprintf(state->phase, sizeof(state->phase), "%s", phase);
+    return journal_save(path, state, error);
+}
+
+static void transaction_cleanup(const char *journal, const NtfsJournal *state) {
+    if (state != NULL) {
+        unlink_if_exists(state->stage); unlink_if_exists(state->plan);
+        if (state->plan != NULL) {
+            char *wal = append_suffix(state->plan, "-wal");
+            char *shm = append_suffix(state->plan, "-shm");
+            unlink_if_exists(wal); unlink_if_exists(shm); free(wal); free(shm);
+        }
+    }
+    unlink_if_exists(journal); fsync_parent(journal);
+}
+
+static void serial_hex(const uint8_t serial[8], char output[17]) {
+    static const char digits[] = "0123456789abcdef";
+    for (size_t i = 0; i < 8U; ++i) {
+        output[i * 2U] = digits[serial[i] >> 4];
+        output[i * 2U + 1U] = digits[serial[i] & 15U];
+    }
+    output[16] = '\0';
+}
+
+static bool same_serial(const NtfsVolume *volume, const char *serial) {
+    char current[17]; serial_hex(volume->serial, current); return strcmp(current, serial) == 0;
+}
+
+static char *canonical_path(const char *path, char **error) {
+    char *resolved = realpath(path, NULL);
+    if (resolved == NULL) ntfs_set_error(error, "cannot resolve NTFS target %s: %s", path, strerror(errno));
+    return resolved;
+}
+
+static int target_identity(const char *path, char **identity, uint64_t *size, char **error) {
+    struct stat status;
+    if (stat(path, &status) != 0) { ntfs_set_error(error, "cannot stat NTFS target: %s", strerror(errno)); return -1; }
+    if (!S_ISBLK(status.st_mode) && !S_ISREG(status.st_mode)) {
+        ntfs_set_error(error, "NTFS target is not a block device or regular image"); return -1;
+    }
+    char text[160];
+    if (S_ISBLK(status.st_mode)) snprintf(text, sizeof(text), "block:%u:%u", major(status.st_rdev), minor(status.st_rdev));
+    else snprintf(text, sizeof(text), "file:%llu:%llu", (unsigned long long)status.st_dev, (unsigned long long)status.st_ino);
+    *identity = ld_xstrdup(text);
+    if (S_ISBLK(status.st_mode)) {
+        LdDevice target = ld_device_open(path, false);
+        if (target.fd < 0 || target.size_bytes == 0) {
+            ld_device_close(&target);
+            free(*identity);
+            *identity = NULL;
+            ntfs_set_error(error, "cannot read NTFS block-device size");
+            return -1;
+        }
+        *size = target.size_bytes;
+        ld_device_close(&target);
+    } else {
+        *size = (uint64_t)status.st_size;
+    }
+    return 0;
+}
+
+static int capacity_preflight(const char *journal_path, const NtfsVolume *volume,
+                              const NtfsLayout *layout, char **error) {
+    char *parent = parent_directory(journal_path); struct statvfs info;
+    if (statvfs(parent, &info) != 0) {
+        ntfs_set_error(error, "cannot inspect NTFS staging capacity: %s", strerror(errno)); free(parent); return -1;
+    }
+    free(parent);
+    uint64_t used = 0;
+    for (uint64_t c = 0; c < volume->total_clusters; ++c) if (ntfs_bitmap_bit(layout, c)) used++;
+    uint64_t available = (uint64_t)info.f_bavail * (uint64_t)info.f_frsize;
+    uint64_t stage_bytes = used * volume->cluster_size;
+    uint64_t plan_bytes = used > UINT64_MAX / 80U ? UINT64_MAX : used * 80U;
+    if (plan_bytes <= UINT64_MAX - (64U * 1024U * 1024U)) plan_bytes += 64U * 1024U * 1024U;
+    uint64_t required = stage_bytes > UINT64_MAX - plan_bytes ? UINT64_MAX : stage_bytes + plan_bytes;
+    required += required / 20U;
+    if (available < required) {
+        ntfs_set_error(error, "NTFS safe staging has only %llu MB available; approximately %llu MB is required",
+                       (unsigned long long)(available / (1024U * 1024U)),
+                       (unsigned long long)(required / (1024U * 1024U)));
+        return -1;
+    }
+    return 0;
+}
+
+static int copy_cluster(int source, int target, uint32_t cluster_size, uint64_t cluster,
+                        uint8_t *buffer, char **error) {
+    uint64_t offset = cluster * (uint64_t)cluster_size;
+    ssize_t got = ld_pread_full(source, buffer, cluster_size, offset);
+    if (got < 0 || (size_t)got != cluster_size) { ntfs_set_error(error, "short read cloning NTFS working image"); return -1; }
+    ssize_t wrote = ld_pwrite_full(target, buffer, cluster_size, offset);
+    if (wrote < 0 || (size_t)wrote != cluster_size) { ntfs_set_error(error, "short write cloning NTFS working image"); return -1; }
+    return 0;
+}
+
+static int create_stage(const char *source_path, const char *stage_path,
+                        const NtfsVolume *source, const NtfsLayout *layout, char **error) {
+    int input = open(source_path, O_RDONLY | O_CLOEXEC);
+    if (input < 0) { ntfs_set_error(error, "cannot open NTFS source for staging: %s", strerror(errno)); return -1; }
+    int output = open(stage_path, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    if (output < 0) { close(input); ntfs_set_error(error, "cannot create NTFS working image: %s", strerror(errno)); return -1; }
+    if (ftruncate(output, (off_t)source->volume_bytes) != 0) {
+        ntfs_set_error(error, "cannot size NTFS working image: %s", strerror(errno));
+        close(input); close(output); unlink_if_exists(stage_path); return -1;
+    }
+    uint8_t *buffer = ld_xmalloc(source->cluster_size); uint64_t copied = 0;
+    for (uint64_t cluster = 0; cluster < source->total_clusters; ++cluster) {
+        bool needed = ntfs_bitmap_bit(layout, cluster) != 0 || cluster == 0 || cluster + 1U == source->total_clusters;
+        if (!needed) continue;
+        if (copy_cluster(input, output, source->cluster_size, cluster, buffer, error) != 0) {
+            free(buffer); close(input); close(output); unlink_if_exists(stage_path); return -1;
+        }
+        copied++;
+        if ((copied % 8192U) == 0U && ld_stop_requested()) {
+            free(buffer); close(input); close(output); unlink_if_exists(stage_path); return -2;
+        }
+    }
+    free(buffer);
+    if (fsync(output) != 0) {
+        ntfs_set_error(error, "cannot sync NTFS working image: %s", strerror(errno));
+        close(input); close(output); unlink_if_exists(stage_path); return -1;
+    }
+    close(input); close(output); return 0;
+}
+
+static int check_unchanged_target(const char *device, const NtfsJournal *state, char **error) {
+    char *identity = NULL; uint64_t size = 0;
+    if (target_identity(device, &identity, &size, error) != 0) return -1;
+    int result = 0;
+    if (strcmp(identity, state->target_identity) != 0 || size != state->physical_bytes) {
+        ntfs_set_error(error, "NTFS target identity or capacity changed before source commit"); result = -1;
+    }
+    free(identity); if (result != 0) return result;
+    NtfsVolume volume;
+    if (ntfs_open_volume(device, false, &volume, error) != 0) return -1;
+    if (!same_serial(&volume, state->serial) || volume.volume_bytes != state->filesystem_bytes) {
+        ntfs_set_error(error, "NTFS serial or filesystem capacity changed before source commit"); result = -1;
+    }
+    ntfs_close_volume(&volume); return result;
+}
+
+static int mark_source_dirty(const char *device, char **error) {
+    NtfsVolume volume; NtfsLayout layout;
+    if (ntfs_open_volume(device, true, &volume, error) != 0) return -1;
+    if (ntfs_read_layout(&volume, false, &layout, error) != 0) { ntfs_close_volume(&volume); return -1; }
+    int result = ntfs_set_volume_dirty(&volume, &layout, true, error);
+    ntfs_layout_free(&layout); ntfs_close_volume(&volume); return result;
+}
+
+static int clear_source_dirty(const char *device, char **error) {
+    NtfsVolume volume; NtfsLayout layout;
+    if (ntfs_open_volume(device, true, &volume, error) != 0) return -1;
+    if (ntfs_read_layout(&volume, true, &layout, error) != 0) { ntfs_close_volume(&volume); return -1; }
+    int result = ntfs_set_volume_dirty(&volume, &layout, false, error);
+    ntfs_layout_free(&layout); ntfs_close_volume(&volume); return result;
+}
+
+static int commit_stage(const char *device, const char *journal_path, NtfsJournal *state,
+                        uint64_t resume_cluster, char **error) {
+    NtfsVolume stage; NtfsLayout layout;
+    if (ntfs_open_volume(state->stage, false, &stage, error) != 0) return -1;
+    if (ntfs_read_layout(&stage, true, &layout, error) != 0) { ntfs_close_volume(&stage); return -1; }
+    int source = open(device, O_RDWR | O_CLOEXEC);
+    if (source < 0) { ntfs_set_error(error, "cannot open NTFS source for persistent commit: %s", strerror(errno)); goto fail_no_source; }
+    if (flock(source, LOCK_EX | LOCK_NB) != 0) {
+        ntfs_set_error(error, "cannot lock NTFS source for persistent commit: %s", strerror(errno)); close(source); goto fail_no_source;
+    }
+    uint8_t *buffer = ld_xmalloc(stage.cluster_size); uint64_t copied = 0, total = 0;
+    for (uint64_t c = resume_cluster; c < stage.total_clusters; ++c)
+        if (ntfs_bitmap_bit(&layout, c) != 0 || c == 0 || c + 1U == stage.total_clusters) total++;
+    for (uint64_t c = resume_cluster; c < stage.total_clusters; ++c) {
+        bool needed = ntfs_bitmap_bit(&layout, c) != 0 || c == 0 || c + 1U == stage.total_clusters;
+        if (!needed) continue;
+        uint64_t offset = c * (uint64_t)stage.cluster_size;
+        ssize_t got = ld_pread_full(stage.fd, buffer, stage.cluster_size, offset);
+        if (got < 0 || (size_t)got != stage.cluster_size) { ntfs_set_error(error, "short read from verified NTFS working image"); goto fail; }
+        ssize_t wrote = ld_pwrite_full(source, buffer, stage.cluster_size, offset);
+        if (wrote < 0 || (size_t)wrote != stage.cluster_size) { ntfs_set_error(error, "short write during NTFS source commit"); goto fail; }
+        copied++; state->commit_cluster = c + 1U;
+        if ((copied % JOURNAL_CLUSTER_INTERVAL) == 0U) {
+            if (fsync(source) != 0) { ntfs_set_error(error, "syncing NTFS source commit failed: %s", strerror(errno)); goto fail; }
+            if (journal_save(journal_path, state, error) != 0) goto fail;
+            unsigned percent = total == 0 ? 100U : (unsigned)((copied * 100U) / total);
+            printf("NTFS source commit: %u%%\n", percent); fflush(stdout);
+        }
+    }
+    if (fsync(source) != 0) { ntfs_set_error(error, "syncing NTFS source commit failed: %s", strerror(errno)); goto fail; }
+    if (journal_save(journal_path, state, error) != 0) goto fail;
+    free(buffer); (void)flock(source, LOCK_UN); close(source);
+    ntfs_layout_free(&layout); ntfs_close_volume(&stage); return 0;
+fail:
+    free(buffer); (void)flock(source, LOCK_UN); close(source);
+fail_no_source:
+    ntfs_layout_free(&layout); ntfs_close_volume(&stage); return -1;
+}
+
+static void emit_bitmap_ranges(const NtfsLayout *layout, uint64_t total, bool want_free) {
+    bool active = false, first = true; uint64_t start = 0; putchar('[');
+    for (uint64_t c = 0; c < total; ++c) {
+        bool matches = (ntfs_bitmap_bit(layout, c) == 0) == want_free;
+        if (matches && !active) { active = true; start = c; }
+        else if (!matches && active) {
+            if (!first) putchar(',');
+            printf("[%" PRIu64 ",%" PRIu64 "]", start, c);
+            first = false; active = false;
+        }
+    }
+    if (active) {
+        if (!first) putchar(',');
+        printf("[%" PRIu64 ",%" PRIu64 "]", start, total);
+    }
+    putchar(']');
+}
+
+static void emit_stream_ranges(const NtfsCatalogue *catalogue, bool directories, bool fragmented_only) {
+    bool first = true; putchar('[');
+    for (size_t i = 0; i < catalogue->count; ++i) {
+        const NtfsStream *stream = &catalogue->items[i];
+        if (stream->directory != directories) continue;
+        if (fragmented_only && ntfs_fragment_count(&stream->runs) <= 1U) continue;
+        for (size_t r = 0; r < stream->runs.count; ++r) {
+            NtfsRun run = stream->runs.items[r]; if (run.sparse || run.length == 0) continue;
+            if (!first) putchar(',');
+            printf("[%" PRIu64 ",%" PRIu64 "]", run.lcn, run.lcn + run.length);
+            first = false;
+        }
+    }
+    putchar(']');
+}
+
+static int analyse_json(const char *path, char **error) {
+    NtfsVolume volume; NtfsLayout layout; NtfsCatalogue catalogue;
+    if (ntfs_open_volume(path, false, &volume, error) != 0) return -1;
+    if (ntfs_read_layout(&volume, true, &layout, error) != 0) { ntfs_close_volume(&volume); return -1; }
+    if (ntfs_scan_catalogue(&volume, &layout, &catalogue, error) != 0) {
+        ntfs_layout_free(&layout); ntfs_close_volume(&volume); return -1;
+    }
+    char serial[17]; serial_hex(volume.serial, serial);
+    double percentage = catalogue.regular_files == 0 ? 0.0 :
+        (double)catalogue.fragmented_files * 100.0 / (double)catalogue.regular_files;
+    printf("{\"filesystem\":\"ntfs\",\"cluster_size\":%u,\"total_clusters\":%" PRIu64
+           ",\"serial\":\"%s\",\"mft_records_scanned\":%" PRIu64
+           ",\"mft_malformed_records\":%" PRIu64 ",\"regular_files\":%" PRIu64
+           ",\"directories\":%" PRIu64 ",\"fragmented_files\":%" PRIu64
+           ",\"fragmented_directories\":%" PRIu64 ",\"fragmentation_percent\":%.6f"
+           ",\"growth_10_satisfied\":%s,\"hibernation_active\":%s,\"free_ranges\":",
+           volume.cluster_size, volume.total_clusters, serial, catalogue.records_scanned,
+           catalogue.malformed_records, catalogue.regular_files, catalogue.directories,
+           catalogue.fragmented_files, catalogue.fragmented_directories, percentage,
+           catalogue.growth_10_satisfied ? "true" : "false", catalogue.hibernation_active ? "true" : "false");
+    emit_bitmap_ranges(&layout, volume.total_clusters, true);
+    fputs(",\"fragmented_ranges\":", stdout); emit_stream_ranges(&catalogue, false, true);
+    fputs(",\"directory_ranges\":", stdout); emit_stream_ranges(&catalogue, true, false);
+    fputs("}\n", stdout);
+    ntfs_catalogue_free(&catalogue); ntfs_layout_free(&layout); ntfs_close_volume(&volume); return 0;
+}
+
+static void emit_live_reset(const NtfsVolume *volume, const NtfsLayout *layout) {
+    printf("@@LIVE_RESET {\"filesystem\":\"ntfs\",\"block_size\":%u,\"total_blocks\":%" PRIu64 ",\"free_ranges\":",
+           volume->cluster_size, volume->total_clusters);
+    emit_bitmap_ranges(layout, volume->total_clusters, true);
+    fputs("}\n", stdout); fflush(stdout);
+}
+
+static int build_and_commit(const char *device, const char *operation, const char *journal_path,
+                            bool live_updates, char **error) {
+    int result = 1; char *real = NULL, *identity = NULL; uint64_t physical_bytes = 0;
+    NtfsVolume source; NtfsLayout source_layout; NtfsCatalogue source_catalogue;
+    memset(&source, 0, sizeof(source)); source.fd = -1; memset(&source_layout, 0, sizeof(source_layout)); memset(&source_catalogue, 0, sizeof(source_catalogue));
+    NtfsJournal state; memset(&state, 0, sizeof(state)); sqlite3 *db = NULL;
+    NtfsPlacementVec placements = {0}; NtfsVolume staged; NtfsLayout staged_layout; NtfsCatalogue staged_catalogue;
+    memset(&staged,0,sizeof(staged)); staged.fd = -1; memset(&staged_layout,0,sizeof(staged_layout)); memset(&staged_catalogue,0,sizeof(staged_catalogue));
+
+    real = canonical_path(device, error); if (real == NULL) goto done;
+    if (target_identity(device, &identity, &physical_bytes, error) != 0) goto done;
+    if (ntfs_open_volume(device, false, &source, error) != 0) goto done;
+    if (ntfs_read_layout(&source, false, &source_layout, error) != 0) goto done;
+    if (ntfs_scan_catalogue(&source, &source_layout, &source_catalogue, error) != 0) goto done;
+    if (source_catalogue.malformed_records != 0) { ntfs_set_error(error, "NTFS contains malformed MFT records; refusing mutation"); goto done; }
+    if (source_catalogue.hibernation_active) { ntfs_set_error(error, "NTFS hibernation image is active; resume and shut down Windows fully first"); goto done; }
+    state.device = ld_xstrdup(real); state.target_identity = ld_xstrdup(identity); serial_hex(source.serial, state.serial);
+    snprintf(state.operation, sizeof(state.operation), "%s", operation); snprintf(state.phase, sizeof(state.phase), "prepared");
+    state.stage = append_suffix(journal_path, ".ntfs-stage.img"); state.plan = append_suffix(journal_path, ".ntfs-plan.sqlite");
+    state.physical_bytes = physical_bytes; state.filesystem_bytes = source.volume_bytes;
+    if (capacity_preflight(journal_path, &source, &source_layout, error) != 0 || journal_save(journal_path, &state, error) != 0) goto precommit_fail;
+    printf("Raw userspace native-C NTFS engine %s\n", LD_VERSION); fflush(stdout);
+    if (ld_stop_requested()) goto stopped;
+    if (journal_phase(journal_path, &state, "cloning", error) != 0) goto precommit_fail;
+    int clone_result = create_stage(device, state.stage, &source, &source_layout, error);
+    if (clone_result == -2 || ld_stop_requested()) goto stopped;
+    if (clone_result != 0) goto precommit_fail;
+
+    if (ntfs_open_volume(state.stage, true, &staged, error) != 0) goto precommit_fail;
+    if (ntfs_read_layout(&staged, false, &staged_layout, error) != 0) goto precommit_fail;
+    if (ntfs_scan_catalogue(&staged, &staged_layout, &staged_catalogue, error) != 0) goto precommit_fail;
+    if (journal_phase(journal_path, &state, "planning", error) != 0) goto precommit_fail;
+    bool growth = strcmp(operation, "growth-defrag") == 0;
+    if (ntfs_plan_layout(&staged_layout, &staged_catalogue, staged.total_clusters, growth, &placements, error) != 0) {
+        if (error != NULL && *error != NULL && strstr(*error, "no supported movable") != NULL &&
+            staged_catalogue.fragmented_files == 0 && staged_catalogue.fragmented_directories == 0 &&
+            (!growth || staged_catalogue.growth_10_satisfied)) {
+            free(*error); *error = NULL; transaction_cleanup(journal_path, &state);
+            puts("Not needed; canonical NTFS layout already verified."); emit_result(operation, "not-needed", ""); result = 0; goto done;
+        }
+        goto precommit_fail;
+    }
+    if (ntfs_create_plan_db(state.plan, &staged, &staged_layout, &staged_catalogue, &placements, growth, &db, error) != 0) goto precommit_fail;
+    state.move_clusters = ntfs_plan_move_count(db, error);
+    if (error != NULL && *error != NULL) goto precommit_fail;
+    uint32_t stage_cluster_size = staged.cluster_size;
+    ntfs_catalogue_free(&staged_catalogue);
+    ntfs_layout_free(&staged_layout);
+    ntfs_close_volume(&staged);
+    if (journal_phase(journal_path, &state, "arranging", error) != 0) goto precommit_fail;
+    printf("Arranging %zu supported NTFS streams; %" PRIu64 " clusters require relocation.\n", placements.count, state.move_clusters);
+    if (placements.fixed_streams != 0)
+        printf("Preserving %" PRIu64 " unsupported-but-safe NTFS user stream%s in place as fixed allocation obstacle%s.\n",
+               placements.fixed_streams, placements.fixed_streams == 1U ? "" : "s",
+               placements.fixed_streams == 1U ? "" : "s");
+    if (placements.fixed_slack_clusters != 0)
+        printf("NTFS fixed allocations leave %" PRIu64 " unavoidable low-address free cluster%s too small to fill with complete movable streams; preserving them.\n",
+               placements.fixed_slack_clusters, placements.fixed_slack_clusters == 1U ? "" : "s");
+    fflush(stdout);
+    if (ntfs_permute_stage(state.stage, db, stage_cluster_size, state.move_clusters, error) != 0) {
+        if (ld_stop_requested()) goto stopped;
+        goto precommit_fail;
+    }
+    if (ntfs_apply_stage_metadata(state.stage, db, error) != 0) goto precommit_fail;
+    if (journal_phase(journal_path, &state, "verifying-stage", error) != 0 ||
+        ntfs_verify_stage(state.stage, db, growth, false, error) != 0) goto precommit_fail;
+    if (ld_stop_requested()) goto stopped;
+    if (check_unchanged_target(device, &state, error) != 0) goto precommit_fail;
+    if (mark_source_dirty(device, error) != 0) goto precommit_fail;
+    state.commit_cluster = 0;
+    if (journal_phase(journal_path, &state, "commit", error) != 0) goto commit_fail;
+    puts("The internally verified raw NTFS working image is complete. Starting the persistent source commit."); fflush(stdout);
+    if (commit_stage(device, journal_path, &state, 0, error) != 0) goto commit_fail;
+    if (journal_phase(journal_path, &state, "verifying-source", error) != 0) goto commit_fail;
+    if (ntfs_verify_stage(device, db, growth, true, error) != 0) goto commit_fail;
+    if (clear_source_dirty(device, error) != 0) goto commit_fail;
+    if (live_updates) {
+        NtfsVolume committed; NtfsLayout committed_layout;
+        if (ntfs_open_volume(device,false,&committed,error)==0 && ntfs_read_layout(&committed,false,&committed_layout,error)==0) {
+            emit_live_reset(&committed,&committed_layout); ntfs_layout_free(&committed_layout); ntfs_close_volume(&committed);
+        }
+    }
+    transaction_cleanup(journal_path, &state);
+    printf("NTFS %s completed with serial and full device capacity preserved.\n", growth ? "Growth Defrag" : "Defragment");
+    emit_result(operation, ld_stop_requested() ? "stopped" : "completed", ""); result = ld_stop_requested() ? 130 : 0; goto done;
+stopped:
+    transaction_cleanup(journal_path, &state); puts("Stop requested before source commit; the original NTFS filesystem is unchanged.");
+    emit_result(operation, "stopped", ""); result = 130; goto done;
+precommit_fail:
+    transaction_cleanup(journal_path, &state); goto done;
+commit_fail:
+    /* The dirty source, verified stage and journal are deliberately retained for Recover. */
+    goto done;
+done:
+    if (db != NULL) sqlite3_close(db);
+    ntfs_placements_free(&placements);
+    ntfs_catalogue_free(&staged_catalogue); ntfs_layout_free(&staged_layout); ntfs_close_volume(&staged);
+    ntfs_catalogue_free(&source_catalogue); ntfs_layout_free(&source_layout); ntfs_close_volume(&source);
+    journal_free(&state); free(identity); free(real); return result;
+}
+
+static int recover_transaction(const char *device, const char *journal_path, char **error) {
+    NtfsJournal state;
+    if (journal_load(journal_path, &state, error) != 0) return 1;
+    int result = 1; char *real = canonical_path(device, error), *identity = NULL; uint64_t size = 0;
+    if (real == NULL || target_identity(device, &identity, &size, error) != 0) goto done;
+    if (strcmp(real, state.device) != 0 || strcmp(identity, state.target_identity) != 0 || size != state.physical_bytes) {
+        ntfs_set_error(error, "recovery journal belongs to a different NTFS target"); goto done;
+    }
+    if (strcmp(state.phase, "commit") != 0 && strcmp(state.phase, "verifying-source") != 0) {
+        transaction_cleanup(journal_path, &state);
+        puts("Discarded an incomplete NTFS working image; the source was unchanged."); result = 0; goto done;
+    }
+    struct stat stage_status;
+    if (stat(state.stage, &stage_status) != 0 || !S_ISREG(stage_status.st_mode) ||
+        (uint64_t)stage_status.st_size < state.filesystem_bytes) {
+        ntfs_set_error(error, "the persistent NTFS working image is missing or truncated"); goto done;
+    }
+    sqlite3 *db = NULL;
+    if (ntfs_open_plan_db(state.plan, &db, error) != 0) goto done;
+    bool growth = strcmp(state.operation, "growth-defrag") == 0;
+    if (ntfs_verify_stage(state.stage, db, growth, false, error) != 0) { sqlite3_close(db); goto done; }
+    NtfsVolume staged; memset(&staged, 0, sizeof(staged)); staged.fd = -1;
+    if (ntfs_open_volume(state.stage, false, &staged, error) != 0 || !same_serial(&staged, state.serial)) {
+        if (error != NULL && *error == NULL) ntfs_set_error(error, "persistent NTFS working image has the wrong serial");
+        ntfs_close_volume(&staged); sqlite3_close(db); goto done;
+    }
+    uint64_t total_clusters = staged.total_clusters; ntfs_close_volume(&staged);
+    if (strcmp(state.phase, "commit") == 0 && state.commit_cluster < total_clusters) {
+        printf("Resuming the NTFS source commit at cluster %" PRIu64 ".\n", state.commit_cluster); fflush(stdout);
+        if (commit_stage(device, journal_path, &state, state.commit_cluster, error) != 0) { sqlite3_close(db); goto done; }
+    }
+    if (journal_phase(journal_path, &state, "verifying-source", error) != 0) { sqlite3_close(db); goto done; }
+    if (ntfs_verify_stage(device, db, growth, true, error) != 0) { sqlite3_close(db); goto done; }
+    if (clear_source_dirty(device, error) != 0) { sqlite3_close(db); goto done; }
+    sqlite3_close(db); transaction_cleanup(journal_path, &state);
+    puts("NTFS recovery completed successfully."); emit_result("recover", "completed", ""); result = 0;
+done:
+    free(real); free(identity); journal_free(&state); return result;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 2 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) { usage(stdout); return 0; }
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) { puts(LD_VERSION); return 0; }
+    if (argc < 3) { usage(stderr); return 2; }
+    const char *operation = argv[1], *device = argv[2];
+    if (strcmp(operation, "identify") == 0) {
+        NtfsVolume volume; memset(&volume, 0, sizeof(volume)); volume.fd = -1; char *error = NULL;
+        if (ntfs_open_volume(device, false, &volume, &error) != 0) { free(error); return 1; }
+        ntfs_close_volume(&volume); puts("{\"filesystem\":\"ntfs\"}"); return 0;
+    }
+    if (strcmp(operation, "analyse-json") == 0) {
+        char *error = NULL; int result = analyse_json(device, &error);
+        if (result != 0 && error != NULL) fprintf(stderr, "%s\n", error);
+        free(error); return result == 0 ? 0 : 1;
+    }
+    if (strcmp(operation, "defrag") != 0 && strcmp(operation, "growth-defrag") != 0 && strcmp(operation, "recover") != 0) {
+        usage(stderr); return 2;
+    }
+    const char *confirm = NULL, *journal = NULL; bool write = false, live_updates = false; int growth_percent = 10;
+    for (int i = 3; i < argc; ++i) {
+        if (strcmp(argv[i], "--write") == 0) write = true;
+        else if (strcmp(argv[i], "--live-updates") == 0) live_updates = true;
+        else if (strcmp(argv[i], "--confirm") == 0 && i + 1 < argc) confirm = argv[++i];
+        else if (strcmp(argv[i], "--journal") == 0 && i + 1 < argc) journal = argv[++i];
+        else if (strcmp(argv[i], "--growth-percent") == 0 && i + 1 < argc) growth_percent = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--live-map-cells") == 0 && i + 1 < argc) { live_updates = atoi(argv[++i]) > 0; }
+        else if ((strcmp(argv[i], "--workers") == 0 || strcmp(argv[i], "--ram-buffer") == 0 || strcmp(argv[i], "--batch-clusters") == 0) && i + 1 < argc) { i++; }
+        else { fprintf(stderr, "%s: unknown or incomplete option: %s\n", PROGRAM_NAME, argv[i]); return 2; }
+    }
+    if (!write || confirm == NULL || journal == NULL || strcmp(confirm, device) != 0) {
+        fprintf(stderr, "%s: raw NTFS mutation requires --write --confirm DEVICE --journal PATH\n", PROGRAM_NAME); return 2;
+    }
+    if (strcmp(operation, "growth-defrag") == 0 && growth_percent != 10) {
+        fprintf(stderr, "%s: Growth Defrag requires exactly 10%%%%\n", PROGRAM_NAME); return 2;
+    }
+    ld_stop_install_handlers();
+    char *error = NULL; int result;
+    if (strcmp(operation, "recover") == 0) result = recover_transaction(device, journal, &error);
+    else result = build_and_commit(device, operation, journal, live_updates, &error);
+    if (result != 0 && result != 130) {
+        const char *message = error == NULL ? "native NTFS operation failed" : error;
+        fprintf(stderr, "%s\n", message); emit_result(operation, "failed", message);
+    }
+    free(error); return result;
+}
