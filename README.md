@@ -68,9 +68,9 @@ Revision 95 uses three artifacts:
 |---|---|
 | `linux-defragger_1.8.0-95_amd64.deb` | Generic Debian-managed amd64 build (`-march=x86-64 -mtune=generic`). |
 | `linux-defragger-1.8.0-95-local-folder.run` | Self-contained compiler/installer using `-march=native -mtune=native`; installs `1.8.0-95+native1`. |
-| `linux-defragger-1.8.0-95-local-source.zip` | Complete source, build system, tests, resources and documentation. |
+| `Defragger-1.8.0-95.zip` | Canonical tagged source archive, matching GitHub's source ZIP naming. |
 
-Build them with `packaging/build-deb.sh`, `packaging/build-local-run.sh`, and `packaging/build-source-zip.sh`. `VERSION` is the release source for generated C/Python/Debian metadata.
+Build the Debian and native installer with `packaging/build-deb.sh` and `packaging/build-local-run.sh`. GitHub provides `Defragger-${VERSION}.zip` from the tagged source tree; `packaging/build-source-zip.sh` produces the same canonical filename and top-level directory when a local source archive is needed. `VERSION` is the release source for generated C/Python/Debian metadata.
 
 ## Reconstruction provenance
 
