@@ -7,11 +7,23 @@ VERSION=$(tr -d '\r\n' <"$ROOT/VERSION")
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-artifact-test.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 RUN="$WORK/linux-defragger-${VERSION}-local-folder.run"
+SOURCE_ZIP="$WORK/Defragger-${VERSION}.zip"
 
 sh -n "$ROOT/packaging/build-deb.sh"
 sh -n "$ROOT/packaging/build-local-run.sh"
 sh -n "$ROOT/packaging/build-source-zip.sh"
 "$ROOT/packaging/build-local-run.sh" "$RUN" >/dev/null
+"$ROOT/packaging/build-source-zip.sh" "$SOURCE_ZIP" >/dev/null
+[ -f "$SOURCE_ZIP" ]
+unzip -Z1 "$SOURCE_ZIP" >"$WORK/source-files.txt"
+grep -qx "Defragger-${VERSION}/CMakeLists.txt" "$WORK/source-files.txt"
+grep -qx "Defragger-${VERSION}/packaging/build-source-zip.sh" "$WORK/source-files.txt"
+if grep -Eq '(^|/)linux-defragger-[^/]*-local-source\.zip$' "$WORK/source-files.txt"; then
+    printf '%s\n' 'Source archive contains the obsolete local-source ZIP name.' >&2
+    exit 1
+fi
+grep -Fq 'OUTPUT=${1:-"$PARENT/${ARCHIVE_BASENAME}.zip"}' "$ROOT/packaging/build-source-zip.sh"
+grep -Fq 'ARCHIVE_BASENAME="Defragger-${VERSION}"' "$ROOT/packaging/build-source-zip.sh"
 
 MARKER_LINE=$(grep -an '^__LINUX_DEFRAGGER_PAYLOAD_BELOW__$' "$RUN" | \
     head -1 | cut -d: -f1)
