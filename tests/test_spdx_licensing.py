@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 IDENTIFIER = "SPDX-License-Identifier: GPL-3.0-or-later"
-EXCLUDED_TOP_LEVEL = {"LICENSE", "LICENSES", ".git", ".pytest_cache"}
+EXCLUDED_TOP_LEVEL = {"LICENSE", ".git", ".pytest_cache"}
 EXCLUDED_PREFIXES = ("build", "native-verify", "release")
 
 HASH_SUFFIXES = {".py", ".sh", ".ini", ".desktop", ".yml", ".yaml"}
@@ -114,7 +114,7 @@ def test_no_first_party_gpl2_spdx_headers() -> None:
 
 
 def test_project_licence_text_is_present() -> None:
-    licence = ROOT / "LICENSES" / "GPL-3.0-or-later.txt"
+    licence = ROOT / "LICENSE"
     text = licence.read_text(encoding="utf-8")
     assert "GNU GENERAL PUBLIC LICENSE" in text
     assert "Version 3, 29 June 2007" in text

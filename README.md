@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-# Linux Defragger 1.8.0-97
+# Linux Defragger 1.8.0-98
 
 Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on an unmounted block device or image: they do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation utilities.
 
@@ -52,26 +52,22 @@ The native `.run` installer installs required build/runtime packages, compiles f
 
 ## Release files
 
-Linux Defragger 1.8.0-97 uses the standard three-download model:
+Linux Defragger 1.8.0-98 uses the standard three-download model:
 
 | File | Purpose |
 |---|---|
-| `linux-defragger_1.8.0-97_amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
-| `linux-defragger-1.8.0-97-local-folder.run` | Hardware-optimised local compile-and-install program. |
-| `Defragger-1.8.0-97.zip` | Canonical GitHub source archive from the exact `v1.8.0-97` tag. |
+| `linux-defragger_1.8.0-98_amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
+| `linux-defragger-1.8.0-98-local-folder.run` | Hardware-optimised local compile-and-install program. |
+| `Defragger-1.8.0-98.zip` | Canonical GitHub source archive from the exact `v1.8.0-97` tag. |
 
 The generic package and native installer are built with `packaging/build-deb.sh` and `packaging/build-local-run.sh`. `packaging/build-source-zip.sh` produces the same canonical `Defragger-${VERSION}.zip` name and top-level directory when a local source archive is required.
 
 ## Documentation
 
-- `docs/RELEASE_NOTES.md` — revision history and behavioural changes.
-- `docs/TEST_STATUS.md` — current regression coverage and validation gates.
-- `docs/DESIGN.md` — architecture, canonical layout and transaction design.
-- `docs/FILESYSTEM_PLUGIN_CONTRACT.md` — filesystem plugin/worker contract.
-- `docs/COPYRIGHT.md` — copyright and licensing statement.
+`docs/DESIGN.md` is the single technical design document. Release history lives in Git tags/releases, and the executable test suite is the authority for regression status.
 
 ## Licence
 
 Copyright © 2026 Shannon Smith.
 
-Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under the **GNU General Public License version 3 or, at your option, any later version** (`GPL-3.0-or-later`). The canonical licence text is in `LICENSES/GPL-3.0-or-later.txt`.
+Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under the **GNU General Public License version 3 or, at your option, any later version** (`GPL-3.0-or-later`). The canonical licence text is the root `LICENSE` file.

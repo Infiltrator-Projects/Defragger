@@ -370,10 +370,9 @@ install(FILES packaging/io.github.linuxdefragger.svg
         DESTINATION share/icons/hicolor/scalable/apps)
 
 
-install(FILES README.md docs/RELEASE_NOTES.md docs/TEST_STATUS.md
-              docs/FILESYSTEM_PLUGIN_CONTRACT.md docs/DESIGN.md docs/COPYRIGHT.md
+install(FILES README.md docs/DESIGN.md
         DESTINATION share/doc/linux-defragger)
-install(FILES LICENSES/GPL-3.0-or-later.txt
+install(FILES LICENSE
         DESTINATION share/doc/linux-defragger RENAME COPYING.GPL-3.0)
 include(CTest)
 if(BUILD_TESTING)

@@ -168,6 +168,27 @@ source commit.
 
 The writer accepts journaled volumes only when the internal JournalInfoBlock/journal header proves that no transaction needs replay. The journal allocation remains fixed. A non-empty journal is a pre-write failure; journal replay is intentionally outside revision 94.
 
+## Filesystem plugin and worker contract
+
+Each discoverable filesystem package under `gui/filesystems/<id>/` exposes `BACKEND`
+from `plugin.py`; `gui/backends/registry.py` is the sole filesystem registry and
+dispatch authority. Read-only plugins provide probe/map behaviour. Write-capable
+plugins additionally declare their supported operations and private native worker.
+Filesystem-specific parsing, planning, writing and verification stay below the
+owning filesystem package; filesystem-neutral mechanics stay in `src/core/`.
+
+Write workers use the standard invocation shape
+`WORKER OPERATION TARGET --write --confirm TARGET --journal PATH [options]`. Common
+options include live-map sizing, the fixed 10% Growth Defrag reserve, RAM staging,
+worker count and transaction sizing where supported. Workers publish typed `@@PHASE`,
+`@@LIVE_RANGES` and `@@RESULT` records. Human-readable log text is not an API, and a
+successful mutation emits exactly one semantic result for `defrag`, `growth-defrag`
+or `recover` with status `completed`, `not-needed` or `stopped`.
+
+Every first-party plugin, native worker and associated test uses the project
+`GPL-3.0-or-later` SPDX identifier. Architecture and licensing tests enforce these
+invariants.
+
 ## Licensing invariant
 
 All first-party Linux Defragger implementation code, GUI glue, build/packaging logic, tests and project documentation use `SPDX-License-Identifier: GPL-3.0-or-later`. The exact comment syntax follows the file format. Non-commentable first-party artefacts use an adjacent `.license` sidecar. `tests/test_spdx_licensing.py` enforces this rule. The repository contains no vendored third-party source; system-provided build/runtime libraries retain their own licence terms.
