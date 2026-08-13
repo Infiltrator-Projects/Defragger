@@ -1,4 +1,12 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+# Linux Defragger 1.8.0-97
+
+- Integrated Infiltratr Common 1.4.0 at exact commit `e4547c49400875da3e1a5638366903a01374b350` as the canonical provider for generic C parsing, bounded string handling, line-end trimming, bounded `realpath`, small sysfs scalar reads, prefix matching and saturating unit conversion.
+- Removed duplicated unsigned integer parsers from the EXT, NTFS, exFAT and XFS native journal workers and adopted Common range-checked parsing in FAT, exFAT, AFFS and HFS+ where explicit bounds are required.
+- Preserved Defragger-specific checked-overflow arithmetic and interruption-safe raw positional I/O because their contracts differ from Common's saturating arithmetic and text-file readers.
+- The native `.run` payload carries the exact pinned Common 1.4.0 source; release builds verify the pin rather than silently using an arbitrary library revision.
+- Reduced repository-root clutter by moving release/test history into `docs/` and removing SPDX `.license` sidecars for known non-commentable project metadata. Those exact metadata files are covered by the project licence policy and licensing regression without separate root files.
+
 # Linux Defragger 1.8.0-96
 
 - Replaced the remaining bundled classic-HFS `hfsutils` dependency with a first-party native C read-only analyser. The new analyser directly parses the HFS MDB, Extents Overflow B-tree, Catalog B-tree, data/resource-fork extent chains and fragmentation state.

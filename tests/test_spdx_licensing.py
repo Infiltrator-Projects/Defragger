@@ -15,9 +15,8 @@ HASH_SUFFIXES = {".py", ".sh", ".ini", ".desktop", ".yml", ".yaml"}
 SLASH_SUFFIXES = {".c", ".h"}
 HTML_SUFFIXES = {".md"}
 XML_SUFFIXES = {".svg"}
+INLINE_EXEMPT = {Path("VERSION"), Path("pyrightconfig.json")}
 SIDECAR_REQUIRED = {
-    Path("VERSION"),
-    Path("pyrightconfig.json"),
     Path("tests/fixtures/affs-ffs-fragmented.adf.gz"),
     Path("tests/fixtures/affs-ofs-fragmented.adf.gz"),
 }
@@ -46,6 +45,8 @@ def iter_first_party_files() -> list[Path]:
 def expected_prefix(path: Path) -> str | None:
     rel = path.relative_to(ROOT)
     name = path.name
+    if rel == Path(".gitmodules"):
+        return "# " + IDENTIFIER
     if name == "CMakeLists.txt" or path.suffix == ".cmake":
         return "# " + IDENTIFIER
     if path.suffix in SLASH_SUFFIXES or name.endswith(".h.in"):
@@ -70,6 +71,8 @@ def test_spdx_coverage() -> None:
     failures: list[str] = []
     for path in iter_first_party_files():
         rel = path.relative_to(ROOT)
+        if rel in INLINE_EXEMPT:
+            continue
         if rel in SIDECAR_REQUIRED:
             sidecar = Path(str(path) + ".license")
             if not sidecar.is_file() or sidecar.read_text(encoding="utf-8").strip() != IDENTIFIER:

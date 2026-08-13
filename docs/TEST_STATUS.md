@@ -1,13 +1,14 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-# Test status — 1.8.0-96
+# Test status — 1.8.0-97
 
 The first-party C build is required to compile with `LD_ENABLE_WERROR=ON`.
 
 Current focused regressions cover:
 
-- project-wide `GPL-3.0-or-later` SPDX coverage, including `.license` sidecars for non-commentable first-party artefacts;
+- project-wide `GPL-3.0-or-later` SPDX coverage, with exact policy exemptions only for known non-commentable metadata and sidecars retained for binary fixtures;
 - a no-vendored-source architecture invariant;
 - FAT12/FAT16/FAT32 Defrag and exact-10% Growth Defrag;
+- Infiltratr Common 1.4.0 exact-pin integration and production adoption in native C helpers;
 - native EXT, NTFS and exFAT Defrag/Growth Defrag;
 - native XFS metadata, relocation and raw-writer safety;
 - native Amiga OFS/FFS Defrag/Growth Defrag;
