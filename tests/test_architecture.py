@@ -159,6 +159,35 @@ def test_build_and_path_registry_install_native_workers() -> None:
         assert obsolete not in paths
 
 
+def test_infiltratr_common_integration() -> None:
+    common = ROOT / "shared" / "infiltratr-common"
+    assert (common / "VERSION").read_text().strip() == "1.4.0"
+    gitmodules = (ROOT / ".gitmodules").read_text()
+    assert "shared/infiltratr-common" in gitmodules
+    assert "Infiltrator-Libraries.git" in gitmodules
+    cmake = (ROOT / "CMakeLists.txt").read_text()
+    assert "e4547c49400875da3e1a5638366903a01374b350" in cmake
+    assert '${INFILTRATR_COMMON_DIR}/src/core.c' in cmake
+    assert '${INFILTRATR_COMMON_DIR}/src/posix.c' in cmake
+    device = (ROOT / "src" / "core" / "ld_device.c").read_text()
+    assert "infiltratr_realpath_copy" in device
+    assert "infiltratr_read_u64_file" in device
+    assert "infiltratr_string_starts_with" in device
+    stage = (ROOT / "src" / "core" / "ld_stage.c").read_text()
+    assert "infiltratr_u64_multiply_saturating" in stage
+    fat = (GUI / "filesystems" / "fat" / "native" / "writer.c").read_text()
+    assert "infiltratr_parse_u64_range" in fat
+    for filesystem, worker in (("ext4", "ext_worker.c"), ("ntfs", "ntfs_worker.c"),
+                               ("exfat", "exfat_worker.c"), ("xfs", "xfs_worker.c")):
+        source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
+        assert "infiltratr_parse_u64" in source
+        assert "infiltratr_trim_line_end" in source
+    for filesystem, worker in (("affs", "affs_worker.c"), ("hfsplus", "hfsplus_worker.c")):
+        source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
+        assert "infiltratr_parse_u64_range" in source
+        assert "infiltratr_trim_line_end" in source
+
+
 def test_core_remains_filesystem_neutral() -> None:
     core = ROOT / "src" / "core"
     expected = {"ld_device.c", "ld_device.h", "ld_io.c", "ld_io.h", "ld_runtime.c",
@@ -186,6 +215,7 @@ def main() -> None:
     test_dispatch_is_filesystem_neutral()
     test_single_filesystem_hierarchy_and_c_first_writers()
     test_build_and_path_registry_install_native_workers()
+    test_infiltratr_common_integration()
     test_core_remains_filesystem_neutral()
     test_version_and_registry_are_dynamic()
     print("current C-first single-plugin architecture tests passed")

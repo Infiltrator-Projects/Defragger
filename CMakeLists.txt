@@ -13,6 +13,58 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 find_package(Threads REQUIRED)
 
+set(INFILTRATR_COMMON_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/infiltratr-common")
+set(INFILTRATR_COMMON_URL
+    "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
+set(INFILTRATR_COMMON_TAG "v1.4.0")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.4.0")
+set(INFILTRATR_COMMON_EXPECTED_COMMIT
+    "e4547c49400875da3e1a5638366903a01374b350")
+
+if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
+    find_program(LD_GIT_EXECUTABLE git REQUIRED)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+        execute_process(
+            COMMAND "${LD_GIT_EXECUTABLE}" submodule update --init --depth 1 --
+                    shared/infiltratr-common
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE LD_COMMON_FETCH_RESULT)
+    else()
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/shared")
+        execute_process(
+            COMMAND "${LD_GIT_EXECUTABLE}" clone --depth 1 --branch
+                    "${INFILTRATR_COMMON_TAG}" "${INFILTRATR_COMMON_URL}"
+                    "${INFILTRATR_COMMON_DIR}"
+            RESULT_VARIABLE LD_COMMON_FETCH_RESULT)
+    endif()
+    if(NOT LD_COMMON_FETCH_RESULT EQUAL 0 OR
+       NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
+        message(FATAL_ERROR
+            "Unable to retrieve Infiltratr Common ${INFILTRATR_COMMON_EXPECTED_VERSION}.")
+    endif()
+endif()
+
+file(READ "${INFILTRATR_COMMON_DIR}/VERSION" INFILTRATR_COMMON_VERSION)
+string(STRIP "${INFILTRATR_COMMON_VERSION}" INFILTRATR_COMMON_VERSION)
+if(NOT INFILTRATR_COMMON_VERSION STREQUAL INFILTRATR_COMMON_EXPECTED_VERSION)
+    message(FATAL_ERROR
+        "Infiltratr Common ${INFILTRATR_COMMON_EXPECTED_VERSION} is required; found ${INFILTRATR_COMMON_VERSION}.")
+endif()
+if(EXISTS "${INFILTRATR_COMMON_DIR}/.git")
+    find_program(LD_GIT_EXECUTABLE git REQUIRED)
+    execute_process(
+        COMMAND "${LD_GIT_EXECUTABLE}" -C "${INFILTRATR_COMMON_DIR}" rev-parse HEAD
+        OUTPUT_VARIABLE INFILTRATR_COMMON_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE LD_COMMON_COMMIT_RESULT)
+    if(NOT LD_COMMON_COMMIT_RESULT EQUAL 0 OR
+       NOT INFILTRATR_COMMON_COMMIT STREQUAL INFILTRATR_COMMON_EXPECTED_COMMIT)
+        message(FATAL_ERROR
+            "Infiltratr Common must be pinned to ${INFILTRATR_COMMON_EXPECTED_COMMIT}; found ${INFILTRATR_COMMON_COMMIT}.")
+    endif()
+endif()
+
 option(LD_ENABLE_WERROR "Treat first-party compiler warnings as errors" OFF)
 option(LD_ENABLE_SANITIZERS "Enable address and undefined-behaviour sanitizers" OFF)
 option(LD_GENERIC_AMD64 "Build for the baseline x86-64 instruction set" OFF)
@@ -64,6 +116,22 @@ if(LD_ENABLE_SANITIZERS)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
+# Infiltratr Common owns generic parsing/string/path/sysfs primitives. Defragger
+# deliberately links only the core and POSIX provider; application-specific raw
+# storage, staging, Stop and filesystem transaction mechanics remain local.
+set(INFILTRATR_COMMON_WARNING_FLAGS -Wall -Wextra -Wpedantic -Wshadow -Wformat=2)
+if(LD_ENABLE_WERROR)
+    list(APPEND INFILTRATR_COMMON_WARNING_FLAGS -Werror)
+endif()
+add_library(infiltratr-common STATIC
+    "${INFILTRATR_COMMON_DIR}/src/core.c"
+    "${INFILTRATR_COMMON_DIR}/src/posix.c")
+target_include_directories(infiltratr-common PUBLIC
+    "${INFILTRATR_COMMON_DIR}/include")
+target_compile_options(infiltratr-common PRIVATE ${INFILTRATR_COMMON_WARNING_FLAGS})
+target_compile_definitions(infiltratr-common PRIVATE _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(infiltratr-common PUBLIC m)
+
 add_library(linux-defragger-core STATIC
     src/core/ld_runtime.c
     src/core/ld_io.c
@@ -75,6 +143,7 @@ target_include_directories(linux-defragger-core PUBLIC
     "${LD_GENERATED_DIR}")
 target_compile_options(linux-defragger-core PRIVATE ${LD_WARNING_FLAGS})
 target_compile_definitions(linux-defragger-core PUBLIC _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-core PUBLIC infiltratr-common)
 
 # FAT remains native C, but it is a private implementation detail of the
 # authoritative gui/filesystems/fat plugin.  There is deliberately no second

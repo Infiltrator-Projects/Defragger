@@ -9,7 +9,46 @@ NATIVE_PACKAGE_VERSION="${VERSION}+native1"
 OUTPUT=${1:-"$ROOT/linux-defragger-${VERSION}-local-folder.run"}
 TEMPLATE="$ROOT/packaging/local-run-header.sh.in"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-run-build.XXXXXX")
-trap 'rm -rf "$WORK"' EXIT HUP INT TERM
+COMMON_DIR="$ROOT/shared/infiltratr-common"
+COMMON_URL="https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git"
+COMMON_TAG="v1.4.0"
+COMMON_VERSION="1.4.0"
+COMMON_COMMIT="e4547c49400875da3e1a5638366903a01374b350"
+COMMON_TEMP=0
+cleanup() {
+    rm -rf "$WORK"
+    if [ "$COMMON_TEMP" -eq 1 ]; then
+        rm -rf "$COMMON_DIR"
+        rmdir "$ROOT/shared" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT HUP INT TERM
+
+if [ ! -f "$COMMON_DIR/VERSION" ]; then
+    command -v git >/dev/null 2>&1 || {
+        printf 'git is required to retrieve Infiltratr Common %s\n' "$COMMON_VERSION" >&2
+        exit 1
+    }
+    if [ -e "$ROOT/.git" ]; then
+        git -C "$ROOT" submodule update --init --depth 1 -- shared/infiltratr-common
+    else
+        mkdir -p "$ROOT/shared"
+        git clone --quiet --depth 1 --branch "$COMMON_TAG" "$COMMON_URL" "$COMMON_DIR"
+        COMMON_TEMP=1
+    fi
+fi
+ACTUAL_COMMON_VERSION=$(tr -d '\r\n' <"$COMMON_DIR/VERSION")
+[ "$ACTUAL_COMMON_VERSION" = "$COMMON_VERSION" ] || {
+    printf 'Infiltratr Common %s is required; found %s\n' "$COMMON_VERSION" "$ACTUAL_COMMON_VERSION" >&2
+    exit 1
+}
+if [ -e "$COMMON_DIR/.git" ]; then
+    ACTUAL_COMMON_COMMIT=$(git -C "$COMMON_DIR" rev-parse HEAD)
+    [ "$ACTUAL_COMMON_COMMIT" = "$COMMON_COMMIT" ] || {
+        printf 'Infiltratr Common commit mismatch: %s\n' "$ACTUAL_COMMON_COMMIT" >&2
+        exit 1
+    }
+fi
 
 for command_name in tar gzip sha256sum sed; do
     command -v "$command_name" >/dev/null 2>&1 || {

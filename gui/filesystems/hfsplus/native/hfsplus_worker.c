@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "hfsplus_native.h"
 #include "version.h"
+#include "infiltratr/core.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +24,13 @@ static void result(const char *operation, const char *status, const char *messag
     printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"%s\"}\n",
            operation, status, message ? message : "");
     fflush(stdout);
+}
+
+static bool parse_unsigned(const char *text, unsigned *value) {
+    uint64_t parsed = 0;
+    if (!infiltratr_parse_u64_range(text, 10U, 0U, UINT_MAX, &parsed)) return false;
+    *value = (unsigned)parsed;
+    return true;
 }
 
 static char *stage_name(const char *journal) {
@@ -48,15 +57,15 @@ static int load_journal(const char *journal, char **device, char **stage, char o
     if (!fgets(line, sizeof(line), file)) {
         fclose(file); return -1;
     }
-    line[strcspn(line, "\r\n")] = 0;
+    infiltratr_trim_line_end(line);
     if (strcmp(line, "LINUX-DEFRAGGER-HFSPLUS-1")) {
         fclose(file); return -1;
     }
     while (fgets(line, sizeof(line), file)) {
-        line[strcspn(line, "\r\n")] = 0;
+        infiltratr_trim_line_end(line);
         if (!strncmp(line, "device=", 7)) *device = strdup(line + 7);
         else if (!strncmp(line, "stage=", 6)) *stage = strdup(line + 6);
-        else if (!strncmp(line, "operation=", 10)) snprintf(operation, 32, "%.31s", line + 10);
+        else if (!strncmp(line, "operation=", 10)) infiltratr_copy_string(operation, 32, line + 10);
     }
     fclose(file);
     return *device && *stage && operation[0] ? 0 : -1;
@@ -97,7 +106,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--live-updates")) live = true;
         else if (!strcmp(argv[i], "--confirm") && i + 1 < argc) confirm = argv[++i];
         else if (!strcmp(argv[i], "--journal") && i + 1 < argc) journal = argv[++i];
-        else if (!strcmp(argv[i], "--growth-percent") && i + 1 < argc) growth_percent = (unsigned)strtoul(argv[++i], NULL, 10);
+        else if (!strcmp(argv[i], "--growth-percent") && i + 1 < argc) { if (!parse_unsigned(argv[++i], &growth_percent)) { fprintf(stderr, "invalid --growth-percent\n"); return 2; } }
         else if ((!strcmp(argv[i], "--workers") || !strcmp(argv[i], "--ram-buffer") ||
                   !strcmp(argv[i], "--batch-clusters") || !strcmp(argv[i], "--live-map-cells")) && i + 1 < argc) ++i;
     }

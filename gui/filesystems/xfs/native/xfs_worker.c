@@ -12,6 +12,8 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+
+#include "infiltratr/core.h"
 #include "ld_stop.h"
 #include "version.h"
 
@@ -187,13 +189,7 @@ static char *value_copy(const char *value) {
 }
 
 static int parse_u64(const char *text, uint64_t *out) {
-    if (text == NULL || *text == '\0' || *text == '-') return -1;
-    errno = 0;
-    char *end = NULL;
-    unsigned long long value = strtoull(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0') return -1;
-    *out = (uint64_t)value;
-    return 0;
+    return infiltratr_parse_u64(text, 10U, out) ? 0 : -1;
 }
 
 static int journal_load(const char *path, XfsJournal *state, char **error) {
@@ -206,23 +202,23 @@ static int journal_load(const char *path, XfsJournal *state, char **error) {
         xfs_set_error(error, "XFS transaction journal is empty");
         free(line); fclose(file); return -1;
     }
-    line[strcspn(line, "\r\n")] = '\0';
+    infiltratr_trim_line_end(line);
     if (strcmp(line, JOURNAL_MAGIC) != 0) {
         xfs_set_error(error, "XFS transaction journal has an invalid header");
         free(line); fclose(file); return -1;
     }
     bool filesystem_ok = false;
     while (getline(&line, &capacity, file) >= 0) {
-        line[strcspn(line, "\r\n")] = '\0';
+        infiltratr_trim_line_end(line);
         char *equals = strchr(line, '=');
         if (equals == NULL) continue;
         *equals++ = '\0';
         if (strcmp(line, "filesystem") == 0) filesystem_ok = strcmp(equals, "xfs") == 0;
         else if (strcmp(line, "device") == 0) { free(state->device); state->device = value_copy(equals); }
         else if (strcmp(line, "target_identity") == 0) { free(state->target_identity); state->target_identity = value_copy(equals); }
-        else if (strcmp(line, "uuid") == 0) snprintf(state->uuid, sizeof(state->uuid), "%s", equals);
-        else if (strcmp(line, "operation") == 0) snprintf(state->operation, sizeof(state->operation), "%s", equals);
-        else if (strcmp(line, "phase") == 0) snprintf(state->phase, sizeof(state->phase), "%s", equals);
+        else if (strcmp(line, "uuid") == 0) infiltratr_copy_string(state->uuid, sizeof(state->uuid), equals);
+        else if (strcmp(line, "operation") == 0) infiltratr_copy_string(state->operation, sizeof(state->operation), equals);
+        else if (strcmp(line, "phase") == 0) infiltratr_copy_string(state->phase, sizeof(state->phase), equals);
         else if (strcmp(line, "stage") == 0) { free(state->stage); state->stage = value_copy(equals); }
         else if (strcmp(line, "plan") == 0) { free(state->plan); state->plan = value_copy(equals); }
         else if (strcmp(line, "physical_bytes") == 0 && parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
@@ -246,7 +242,7 @@ invalid:
 }
 
 static int journal_phase(const char *path, XfsJournal *state, const char *phase, char **error) {
-    snprintf(state->phase, sizeof(state->phase), "%s", phase);
+    infiltratr_copy_string(state->phase, sizeof(state->phase), phase);
     return journal_save(path, state, error);
 }
 

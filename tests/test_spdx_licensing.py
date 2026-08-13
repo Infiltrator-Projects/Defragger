@@ -31,6 +31,8 @@ def iter_first_party_files() -> list[Path]:
         rel = path.relative_to(ROOT)
         if rel.parts and rel.parts[0] in EXCLUDED_TOP_LEVEL:
             continue
+        if rel.parts[:2] == ("shared", "infiltratr-common"):
+            continue
         if any(part.startswith(EXCLUDED_PREFIXES) for part in rel.parts):
             continue
         if path.suffix in {".deb", ".run", ".zip", ".pyc"}:

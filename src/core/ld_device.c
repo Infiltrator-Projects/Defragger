@@ -2,6 +2,9 @@
 #include "ld_device.h"
 #include "ld_runtime.h"
 
+#include "infiltratr/core.h"
+#include "infiltratr/posix.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -58,7 +61,7 @@ static bool ld_resolve_sysfs_device(dev_t device, char *path, size_t size) {
     int length = snprintf(link_path, sizeof(link_path), "/sys/dev/block/%u:%u",
                           major(device), minor(device));
     if (length < 0 || (size_t)length >= sizeof(link_path)) return false;
-    return realpath(link_path, path) != NULL && strlen(path) < size;
+    return infiltratr_realpath_copy(link_path, path, size);
 }
 
 static bool ld_collect_sysfs_directory(const char *path,
@@ -238,16 +241,12 @@ bool ld_device_is_rotational(const LdDevice *device) {
     char path[128];
     snprintf(path, sizeof(path), "/sys/dev/block/%u:%u/queue/rotational",
              major(device->device_number), minor(device->device_number));
-    FILE *file = fopen(path, "r");
-    if (file == NULL) return false;
-    int value = 0;
-    bool result = fscanf(file, "%d", &value) == 1 && value != 0;
-    fclose(file);
-    return result;
+    uint64_t value = 0;
+    return infiltratr_read_u64_file(path, &value) && value != 0;
 }
 
 bool ld_device_is_serial_flash(const LdDevice *device) {
     const char *base = strrchr(device->path, '/');
     base = base == NULL ? device->path : base + 1;
-    return strncmp(base, "mmcblk", 6) == 0;
+    return infiltratr_string_starts_with(base, "mmcblk");
 }

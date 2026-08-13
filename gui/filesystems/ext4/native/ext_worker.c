@@ -4,6 +4,8 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+
+#include "infiltratr/core.h"
 #include "ld_stop.h"
 #include "version.h"
 
@@ -158,10 +160,7 @@ static char *value_copy(const char *value) {
 }
 
 static int parse_u64(const char *text, uint64_t *value) {
-    errno = 0; char *end = NULL;
-    unsigned long long parsed = strtoull(text, &end, 10);
-    if (errno != 0 || end == text || (*end != '\0' && *end != '\n' && *end != '\r')) return -1;
-    *value = (uint64_t)parsed; return 0;
+    return infiltratr_parse_u64(text, 10U, value) ? 0 : -1;
 }
 
 static int journal_load(const char *path, ExtJournal *state, char **error) {
@@ -170,17 +169,17 @@ static int journal_load(const char *path, ExtJournal *state, char **error) {
     if (file == NULL) { ext_set_error(error, "cannot open EXT recovery journal: %s", strerror(errno)); return -1; }
     char *line = NULL; size_t capacity = 0;
     if (getline(&line, &capacity, file) < 0) goto invalid;
-    line[strcspn(line, "\r\n")] = '\0';
+    infiltratr_trim_line_end(line);
     if (strcmp(line, JOURNAL_MAGIC) != 0) goto invalid;
     while (getline(&line, &capacity, file) >= 0) {
         char *equals = strchr(line, '='); if (equals == NULL) goto invalid;
         *equals++ = '\0'; equals[strcspn(equals, "\r\n")] = '\0';
         if (strcmp(line, "device") == 0) { free(state->device); state->device = value_copy(equals); }
         else if (strcmp(line, "target_identity") == 0) { free(state->target_identity); state->target_identity = value_copy(equals); }
-        else if (strcmp(line, "uuid") == 0) snprintf(state->uuid, sizeof(state->uuid), "%s", equals);
-        else if (strcmp(line, "source_type") == 0) snprintf(state->source_type, sizeof(state->source_type), "%s", equals);
-        else if (strcmp(line, "operation") == 0) snprintf(state->operation, sizeof(state->operation), "%s", equals);
-        else if (strcmp(line, "phase") == 0) snprintf(state->phase, sizeof(state->phase), "%s", equals);
+        else if (strcmp(line, "uuid") == 0) infiltratr_copy_string(state->uuid, sizeof(state->uuid), equals);
+        else if (strcmp(line, "source_type") == 0) infiltratr_copy_string(state->source_type, sizeof(state->source_type), equals);
+        else if (strcmp(line, "operation") == 0) infiltratr_copy_string(state->operation, sizeof(state->operation), equals);
+        else if (strcmp(line, "phase") == 0) infiltratr_copy_string(state->phase, sizeof(state->phase), equals);
         else if (strcmp(line, "stage") == 0) { free(state->stage); state->stage = value_copy(equals); }
         else if (strcmp(line, "plan") == 0) { free(state->plan); state->plan = value_copy(equals); }
         else if (strcmp(line, "physical_bytes") == 0 && parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
@@ -201,7 +200,7 @@ invalid_state:
 }
 
 static int journal_phase(const char *path, ExtJournal *state, const char *phase, char **error) {
-    snprintf(state->phase, sizeof(state->phase), "%s", phase);
+    infiltratr_copy_string(state->phase, sizeof(state->phase), phase);
     return journal_save(path, state, error);
 }
 

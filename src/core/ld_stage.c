@@ -4,6 +4,8 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 
+#include "infiltratr/core.h"
+
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -32,7 +34,7 @@ bool ld_memory_info(LdMemoryInfo *info) {
     uint64_t value_kb = 0;
     char unit[16];
     while (fscanf(file, "%63s %" SCNu64 " %15s", key, &value_kb, unit) == 3) {
-        uint64_t bytes = value_kb > UINT64_MAX / 1024U ? UINT64_MAX : value_kb * 1024U;
+        uint64_t bytes = infiltratr_u64_multiply_saturating(value_kb, UINT64_C(1024));
         if (strcmp(key, "MemTotal:") == 0) info->total_bytes = bytes;
         else if (strcmp(key, "MemAvailable:") == 0) info->available_bytes = bytes;
     }

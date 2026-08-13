@@ -4,6 +4,8 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+
+#include "infiltratr/core.h"
 #include "ld_stop.h"
 #include "version.h"
 
@@ -136,10 +138,7 @@ static int journal_save(const char *path, const ExfatJournal *state, char **erro
 }
 
 static int parse_u64(const char *text, uint64_t *value) {
-    errno = 0; char *end = NULL; unsigned long long parsed = strtoull(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0') return -1;
-    *value = (uint64_t)parsed;
-    return 0;
+    return infiltratr_parse_u64(text, 10U, value) ? 0 : -1;
 }
 
 static int journal_load(const char *path, ExfatJournal *state, char **error) {
@@ -147,17 +146,17 @@ static int journal_load(const char *path, ExfatJournal *state, char **error) {
     if (file == NULL) { exfat_set_error(error, "cannot open exFAT recovery journal: %s", strerror(errno)); return -1; }
     char *line = NULL; size_t capacity = 0;
     if (getline(&line, &capacity, file) < 0) goto invalid;
-    line[strcspn(line, "\r\n")] = '\0'; if (strcmp(line, JOURNAL_MAGIC) != 0) goto invalid;
+    infiltratr_trim_line_end(line); if (strcmp(line, JOURNAL_MAGIC) != 0) goto invalid;
     while (getline(&line, &capacity, file) >= 0) {
-        line[strcspn(line, "\r\n")] = '\0'; char *equals = strchr(line, '='); if (equals == NULL) goto invalid;
+        infiltratr_trim_line_end(line); char *equals = strchr(line, '='); if (equals == NULL) goto invalid;
         *equals++ = '\0';
         if (strcmp(line, "device") == 0) { free(state->device); state->device = ld_xstrdup(equals); }
         else if (strcmp(line, "target_identity") == 0) { free(state->target_identity); state->target_identity = ld_xstrdup(equals); }
         else if (strcmp(line, "stage") == 0) { free(state->stage); state->stage = ld_xstrdup(equals); }
-        else if (strcmp(line, "operation") == 0) snprintf(state->operation, sizeof(state->operation), "%s", equals);
-        else if (strcmp(line, "phase") == 0) snprintf(state->phase, sizeof(state->phase), "%s", equals);
-        else if (strcmp(line, "stage_sha256") == 0) snprintf(state->stage_sha256, sizeof(state->stage_sha256), "%s", equals);
-        else if (strcmp(line, "serial") == 0) { uint64_t value; if (parse_u64(equals, &value) != 0 || value > UINT32_MAX) goto invalid; state->serial = (uint32_t)value; }
+        else if (strcmp(line, "operation") == 0) infiltratr_copy_string(state->operation, sizeof(state->operation), equals);
+        else if (strcmp(line, "phase") == 0) infiltratr_copy_string(state->phase, sizeof(state->phase), equals);
+        else if (strcmp(line, "stage_sha256") == 0) infiltratr_copy_string(state->stage_sha256, sizeof(state->stage_sha256), equals);
+        else if (strcmp(line, "serial") == 0) { uint64_t value; if (!infiltratr_parse_u64_range(equals, 10U, 0U, UINT32_MAX, &value)) goto invalid; state->serial = (uint32_t)value; }
         else if (strcmp(line, "physical_bytes") == 0 && parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
         else if (strcmp(line, "filesystem_bytes") == 0 && parse_u64(equals, &state->filesystem_bytes) != 0) goto invalid;
         else if (strcmp(line, "commit_offset") == 0 && parse_u64(equals, &state->commit_offset) != 0) goto invalid;
@@ -174,7 +173,7 @@ invalid_state:
 }
 
 static int journal_phase(const char *path, ExfatJournal *state, const char *phase, char **error) {
-    snprintf(state->phase, sizeof(state->phase), "%s", phase); return journal_save(path, state, error);
+    infiltratr_copy_string(state->phase, sizeof(state->phase), phase); return journal_save(path, state, error);
 }
 
 static void transaction_cleanup(const char *journal, const ExfatJournal *state) {

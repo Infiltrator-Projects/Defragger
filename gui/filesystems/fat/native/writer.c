@@ -27,6 +27,7 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "ld_stop.h"
+#include "infiltratr/core.h"
 #include "version.h"
 #include "fat_analysis.h"
 #include "fat_directory.h"
@@ -1070,11 +1071,10 @@ static void usage(FILE *out) {
 }
 
 static size_t parse_size(const char *s) {
-    char *end = NULL;
-    errno = 0;
-    unsigned long long v = strtoull(s, &end, 10);
-    if (errno != 0 || end == s || *end != '\0' || v > SIZE_MAX) ld_die("invalid numeric argument");
-    return (size_t)v;
+    uint64_t value = 0;
+    if (!infiltratr_parse_u64_range(s, 10U, 0U, (uint64_t)SIZE_MAX, &value))
+        ld_die("invalid numeric argument");
+    return (size_t)value;
 }
 
 static size_t parse_byte_size(const char *s) {
