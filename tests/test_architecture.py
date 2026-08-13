@@ -83,6 +83,7 @@ def test_dispatch_is_filesystem_neutral() -> None:
 
 def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
     assert not (ROOT / "src" / "filesystems").exists()
+    assert not (ROOT / "vendor").exists(), "bundled third-party source tree reintroduced"
     assert not (ROOT / "src" / "engine").exists()
     assert not (ROOT / "src" / "core" / "ld_plugin.h").exists()
     assert not (ROOT / "src" / "linux_defragger_engine.c").exists()
@@ -128,7 +129,11 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
 
     fat_native = GUI / "filesystems" / "fat" / "native"
     assert (fat_native / "writer.c").is_file()
-    assert (GUI / "filesystems" / "hfs" / "native" / "analyser.c").is_file()
+    hfs_analyser = GUI / "filesystems" / "hfs" / "native" / "analyser.c"
+    assert hfs_analyser.is_file()
+    hfs_source = hfs_analyser.read_text()
+    assert "libhfs" not in hfs_source
+    assert "vendor/" not in (ROOT / "CMakeLists.txt").read_text()
 
 
 def test_build_and_path_registry_install_native_workers() -> None:

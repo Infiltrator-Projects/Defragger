@@ -1,4 +1,15 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+# Linux Defragger 1.8.0-96
+
+- Replaced the remaining bundled classic-HFS `hfsutils` dependency with a first-party native C read-only analyser. The new analyser directly parses the HFS MDB, Extents Overflow B-tree, Catalog B-tree, data/resource-fork extent chains and fragmentation state.
+- Removed the complete `vendor/` tree and all installed hfsutils notices/credits. The repository now contains no vendored third-party source.
+- Added a permanent classic-HFS regression that constructs a fragmented raw HFS image directly in first-party test code. Before the dependency was removed, the new analyser was also cross-checked against the previous hfsutils-backed analyser on an independently generated fragmented HFS volume and produced the same result.
+- Updated the About dialog to the current `The-First-Infiltrator/Defragger` repository and removed obsolete third-party credits.
+- Rewrote the README as a current-state project overview, split every read-only filesystem into an explicit support row, and moved revision-history material to this release-notes document.
+- Standardised the source archive as `Defragger-${VERSION}.zip` and added a packaging regression that verifies both the filename and `Defragger-${VERSION}/` top-level directory.
+- Added an architecture guard that rejects a reintroduced top-level `vendor/` source tree.
+- Revision 96 is the first tag after the post-95 documentation/naming corrections, so the GitHub-generated source ZIP, tagged README and release metadata are intended to describe one exact commit.
+
 # Linux Defragger 1.8.0-95
 
 - Relicensed all first-party Linux Defragger source code, headers, Python modules, build scripts, packaging, tests, documentation and project metadata under `GPL-3.0-or-later`.

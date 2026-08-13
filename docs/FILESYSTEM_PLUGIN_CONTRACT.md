@@ -38,7 +38,7 @@ Filesystem-neutral native services remain in `src/core/` and may be shared by
 such helpers. They provide raw I/O, device safety, staging, stop handling and
 runtime support; they do not probe, register or dispatch filesystem formats.
 
-Revision 94 keeps FAT, XFS, Amiga OFS/FFS, HFS+/HFSX, EXT, NTFS and exFAT mutation engines in native C below their owning GUI packages. Their Python `plugin.py` files are thin adapters only; parsing, planning, mutation, staged verification and recovery are native implementation details. Classic HFS similarly owns its read-only native analyser under `gui/filesystems/hfs/native/`. The architecture is one GUI plugin hierarchy with C filesystem engines beneath it, not parallel Python and C implementations of the same filesystem logic.
+FAT, XFS, Amiga OFS/FFS, HFS+/HFSX, EXT, NTFS and exFAT keep their mutation engines in native C below their owning GUI packages. Their Python `plugin.py` files are thin adapters only; parsing, planning, mutation, staged verification and recovery are native implementation details. Classic HFS owns a first-party direct read-only C analyser under `gui/filesystems/hfs/native/`; no third-party HFS source is bundled. The architecture is one GUI plugin hierarchy with C filesystem engines beneath it, not parallel Python and C implementations of the same filesystem logic.
 
 ## Worker invocation
 

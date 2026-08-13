@@ -8,10 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 IDENTIFIER = "SPDX-License-Identifier: GPL-3.0-or-later"
-EXCLUDED_TOP_LEVEL = {"vendor", "LICENSES", ".git", ".pytest_cache"}
+EXCLUDED_TOP_LEVEL = {"LICENSE", "LICENSES", ".git", ".pytest_cache"}
 EXCLUDED_PREFIXES = ("build", "native-verify", "release")
 
-HASH_SUFFIXES = {".py", ".sh", ".ini", ".desktop"}
+HASH_SUFFIXES = {".py", ".sh", ".ini", ".desktop", ".yml", ".yaml"}
 SLASH_SUFFIXES = {".c", ".h"}
 HTML_SUFFIXES = {".md"}
 XML_SUFFIXES = {".svg"}

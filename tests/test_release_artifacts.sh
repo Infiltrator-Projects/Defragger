@@ -42,7 +42,6 @@ grep -qx "linux-defragger-${VERSION}/CMakeLists.txt" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/packaging/build-deb.sh" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/packaging/build-local-run.sh" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/packaging/build-source-zip.sh" "$WORK/files.txt"
-grep -qx "linux-defragger-${VERSION}/THIRD_PARTY_NOTICES.md" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/LICENSES/GPL-3.0-or-later.txt" "$WORK/files.txt"
 if grep -Eq '/(build[^/]*)/|__pycache__|\.pyc$|\.deb$|\.run$|\.zip$' "$WORK/files.txt"; then
     printf '%s\n' 'Generated local installer contains a forbidden generated file.' >&2

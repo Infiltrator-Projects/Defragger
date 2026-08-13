@@ -5,4 +5,4 @@ Linux Defragger first-party code, scripts, tests, packaging and documentation ar
 
 The canonical GPL version 3 licence text is distributed as `LICENSES/GPL-3.0-or-later.txt` in the source tree and as `COPYING.GPL-3.0` in installed package documentation.
 
-The temporarily bundled classic-HFS `hfsutils` source is third-party material. Its authorship and GPL-2.0-or-later terms are recorded separately in `THIRD_PARTY_NOTICES.md` and the corresponding installed hfsutils notices. It is not relicensed as Linux Defragger first-party code.
+Linux Defragger does not vendor third-party source code. Build and runtime libraries are supplied by the host operating system and retain their own distribution/upstream licence terms.

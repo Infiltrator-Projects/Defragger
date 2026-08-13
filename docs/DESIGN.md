@@ -69,7 +69,7 @@ preferred implementation language for filesystem parsing and mutation; Python
 is retained only where it provides GUI/backend glue or where a filesystem has
 not yet completed its C migration. FAT keeps its C implementation in
 `gui/filesystems/fat/native/`; XFS keeps its complete raw engine in
-`gui/filesystems/xfs/native/`; classic HFS keeps its analyser in
+`gui/filesystems/xfs/native/`; classic HFS keeps its first-party direct read-only analyser in
 `gui/filesystems/hfs/native/`. Those binaries are workers of the GUI plugin,
 not independently registered filesystem plugins. There is deliberately no
 `src/filesystems/` tree and no native filesystem ABI.
@@ -118,10 +118,10 @@ authoritative filesystem change.
 
 ## Direct writer rule
 
-A write-capable plugin opens the unmounted target directly. It may link a fixed
-userspace format library in-process, but it may not mount the target, call a
-mounted-filesystem relocation interface, or launch an external filesystem
-mutation/repair program. The plugin owns allocation planning, metadata updates,
+A write-capable plugin opens the unmounted target directly. It may link system-provided
+userspace libraries in-process, but Linux Defragger does not vendor third-party source.
+A writer may not mount the target, call a mounted-filesystem relocation interface,
+or launch an external filesystem mutation/repair program. The plugin owns allocation planning, metadata updates,
 checksums, staging, verification, commit and recovery. A production architecture
 test rejects known external filesystem mutation/repair utilities and loop/mount
 orchestration if they reappear in production code or package dependencies.
@@ -142,6 +142,11 @@ Fixed group metadata stays fixed. The private image is verified internally,
 including allocation state and payload identity, before commit begins. Commit derives write ranges from the verified final allocation state and writes only allocated blocks, with a durable physical cursor so Recover can resume idempotently after interruption. Growth Defrag verifies the exact 10% reserve policy before
 source commit.
 
+
+## Classic HFS direct analyser
+
+`gui/filesystems/hfs/native/analyser.c` is a first-party read-only implementation. It parses the classic HFS Master Directory Block, Extents Overflow B-tree and Catalog B-tree directly from raw storage, follows data/resource-fork extent chains, and reports exact file fragmentation without mounting HFS or invoking an external HFS utility. The former bundled hfsutils/libhfs source is absent from the repository and package. Unsupported structural cases fail closed.
+
 ## Amiga OFS/FFS
 
 `gui/filesystems/affs/native/` is the authoritative first-party OFS/FFS implementation. It performs raw DOS\0..DOS\7 identification, allocation bitmap decoding, directory/hash-chain traversal, file/list-block cataloguing, relocation planning, OFS/FFS data rewriting, staged verification, allocated-range commit and recovery. The previous bundled Python `amitools` runtime is not part of production or packaging.
@@ -155,4 +160,4 @@ The writer accepts journaled volumes only when the internal JournalInfoBlock/jou
 
 ## Licensing invariant
 
-All first-party Linux Defragger implementation code, GUI glue, build/packaging logic, tests and project documentation use `SPDX-License-Identifier: GPL-3.0-or-later`. The exact comment syntax follows the file format. Non-commentable first-party artefacts use an adjacent `.license` sidecar. `tests/test_spdx_licensing.py` enforces this rule. Third-party source is never silently relicensed.
+All first-party Linux Defragger implementation code, GUI glue, build/packaging logic, tests and project documentation use `SPDX-License-Identifier: GPL-3.0-or-later`. The exact comment syntax follows the file format. Non-commentable first-party artefacts use an adjacent `.license` sidecar. `tests/test_spdx_licensing.py` enforces this rule. The repository contains no vendored third-party source; system-provided build/runtime libraries retain their own licence terms.

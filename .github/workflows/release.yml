@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Build and publish release
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact release commit
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config zip python3 python3-gi python3-cairo \
+            gir1.2-gtk-3.0 policykit-1 udisks2 util-linux \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Build release artefacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '\r\n' < VERSION)
+          ./packaging/build-deb.sh
+          ./packaging/build-local-run.sh "linux-defragger-${VERSION}-local-folder.run"
+          test -f "linux-defragger_${VERSION}_amd64.deb"
+          test -f "linux-defragger-${VERSION}-local-folder.run"
+          sha256sum \
+            "linux-defragger_${VERSION}_amd64.deb" \
+            "linux-defragger-${VERSION}-local-folder.run" > RELEASE_SHA256SUMS.txt
+
+      - name: Publish immutable versioned release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '\r\n' < VERSION)
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to replace it." >&2
+            exit 1
+          fi
+          cat > release-body.md <<BODY
+          Linux Defragger ${VERSION}.
+
+          Release downloads:
+          - Generic AMD64 Debian package
+          - Hardware-optimised local compile-and-install program
+          - GitHub-generated source archive \`Defragger-${VERSION}.zip\` from this exact tag
+
+          SHA-256:
+          \`\`\`
+          $(cat RELEASE_SHA256SUMS.txt)
+          \`\`\`
+          BODY
+          gh release create "$TAG" \
+            "linux-defragger_${VERSION}_amd64.deb" \
+            "linux-defragger-${VERSION}-local-folder.run" \
+            --target "$GITHUB_SHA" \
+            --title "Linux Defragger ${VERSION}" \
+            --notes-file release-body.md

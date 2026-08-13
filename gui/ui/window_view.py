@@ -14,21 +14,18 @@ from .widgets import DiskMap, SummaryCard
 
 APP_NAME = "Linux Defragger"
 APP_ICON_NAME = "io.github.linuxdefragger"
-PROJECT_URL = "https://github.com/The-Infiltratr/Linux-Defragger"
+PROJECT_URL = "https://github.com/The-First-Infiltrator/Defragger"
 COPYRIGHT = "Copyright © 2026 Shannon Smith"
 ABOUT_COMMENTS = (
-    "A native C/Python/GTK Linux filesystem allocation analyser and offline "
-    "defragmenter authored by Shannon Smith. Includes hfsutils by Robert "
-    "Leslie."
+    "A C-first Linux filesystem allocation analyser and offline defragmenter "
+    "authored by Shannon Smith."
 )
 ABOUT_LICENSE = (
-    "Linux Defragger first-party code is free software licensed under the GNU "
-    "General Public License version 3 or, at your option, any later version "
+    "Linux Defragger is free software licensed under the GNU General Public "
+    "License version 3 or, at your option, any later version "
     "(GPL-3.0-or-later).\n\n"
-    "The temporarily bundled hfsutils 3.2.6 code is Copyright © 1996–1998 "
-    "Robert Leslie and retains its upstream GNU GPL version 2 or later terms.\n\n"
-    "See LICENSES/GPL-3.0-or-later.txt and THIRD_PARTY_NOTICES.md in the source "
-    "package, and the installed documentation, for complete details."
+    "See LICENSES/GPL-3.0-or-later.txt in the source package and the installed "
+    "documentation for the complete licence text."
 )
 
 
@@ -402,12 +399,7 @@ class WindowView:
         dialog.set_version(self.gui_version)
         dialog.set_logo_icon_name(APP_ICON_NAME)
         dialog.set_comments(ABOUT_COMMENTS)
-        dialog.set_authors(
-            [
-                "Shannon Smith — Author and project maintainer",
-                "Robert Leslie — hfsutils 3.2.6",
-            ]
-        )
+        dialog.set_authors(["Shannon Smith — Author and project maintainer"])
         dialog.set_website(PROJECT_URL)
         dialog.set_website_label("Website")
         dialog.set_copyright(COPYRIGHT)

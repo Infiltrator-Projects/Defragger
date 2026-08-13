@@ -25,6 +25,7 @@ done
 
 PARENT=$(dirname -- "$ROOT")
 BASENAME=$(basename -- "$ROOT")
+PAYLOAD_BASENAME="linux-defragger-${VERSION}"
 TAR_PATH="$WORK/source.tar"
 
 tar --sort=name --mtime='@1704067200' --owner=0 --group=0 --numeric-owner \
@@ -37,6 +38,7 @@ tar --sort=name --mtime='@1704067200' --owner=0 --group=0 --numeric-owner \
     --exclude='*.deb' \
     --exclude='*.run' \
     --exclude='*.zip' \
+    --transform="s,^${BASENAME},${PAYLOAD_BASENAME}," \
     -C "$PARENT" -cf "$TAR_PATH" "$BASENAME"
 gzip -n -9 "$TAR_PATH"
 PAYLOAD="$TAR_PATH.gz"

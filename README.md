@@ -1,77 +1,77 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-# Linux Defragger 1.8.0-95
+# Linux Defragger 1.8.0-96
 
-Linux Defragger provides direct allocation analysis and offline canonical layout rewriting for supported filesystems. Writers require the selected target and any genuinely overlapping block mappings to be unmounted; mounted sibling partitions do not block partition-level operations.
+Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on an unmounted block device or image: they do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation utilities.
 
-## Licence
+The project is deliberately modular. Each filesystem owns one authoritative implementation under `gui/filesystems/<format>/`, with native C beneath `native/` where mutation or exact low-level analysis is implemented. Filesystem-neutral raw I/O, staging, device safety and Stop handling live in `src/core/`.
 
-Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under **GNU GPL version 3 or any later version** (`GPL-3.0-or-later`). First-party source files carry SPDX licence identifiers, with sidecar `.license` files used only where a file format cannot safely contain comments. The canonical GPLv3 text is provided in `LICENSES/GPL-3.0-or-later.txt`.
+## Current filesystem support
 
-The remaining bundled classic-HFS `hfsutils` source is third-party code and retains its original GPL-2.0-or-later terms; see `THIRD_PARTY_NOTICES.md`. It is not part of the first-party relicensing.
+| Filesystem | Analyse / Map | Defragment | Growth Defrag | Recover |
+|---|---|---|---|---|
+| FAT12 / FAT16 / FAT32 | Exact | Native C | Native C, exact 10% reserve | Yes |
+| exFAT | Exact | Native C | Native C, exact 10% reserve | Yes |
+| NTFS | Exact | Native C, fail-closed preflight | Native C, exact 10% reserve | Yes |
+| ext2 / ext3 / ext4 | Exact | Native C staged writer | Native C, exact 10% reserve | Yes |
+| XFS v5 | Exact | Native C raw userspace writer | Native C, exact 10% reserve | Yes |
+| Amiga OFS / FFS | Exact | Native C | Native C, exact 10% reserve | Yes |
+| HFS+ / HFSX | Exact | Native C, fail-closed preflight | Native C, exact 10% reserve | Yes |
+| Classic Macintosh HFS | Exact, native C read-only | Not implemented | Not implemented | No |
+| Btrfs | Exact read-only raw analysis | Not implemented | Not implemented | No |
+| APFS | Summary read-only analysis | Not implemented | Not implemented | No |
+| Minix | Summary read-only analysis | Not implemented | Not implemented | No |
+| UFS | Summary read-only analysis | Not implemented | Not implemented | No |
+| ZFS / OpenZFS member | Summary read-only analysis | Not implemented | Not implemented | No |
+| Linux / Solaris swap | Summary read-only analysis | Not applicable | Not applicable | No |
 
-## Current support
+Unsupported on-disk layouts fail closed rather than being guessed. The exact writers perform a final read-only rescan before reporting success.
 
-| Filesystem | Analyse | Defragment | Growth Defrag | Recover |
-|---|---:|---:|---:|---:|
-| FAT12/16/32 | Yes | Native C | Exact 10% | Yes |
-| exFAT | Yes | Native C | Exact 10% | Yes |
-| NTFS | Yes | Native C, fail-closed preflight | Exact 10% | Yes |
-| ext2/ext3/ext4 | Yes | Native C staged writer | Exact 10% | Yes |
-| XFS v5 | Yes | Native C raw userspace, restricted preflight | Exact 10% | Yes |
-| Amiga OFS/FFS | Yes | Native C | Exact 10% | Yes |
-| HFS+/HFSX | Yes | Native C, fail-closed preflight | Exact 10% | Yes |
-| Btrfs, classic HFS, APFS, Minix, UFS, ZFS, swap | Recognition or analysis | Not implemented | Not implemented | No |
+## Raw userspace design
 
-## Architecture
+The writer engines use ordinary Linux raw block I/O but do not depend on Linux filesystem-driver support for physical placement. This is intentional: for example, an XFS target can be analysed and rewritten by the XFS engine without mounting XFS or asking the XFS kernel driver to relocate files.
 
-There is one filesystem hierarchy: `gui/filesystems/<format>/`. `gui/backends/registry.py` is the sole filesystem registry. Write-capable filesystem logic lives in first-party C below the owning package's `native/` directory; Python `plugin.py` files are GUI/backend adapters only. Filesystem-neutral C raw-I/O, device-safety, staging and Stop services remain in `src/core/`.
+Persistent staged writers build and verify a private working image before committing authoritative changes to the source. XFS, EXT, exFAT, HFS+/HFSX and Amiga OFS/FFS commit verified allocated/metadata ranges rather than rewriting free address space merely because the stage spans the full logical filesystem. Recovery re-verifies the persistent stage before resuming writes.
 
-The production architecture test rejects external filesystem mutation/repair command orchestration. Writers use direct raw I/O and may link fixed userspace libraries in-process, but they do not mount a filesystem to ask its kernel driver to choose physical placement.
+The production architecture test rejects known external filesystem mutation/repair command orchestration and loop/mount delegation.
 
-## Staged writers and commit I/O
+## No bundled third-party source
 
-XFS, EXT, exFAT, HFS+/HFSX and Amiga OFS/FFS build and verify a persistent private working image before source commit. Their commit paths write verified allocated/metadata ranges rather than rewriting free address space merely because the sparse stage spans the full logical filesystem. Recovery re-verifies the persistent stage before resuming source writes.
+The source repository contains **no vendored third-party source tree**. Required libraries are supplied by the host distribution at build/runtime rather than copied into Linux Defragger. The project itself is licensed `GPL-3.0-or-later` and first-party source files carry SPDX identifiers.
 
-## HFS+/HFSX native writer
+## Build
 
-Revision 94 replaces the read-only Python HFS+/HFSX implementation with a first-party C engine under `gui/filesystems/hfsplus/native/`. The engine parses the volume header, allocation file, catalog B-tree and extents-overflow B-tree directly. User data/resource forks are packed around fixed filesystem metadata; catalog and existing overflow extent descriptors are updated without rebuilding B-tree topology. Growth Defrag leaves an exact 10% free allocation-block reserve after each movable fork.
-
-Journaled volumes are accepted only when their internal journal is demonstrably empty (or explicitly marked as not yet initialised). Journal info/data blocks remain fixed. A journal containing pending transactions is rejected before mutation because revision 94 deliberately does not replay HFS+ journal transactions.
-
-## XFS raw userspace writer
-
-The XFS writer does not mount XFS, create a loop-mounted XFS stage, issue XFS filesystem ioctls, use FIEMAP for placement, or invoke xfsprogs in production. It performs raw allocation-group, inode, B-tree, reverse-mapping, CRC and journal-cleanliness work itself. Unsupported layouts fail closed before source commit.
-
-## Safety model
-
-- writable block targets use exclusive raw opening;
-- overlap-aware mount checks reject mounted targets/mappings without rejecting disjoint sibling partitions;
-- persistent staged writers keep source bytes unchanged until the private image verifies;
-- recovery re-verifies the stage before authoritative source writes;
-- unsupported on-disk layouts abort before source commit;
-- every successful mutation performs a final read-only verification.
-
-## Build and test
+A normal development build is:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
 cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
-./tests/run_tests.sh ./build/linux-defragger-fat-worker
 ```
+
+The native `.run` installer installs required build/runtime packages, compiles for the current machine using `-march=native -mtune=native`, builds a Debian package and installs it through `dpkg`.
 
 ## Release files
 
-Revision 95 uses three artifacts:
+Linux Defragger 1.8.0-96 uses the standard three-download model:
 
 | File | Purpose |
 |---|---|
-| `linux-defragger_1.8.0-95_amd64.deb` | Generic Debian-managed amd64 build (`-march=x86-64 -mtune=generic`). |
-| `linux-defragger-1.8.0-95-local-folder.run` | Self-contained compiler/installer using `-march=native -mtune=native`; installs `1.8.0-95+native1`. |
-| `Defragger-1.8.0-95.zip` | Canonical tagged source archive, matching GitHub's source ZIP naming. |
+| `linux-defragger_1.8.0-96_amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
+| `linux-defragger-1.8.0-96-local-folder.run` | Hardware-optimised local compile-and-install program. |
+| `Defragger-1.8.0-96.zip` | Canonical GitHub source archive from the exact `v1.8.0-96` tag. |
 
-Build the Debian and native installer with `packaging/build-deb.sh` and `packaging/build-local-run.sh`. GitHub provides `Defragger-${VERSION}.zip` from the tagged source tree; `packaging/build-source-zip.sh` produces the same canonical filename and top-level directory when a local source archive is needed. `VERSION` is the release source for generated C/Python/Debian metadata.
+The generic package and native installer are built with `packaging/build-deb.sh` and `packaging/build-local-run.sh`. `packaging/build-source-zip.sh` produces the same canonical `Defragger-${VERSION}.zip` name and top-level directory when a local source archive is required.
 
-## Reconstruction provenance
+## Documentation
 
-This line descends from the reconstructed revision-80 source after the original revision-80 working directory was lost before packaging. It does not claim byte-for-byte preservation of unrelated unrecoverable revision-63-through-79 changes.
+- `RELEASE_NOTES.md` — revision history and behavioural changes.
+- `TEST_STATUS.md` — current regression coverage and validation gates.
+- `docs/DESIGN.md` — architecture, canonical layout and transaction design.
+- `docs/FILESYSTEM_PLUGIN_CONTRACT.md` — filesystem plugin/worker contract.
+- `docs/COPYRIGHT.md` — copyright and licensing statement.
+
+## Licence
+
+Copyright © 2026 Shannon Smith.
+
+Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under the **GNU General Public License version 3 or, at your option, any later version** (`GPL-3.0-or-later`). The canonical licence text is in `LICENSES/GPL-3.0-or-later.txt`.

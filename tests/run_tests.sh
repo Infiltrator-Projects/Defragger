@@ -14,7 +14,7 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-tests.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
 export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPATH="$ROOT/gui:$ROOT/vendor"
+export PYTHONPATH="$ROOT/gui"
 export LINUX_DEFRAGGER_BUILD_DIR="$BUILD_DIR"
 
 fail() {
@@ -50,6 +50,7 @@ python3 "$ROOT/tests/test_worker_entrypoints.py"
 LINUX_DEFRAGGER_BUILD_DIR="$BUILD_DIR" PYTHONPATH="$ROOT/gui:$ROOT/tests" python3 "$ROOT/tests/test_native_top3.py"
 LINUX_DEFRAGGER_BUILD_DIR="$BUILD_DIR" PYTHONPATH="$ROOT/gui:$ROOT/tests" python3 "$ROOT/tests/test_affs_native.py"
 LINUX_DEFRAGGER_BUILD_DIR="$BUILD_DIR" PYTHONPATH="$ROOT/gui:$ROOT/tests" python3 "$ROOT/tests/test_hfsplus_native.py"
+LINUX_DEFRAGGER_BUILD_DIR="$BUILD_DIR" PYTHONPATH="$ROOT/gui:$ROOT/tests" python3 "$ROOT/tests/test_hfs_native.py"
 python3 "$ROOT/tests/test_xfs_writer.py"
 if [[ -x "$XFS_NATIVE_TEST" ]]; then "$XFS_NATIVE_TEST"; fi
 if [[ -x "$XFS_METADATA_TEST" ]]; then "$XFS_METADATA_TEST"; fi

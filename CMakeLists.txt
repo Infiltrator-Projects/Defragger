@@ -253,34 +253,13 @@ target_compile_definitions(linux-defragger-xfs-worker PRIVATE
 target_link_libraries(linux-defragger-xfs-worker PRIVATE
     linux-defragger-xfs-native linux-defragger-core SQLite::SQLite3 OpenSSL::Crypto)
 
-set(HFSUTILS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/hfsutils-3.2.6)
-set(HFSUTILS_LIB_DIR ${HFSUTILS_DIR}/libhfs)
-add_library(linux-defragger-hfsutils STATIC
-    ${HFSUTILS_LIB_DIR}/block.c
-    ${HFSUTILS_LIB_DIR}/btree.c
-    ${HFSUTILS_LIB_DIR}/data.c
-    ${HFSUTILS_LIB_DIR}/file.c
-    ${HFSUTILS_LIB_DIR}/hfs.c
-    ${HFSUTILS_LIB_DIR}/low.c
-    ${HFSUTILS_LIB_DIR}/medium.c
-    ${HFSUTILS_LIB_DIR}/memcmp.c
-    ${HFSUTILS_LIB_DIR}/node.c
-    ${HFSUTILS_LIB_DIR}/os.c
-    ${HFSUTILS_LIB_DIR}/record.c
-    ${HFSUTILS_LIB_DIR}/version.c
-    ${HFSUTILS_LIB_DIR}/volume.c)
-target_include_directories(linux-defragger-hfsutils PUBLIC
-    ${HFSUTILS_DIR} ${HFSUTILS_LIB_DIR})
-target_compile_options(linux-defragger-hfsutils PRIVATE
-    -std=gnu89 -Wno-implicit-int -Wno-implicit-function-declaration -Wno-int-conversion)
-target_compile_definitions(linux-defragger-hfsutils PRIVATE
-    HAVE_CONFIG_H _FILE_OFFSET_BITS=64)
-
+# Classic HFS read-only analysis is first-party native C.  The analyser parses
+# the MDB, Extents Overflow B-tree and Catalog B-tree directly; no bundled HFS
+# library or external filesystem utility participates in the production path.
 add_executable(linux-defragger-hfs-analyser gui/filesystems/hfs/native/analyser.c)
-target_link_libraries(linux-defragger-hfs-analyser PRIVATE linux-defragger-hfsutils)
-target_compile_options(linux-defragger-hfs-analyser PRIVATE -std=gnu89)
+target_compile_options(linux-defragger-hfs-analyser PRIVATE ${LD_WARNING_FLAGS})
 target_compile_definitions(linux-defragger-hfs-analyser PRIVATE
-    HAVE_CONFIG_H _FILE_OFFSET_BITS=64)
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
 set_target_properties(linux-defragger-hfs-analyser PROPERTIES OUTPUT_NAME hfs_analyser)
 
 install(TARGETS linux-defragger-affs-worker
@@ -322,17 +301,11 @@ install(FILES packaging/io.github.linuxdefragger.svg
         DESTINATION share/icons/hicolor/scalable/apps)
 
 
-install(FILES README.md RELEASE_NOTES.md TEST_STATUS.md THIRD_PARTY_NOTICES.md
+install(FILES README.md RELEASE_NOTES.md TEST_STATUS.md
               docs/FILESYSTEM_PLUGIN_CONTRACT.md docs/DESIGN.md docs/COPYRIGHT.md
         DESTINATION share/doc/linux-defragger)
 install(FILES LICENSES/GPL-3.0-or-later.txt
         DESTINATION share/doc/linux-defragger RENAME COPYING.GPL-3.0)
-install(FILES vendor/hfsutils-3.2.6/COPYING
-        DESTINATION share/doc/linux-defragger RENAME COPYING.GPL-2.0)
-install(FILES vendor/hfsutils-3.2.6/COPYRIGHT
-              vendor/hfsutils-3.2.6/CREDITS
-        DESTINATION share/doc/linux-defragger/hfsutils)
-
 include(CTest)
 if(BUILD_TESTING)
     add_executable(linux-defragger-xfs-metadata-test

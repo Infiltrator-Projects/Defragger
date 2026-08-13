@@ -247,10 +247,10 @@ def test_about_dialog_matches_the_standard_project_identity() -> None:
     for required in (
         'APP_ICON_NAME = "io.github.linuxdefragger"',
         'COPYRIGHT = "Copyright © 2026 Shannon Smith"',
+        'PROJECT_URL = "https://github.com/The-First-Infiltrator/Defragger"',
         "dialog.set_logo_icon_name(APP_ICON_NAME)",
         "dialog.set_comments(ABOUT_COMMENTS)",
         "Shannon Smith — Author and project maintainer",
-        "Robert Leslie — hfsutils 3.2.6",
         'dialog.set_website_label("Website")',
         "dialog.set_copyright(COPYRIGHT)",
         "dialog.set_license(ABOUT_LICENSE)",
@@ -258,6 +258,7 @@ def test_about_dialog_matches_the_standard_project_identity() -> None:
     ):
         assert required in source
     assert "Operation engine:" not in source
+    assert "hfsutils" not in source
 
 
 def main() -> None:

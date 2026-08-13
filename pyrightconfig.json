@@ -11,8 +11,13 @@
     "gui/ui/operation_planner.py",
     "gui/ui/window_view.py"
   ],
-  "exclude": ["vendor", "build", "build-deb"],
-  "extraPaths": ["gui"],
+  "exclude": [
+    "build",
+    "build-deb"
+  ],
+  "extraPaths": [
+    "gui"
+  ],
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic",
   "reportMissingImports": false,
