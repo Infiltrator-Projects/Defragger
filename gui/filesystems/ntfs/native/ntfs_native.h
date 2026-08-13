@@ -138,7 +138,6 @@ uint16_t ntfs_u16(const void *data, size_t offset);
 uint32_t ntfs_u32(const void *data, size_t offset);
 uint64_t ntfs_u64(const void *data, size_t offset);
 void ntfs_put_u16(void *data, size_t offset, uint16_t value);
-void ntfs_put_u32(void *data, size_t offset, uint32_t value);
 void ntfs_put_u64(void *data, size_t offset, uint64_t value);
 
 void ntfs_runs_free(NtfsRunVec *runs);

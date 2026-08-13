@@ -51,10 +51,6 @@ uint64_t ntfs_u64(const void *data, size_t offset) {
 void ntfs_put_u16(void *data, size_t offset, uint16_t value) {
     uint8_t *p = data; p[offset] = (uint8_t)value; p[offset + 1U] = (uint8_t)(value >> 8);
 }
-void ntfs_put_u32(void *data, size_t offset, uint32_t value) {
-    uint8_t *p = data;
-    for (unsigned index = 0; index < 4U; ++index) p[offset + index] = (uint8_t)(value >> (index * 8U));
-}
 void ntfs_put_u64(void *data, size_t offset, uint64_t value) {
     uint8_t *p = data;
     for (unsigned index = 0; index < 8U; ++index) p[offset + index] = (uint8_t)(value >> (index * 8U));

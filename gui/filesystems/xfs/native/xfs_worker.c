@@ -12,6 +12,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "ld_path.h"
 
 #include "infiltratr/core.h"
 #include "ld_stop.h"
@@ -78,25 +79,7 @@ static void uuid_hex(const uint8_t uuid[16], char out[33]) {
     out[32] = '\0';
 }
 
-static char *append_suffix(const char *base, const char *suffix) {
-    size_t a = strlen(base), b = strlen(suffix);
-    char *result = ld_xmalloc(a + b + 1U);
-    memcpy(result, base, a);
-    memcpy(result + a, suffix, b + 1U);
-    return result;
-}
 
-static char *parent_directory(const char *path) {
-    char *copy = ld_xstrdup(path);
-    char *slash = strrchr(copy, '/');
-    if (slash == NULL) {
-        free(copy);
-        return ld_xstrdup(".");
-    }
-    if (slash == copy) slash[1] = '\0';
-    else *slash = '\0';
-    return copy;
-}
 
 static int ensure_directory_tree(const char *path, char **error) {
     char *copy = ld_xstrdup(path);
@@ -117,12 +100,6 @@ static int ensure_directory_tree(const char *path, char **error) {
     return 0;
 }
 
-static void fsync_parent(const char *path) {
-    char *parent = parent_directory(path);
-    int fd = open(parent, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (fd >= 0) { (void)fsync(fd); (void)close(fd); }
-    free(parent);
-}
 
 static void journal_free(XfsJournal *state) {
     free(state->device);
@@ -142,10 +119,10 @@ static int journal_save(const char *path, const XfsJournal *state, char **error)
         xfs_set_error(error, "XFS journal path or identity contains an unsupported newline");
         return -1;
     }
-    char *parent = parent_directory(path);
+    char *parent = ld_path_parent_directory(path);
     if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
     free(parent);
-    char *temporary = append_suffix(path, ".tmp");
+    char *temporary = ld_path_append_suffix(path, ".tmp");
     FILE *file = fopen(temporary, "w");
     if (file == NULL) {
         xfs_set_error(error, "cannot create XFS transaction journal: %s", strerror(errno));
@@ -179,7 +156,7 @@ static int journal_save(const char *path, const XfsJournal *state, char **error)
         free(temporary);
         return -1;
     }
-    fsync_parent(path);
+    ld_path_fsync_parent(path);
     free(temporary);
     return 0;
 }
@@ -256,14 +233,14 @@ static void transaction_cleanup(const char *journal, const XfsJournal *state) {
         unlink_if_exists(state->stage);
         unlink_if_exists(state->plan);
         if (state->plan != NULL) {
-            char *wal = append_suffix(state->plan, "-wal");
-            char *shm = append_suffix(state->plan, "-shm");
+            char *wal = ld_path_append_suffix(state->plan, "-wal");
+            char *shm = ld_path_append_suffix(state->plan, "-shm");
             unlink_if_exists(wal); unlink_if_exists(shm);
             free(wal); free(shm);
         }
     }
     unlink_if_exists(journal);
-    fsync_parent(journal);
+    ld_path_fsync_parent(journal);
 }
 
 static int target_identity(const char *path, char **identity, uint64_t *size, char **error) {
@@ -311,7 +288,7 @@ static int capacity_preflight(const char *journal, const XfsCatalogue *catalogue
         if (UINT64_MAX - required < repair_margin) required = UINT64_MAX;
         else required += repair_margin;
     }
-    char *parent = parent_directory(journal);
+    char *parent = ld_path_parent_directory(journal);
     struct statvfs fs;
     if (statvfs(parent, &fs) != 0) {
         xfs_set_error(error, "cannot inspect XFS staging capacity in %s: %s", parent, strerror(errno));
@@ -573,8 +550,8 @@ static int build_and_commit(const char *device, const char *operation, const cha
     state.device = ld_xstrdup(real); state.target_identity = ld_xstrdup(identity);
     uuid_hex(source.geometry.uuid, state.uuid); snprintf(state.operation, sizeof(state.operation), "%s", operation);
     snprintf(state.phase, sizeof(state.phase), "preflight");
-    state.stage = append_suffix(journal_path, ".xfs-stage.img");
-    state.plan = append_suffix(journal_path, ".xfs-plan.sqlite");
+    state.stage = ld_path_append_suffix(journal_path, ".xfs-stage.img");
+    state.plan = ld_path_append_suffix(journal_path, ".xfs-plan.sqlite");
     state.physical_bytes = physical_bytes; state.filesystem_bytes = filesystem_bytes;
     if (capacity_preflight(journal_path, &source, error) != 0 || journal_save(journal_path, &state, error) != 0) goto done;
     printf("Raw userspace native-C XFS engine %s\n", LD_VERSION); fflush(stdout);

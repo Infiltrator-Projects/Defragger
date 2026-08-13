@@ -4,6 +4,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "ld_path.h"
 
 #include "infiltratr/core.h"
 #include "ld_stop.h"
@@ -58,17 +59,7 @@ static void emit_result(const char *operation, const char *status, const char *m
     fflush(stdout);
 }
 
-static char *append_suffix(const char *base, const char *suffix) {
-    size_t a = strlen(base), b = strlen(suffix);
-    char *result = ld_xmalloc(a + b + 1U);
-    memcpy(result, base, a); memcpy(result + a, suffix, b + 1U); return result;
-}
 
-static char *parent_directory(const char *path) {
-    char *copy = ld_xstrdup(path); char *slash = strrchr(copy, '/');
-    if (slash == NULL) { free(copy); return ld_xstrdup("."); }
-    if (slash == copy) slash[1] = '\0'; else *slash = '\0'; return copy;
-}
 
 static int ensure_directory_tree(const char *path, char **error) {
     char *copy = ld_xstrdup(path); size_t length = strlen(copy);
@@ -84,12 +75,6 @@ static int ensure_directory_tree(const char *path, char **error) {
     free(copy); return 0;
 }
 
-static void fsync_parent(const char *path) {
-    char *parent = parent_directory(path);
-    int fd = open(parent, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (fd >= 0) { (void)fsync(fd); (void)close(fd); }
-    free(parent);
-}
 
 static void unlink_if_exists(const char *path) {
     if (path == NULL || *path == '\0') return;
@@ -110,10 +95,10 @@ static int journal_save(const char *path, const ExfatJournal *state, char **erro
     if (!safe_value(state->device) || !safe_value(state->target_identity) || !safe_value(state->stage)) {
         exfat_set_error(error, "exFAT transaction paths contain unsupported journal characters"); return -1;
     }
-    char *parent = parent_directory(path);
+    char *parent = ld_path_parent_directory(path);
     if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
     free(parent);
-    char *temporary = append_suffix(path, ".tmp");
+    char *temporary = ld_path_append_suffix(path, ".tmp");
     FILE *file = fopen(temporary, "w");
     if (file == NULL) { exfat_set_error(error, "cannot create exFAT journal: %s", strerror(errno)); free(temporary); return -1; }
     fprintf(file, "%s\n", JOURNAL_MAGIC);
@@ -134,7 +119,7 @@ static int journal_save(const char *path, const ExfatJournal *state, char **erro
     if (rename(temporary, path) != 0) {
         exfat_set_error(error, "cannot publish exFAT journal: %s", strerror(errno)); unlink_if_exists(temporary); free(temporary); return -1;
     }
-    free(temporary); fsync_parent(path); return 0;
+    free(temporary); ld_path_fsync_parent(path); return 0;
 }
 
 static int parse_u64(const char *text, uint64_t *value) {
@@ -179,7 +164,7 @@ static int journal_phase(const char *path, ExfatJournal *state, const char *phas
 static void transaction_cleanup(const char *journal, const ExfatJournal *state) {
     if (state != NULL) unlink_if_exists(state->stage);
     unlink_if_exists(journal);
-    fsync_parent(journal);
+    ld_path_fsync_parent(journal);
 }
 
 static char *canonical_path(const char *path, char **error) {
@@ -238,7 +223,7 @@ static bool canonical_layout(const ExfatCatalogue *catalogue, const ExfatPlan *p
 
 static int capacity_preflight(const char *journal_path, const ExfatVolume *volume,
                               const ExfatPlan *plan, char **error) {
-    char *parent = parent_directory(journal_path); struct statvfs fs;
+    char *parent = ld_path_parent_directory(journal_path); struct statvfs fs;
     if (statvfs(parent, &fs) != 0) { exfat_set_error(error, "cannot inspect exFAT journal filesystem capacity: %s", strerror(errno)); free(parent); return -1; }
     free(parent); uint64_t available = (uint64_t)fs.f_bavail * (uint64_t)fs.f_frsize;
     uint64_t allocated = 0; for (size_t i = 0; i < plan->bitmap_length; ++i) allocated += (uint64_t)__builtin_popcount((unsigned int)plan->expected_bitmap[i]);
@@ -517,7 +502,7 @@ static int build_and_commit(const char *device, const char *operation, const cha
         puts(growth ? "Not needed; canonical exFAT layout with exact 10% growth reserves verified." : "Not needed; canonical packed exFAT layout verified.");
         emit_result(operation, "not-needed", ""); exfat_plan_free(&plan); exfat_catalogue_free(&catalogue); exfat_close_volume(&source); free(real); free(identity); return 0;
     }
-    state.device = ld_xstrdup(real); state.target_identity = ld_xstrdup(identity); state.stage = append_suffix(journal_path, ".exfat-stage.img");
+    state.device = ld_xstrdup(real); state.target_identity = ld_xstrdup(identity); state.stage = ld_path_append_suffix(journal_path, ".exfat-stage.img");
     snprintf(state.operation, sizeof(state.operation), "%s", operation); snprintf(state.phase, sizeof(state.phase), "prepared");
     state.serial = source.serial; state.physical_bytes = physical; state.filesystem_bytes = source.volume_bytes; state.boot_length = (uint64_t)source.bytes_per_sector * 24U;
     if (capacity_preflight(journal_path, &source, &plan, error) != 0 || journal_save(journal_path, &state, error) != 0) goto precommit_fail;

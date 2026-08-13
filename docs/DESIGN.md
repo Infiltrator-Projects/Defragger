@@ -53,7 +53,6 @@ Filesystem-neutral C mechanics are implemented once:
 - rotational/serial-flash policy and resource defaults;
 - checked allocation, endian codecs and overflow helpers;
 - signal-safe Stop state;
-- raw-range and anonymous-memory staging stores;
 - generated version ownership.
 
 Generic C primitives that are also useful to other Infiltrator applications are
@@ -62,9 +61,9 @@ exact commit `e4547c49400875da3e1a5638366903a01374b350` and currently consumes i
 for strict integer parsing/range validation, bounded string operations, line-end
 trimming, bounded realpath handling, small sysfs scalar reads, prefix matching and
 saturating unit conversion. Defragger keeps its checked-overflow arithmetic, raw
-`pread`/`pwrite` loops, device safety, Stop state and staging/transaction mechanics
-local because those semantics are application-specific or are not yet supplied by
-Common with the required contract.
+`pread`/`pwrite` loops, device safety and Stop state local, while each filesystem
+engine owns its journalled staging/transaction mechanics because those semantics
+are application-specific or are not yet supplied by Common with the required contract.
 
 This directory contains no filesystem registration or dispatch logic.
 

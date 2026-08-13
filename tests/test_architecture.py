@@ -173,10 +173,12 @@ def test_infiltratr_common_integration() -> None:
     assert "infiltratr_realpath_copy" in device
     assert "infiltratr_read_u64_file" in device
     assert "infiltratr_string_starts_with" in device
-    stage = (ROOT / "src" / "core" / "ld_stage.c").read_text()
-    assert "infiltratr_u64_multiply_saturating" in stage
     fat = (GUI / "filesystems" / "fat" / "native" / "writer.c").read_text()
     assert "infiltratr_parse_u64_range" in fat
+    fat_journal = (GUI / "filesystems" / "fat" / "native" / "fat_journal.c").read_text()
+    assert "infiltratr_parse_u64" in fat_journal
+    assert "infiltratr_parse_u64_range" in fat_journal
+    assert "infiltratr_trim_line_end" in fat_journal
     for filesystem, worker in (("ext4", "ext_worker.c"), ("ntfs", "ntfs_worker.c"),
                                ("exfat", "exfat_worker.c"), ("xfs", "xfs_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
@@ -191,7 +193,7 @@ def test_infiltratr_common_integration() -> None:
 def test_core_remains_filesystem_neutral() -> None:
     core = ROOT / "src" / "core"
     expected = {"ld_device.c", "ld_device.h", "ld_io.c", "ld_io.h", "ld_runtime.c",
-                "ld_runtime.h", "ld_stage.c", "ld_stage.h", "ld_stop.c", "ld_stop.h"}
+                "ld_runtime.h", "ld_path.c", "ld_path.h", "ld_stop.c", "ld_stop.h"}
     assert expected <= {path.name for path in core.iterdir() if path.is_file()}
     combined = "\n".join(
         path.read_text(encoding="utf-8", errors="replace").lower()

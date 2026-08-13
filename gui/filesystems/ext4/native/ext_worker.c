@@ -4,6 +4,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "ld_path.h"
 
 #include "infiltratr/core.h"
 #include "ld_stop.h"
@@ -61,21 +62,7 @@ static void emit_result(const char *operation, const char *status, const char *m
     fflush(stdout);
 }
 
-static char *append_suffix(const char *base, const char *suffix) {
-    size_t a = strlen(base), b = strlen(suffix);
-    char *result = ld_xmalloc(a + b + 1U);
-    memcpy(result, base, a);
-    memcpy(result + a, suffix, b + 1U);
-    return result;
-}
 
-static char *parent_directory(const char *path) {
-    char *copy = ld_xstrdup(path);
-    char *slash = strrchr(copy, '/');
-    if (slash == NULL) { free(copy); return ld_xstrdup("."); }
-    if (slash == copy) slash[1] = '\0'; else *slash = '\0';
-    return copy;
-}
 
 static int ensure_directory_tree(const char *path, char **error) {
     char *copy = ld_xstrdup(path);
@@ -92,12 +79,6 @@ static int ensure_directory_tree(const char *path, char **error) {
     free(copy); return 0;
 }
 
-static void fsync_parent(const char *path) {
-    char *parent = parent_directory(path);
-    int fd = open(parent, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (fd >= 0) { (void)fsync(fd); (void)close(fd); }
-    free(parent);
-}
 
 static void unlink_if_exists(const char *path) {
     if (path == NULL || *path == '\0') return;
@@ -122,10 +103,10 @@ static int journal_save(const char *path, const ExtJournal *state, char **error)
         ext_set_error(error, "EXT transaction paths contain unsupported journal characters");
         return -1;
     }
-    char *parent = parent_directory(path);
+    char *parent = ld_path_parent_directory(path);
     if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
     free(parent);
-    char *temporary = append_suffix(path, ".tmp");
+    char *temporary = ld_path_append_suffix(path, ".tmp");
     FILE *file = fopen(temporary, "w");
     if (file == NULL) { ext_set_error(error, "cannot create EXT journal: %s", strerror(errno)); free(temporary); return -1; }
     fprintf(file, "%s\n", JOURNAL_MAGIC);
@@ -150,7 +131,7 @@ static int journal_save(const char *path, const ExtJournal *state, char **error)
         ext_set_error(error, "cannot publish EXT journal: %s", strerror(errno));
         unlink_if_exists(temporary); free(temporary); return -1;
     }
-    free(temporary); fsync_parent(path); return 0;
+    free(temporary); ld_path_fsync_parent(path); return 0;
 }
 
 static char *value_copy(const char *value) {
@@ -173,7 +154,7 @@ static int journal_load(const char *path, ExtJournal *state, char **error) {
     if (strcmp(line, JOURNAL_MAGIC) != 0) goto invalid;
     while (getline(&line, &capacity, file) >= 0) {
         char *equals = strchr(line, '='); if (equals == NULL) goto invalid;
-        *equals++ = '\0'; equals[strcspn(equals, "\r\n")] = '\0';
+        *equals++ = '\0'; infiltratr_trim_line_end(equals);
         if (strcmp(line, "device") == 0) { free(state->device); state->device = value_copy(equals); }
         else if (strcmp(line, "target_identity") == 0) { free(state->target_identity); state->target_identity = value_copy(equals); }
         else if (strcmp(line, "uuid") == 0) infiltratr_copy_string(state->uuid, sizeof(state->uuid), equals);
@@ -208,11 +189,11 @@ static void transaction_cleanup(const char *journal, const ExtJournal *state) {
     if (state != NULL) {
         unlink_if_exists(state->stage); unlink_if_exists(state->plan);
         if (state->plan != NULL) {
-            char *wal = append_suffix(state->plan, "-wal"); char *shm = append_suffix(state->plan, "-shm");
+            char *wal = ld_path_append_suffix(state->plan, "-wal"); char *shm = ld_path_append_suffix(state->plan, "-shm");
             unlink_if_exists(wal); unlink_if_exists(shm); free(wal); free(shm);
         }
     }
-    unlink_if_exists(journal); fsync_parent(journal);
+    unlink_if_exists(journal); ld_path_fsync_parent(journal);
 }
 
 static void uuid_hex(const uint8_t uuid[16], char output[33]) {
@@ -245,7 +226,7 @@ static int target_identity(const char *path, char **identity, uint64_t *size, ch
 }
 
 static int capacity_preflight(const char *journal_path, const ExtGeometry *geometry, char **error) {
-    char *parent = parent_directory(journal_path);
+    char *parent = ld_path_parent_directory(journal_path);
     struct statvfs info;
     if (statvfs(parent, &info) != 0) { ext_set_error(error, "cannot inspect EXT staging filesystem capacity: %s", strerror(errno)); free(parent); return -1; }
     free(parent);
@@ -538,9 +519,9 @@ static int build_and_commit(const char *device, const char *operation,
     (void)ext2fs_close(source_fs); source_fs = NULL;
     real = canonical_path(device, error); if (real == NULL) goto done;
     state.device = ld_xstrdup(real); state.target_identity = ld_xstrdup(identity);
-    uuid_hex(source_geometry.uuid, state.uuid); snprintf(state.source_type, sizeof(state.source_type), "%s", source_geometry.filesystem);
+    uuid_hex(source_geometry.uuid, state.uuid); infiltratr_copy_string(state.source_type, sizeof(state.source_type), source_geometry.filesystem);
     snprintf(state.operation, sizeof(state.operation), "%s", operation); snprintf(state.phase, sizeof(state.phase), "preflight");
-    state.stage = append_suffix(journal_path, ".ext-stage.img"); state.plan = append_suffix(journal_path, ".ext-plan.sqlite");
+    state.stage = ld_path_append_suffix(journal_path, ".ext-stage.img"); state.plan = ld_path_append_suffix(journal_path, ".ext-plan.sqlite");
     state.physical_bytes = physical_bytes; state.filesystem_bytes = source_geometry.total_blocks * source_geometry.block_size;
     if (capacity_preflight(journal_path, &source_geometry, error) != 0 || journal_save(journal_path, &state, error) != 0) goto done;
     printf("Raw userspace native-C %s engine %s\n", source_geometry.filesystem, LD_VERSION); fflush(stdout);

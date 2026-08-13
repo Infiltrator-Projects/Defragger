@@ -12,9 +12,6 @@ void ld_runtime_set_program_name(const char *name) {
     if (name != NULL && *name != '\0') g_program_name = name;
 }
 
-const char *ld_runtime_program_name(void) {
-    return g_program_name;
-}
 
 _Noreturn void ld_die_errno(const char *what) {
     fprintf(stderr, "%s: %s: %s\n", g_program_name, what, strerror(errno));
@@ -67,8 +64,3 @@ bool ld_u64_add(uint64_t left, uint64_t right, uint64_t *result) {
     return true;
 }
 
-bool ld_u64_mul(uint64_t left, uint64_t right, uint64_t *result) {
-    if (left != 0 && right > UINT64_MAX / left) return false;
-    *result = left * right;
-    return true;
-}

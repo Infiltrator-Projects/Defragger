@@ -137,7 +137,7 @@ add_library(linux-defragger-core STATIC
     src/core/ld_io.c
     src/core/ld_device.c
     src/core/ld_stop.c
-    src/core/ld_stage.c)
+    src/core/ld_path.c)
 target_include_directories(linux-defragger-core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
     "${LD_GENERATED_DIR}")

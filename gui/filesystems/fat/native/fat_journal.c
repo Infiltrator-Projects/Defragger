@@ -12,6 +12,8 @@
 #include <unistd.h>
 
 #include "ld_runtime.h"
+#include "ld_path.h"
+#include "infiltratr/core.h"
 #include "fat_journal.h"
 
 void journal_free(Journal *j) {
@@ -38,21 +40,42 @@ void relocation_journal_add_dir_patch(RelocationJournal *j, RelocationDirPatch p
     j->dir_patches[j->dir_patch_count++] = patch;
 }
 
-static void fsync_parent_directory(const char *path) {
-    char *copy = ld_xstrdup(path);
-    char *slash = strrchr(copy, '/');
-    const char *dir = ".";
-    if (slash != NULL) {
-        if (slash == copy) slash[1] = '\0';
-        else *slash = '\0';
-        dir = copy;
+
+static uint64_t parse_u64_value(const char *text, unsigned int base, const char *field) {
+    uint64_t value = 0;
+    if (!infiltratr_parse_u64(text, base, &value)) {
+        char message[160];
+        (void)snprintf(message, sizeof(message), "invalid FAT journal %s", field);
+        ld_die(message);
     }
-    int fd = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (fd >= 0) {
-        (void)fsync(fd);
-        close(fd);
+    return value;
+}
+
+static uint32_t parse_u32_value(const char *text, unsigned int base, const char *field) {
+    uint64_t value = 0;
+    if (!infiltratr_parse_u64_range(text, base, 0U, UINT32_MAX, &value)) {
+        char message[160];
+        (void)snprintf(message, sizeof(message), "invalid FAT journal %s", field);
+        ld_die(message);
     }
-    free(copy);
+    return (uint32_t)value;
+}
+
+static size_t parse_size_value(const char *text, const char *field) {
+    uint64_t value = 0;
+    if (!infiltratr_parse_u64_range(text, 10U, 0U, (uint64_t)SIZE_MAX, &value)) {
+        char message[160];
+        (void)snprintf(message, sizeof(message), "invalid FAT journal %s", field);
+        ld_die(message);
+    }
+    return (size_t)value;
+}
+
+static JournalStage parse_stage_value(const char *text) {
+    uint64_t value = 0;
+    if (!infiltratr_parse_u64_range(text, 10U, J_PREPARED, J_OLD_FREED, &value))
+        ld_die("invalid FAT journal stage");
+    return (JournalStage)value;
 }
 
 void relocation_journal_write(const char *path, const RelocationJournal *j) {
@@ -83,7 +106,7 @@ void relocation_journal_write(const char *path, const RelocationJournal *j) {
     if (fsync(fileno(fp)) != 0) ld_die_errno("fsync relocation journal");
     if (fclose(fp) != 0) ld_die_errno("close relocation journal");
     if (rename(tmp, path) != 0) ld_die_errno("install relocation journal");
-    fsync_parent_directory(path);
+    ld_path_fsync_parent(path);
     free(tmp);
 }
 
@@ -93,7 +116,7 @@ bool journal_has_magic(const char *path, const char *magic) {
     char *line = NULL;
     size_t cap = 0;
     bool match = getline(&line, &cap, fp) >= 0;
-    if (match) line[strcspn(line, "\r\n")] = '\0';
+    if (match) infiltratr_trim_line_end(line);
     match = match && strcmp(line, magic) == 0;
     free(line);
     fclose(fp);
@@ -111,21 +134,21 @@ Journal journal_read(const char *path) {
     }
     size_t expected_count = 0;
     while (getline(&line, &cap, fp) >= 0) {
-        line[strcspn(line, "\r\n")] = '\0';
+        infiltratr_trim_line_end(line);
         char *eq = strchr(line, '=');
         if (eq == NULL) continue;
         *eq++ = '\0';
         if (strcmp(line, "device") == 0) j.device_path = ld_xstrdup(eq);
-        else if (strcmp(line, "volume_id") == 0) j.volume_id = (uint32_t)strtoul(eq, NULL, 16);
-        else if (strcmp(line, "stage") == 0) j.stage = (JournalStage)strtol(eq, NULL, 10);
-        else if (strcmp(line, "dirent_offset") == 0) j.dirent_offset = strtoull(eq, NULL, 10);
-        else if (strcmp(line, "old_first") == 0) j.old_first = (uint32_t)strtoul(eq, NULL, 10);
-        else if (strcmp(line, "dest_start") == 0) j.dest_start = (uint32_t)strtoul(eq, NULL, 10);
-        else if (strcmp(line, "count") == 0) expected_count = (size_t)strtoull(eq, NULL, 10);
+        else if (strcmp(line, "volume_id") == 0) j.volume_id = parse_u32_value(eq, 16U, "volume_id");
+        else if (strcmp(line, "stage") == 0) j.stage = parse_stage_value(eq);
+        else if (strcmp(line, "dirent_offset") == 0) j.dirent_offset = parse_u64_value(eq, 10U, "dirent_offset");
+        else if (strcmp(line, "old_first") == 0) j.old_first = parse_u32_value(eq, 10U, "old_first");
+        else if (strcmp(line, "dest_start") == 0) j.dest_start = parse_u32_value(eq, 10U, "dest_start");
+        else if (strcmp(line, "count") == 0) expected_count = parse_size_value(eq, "count");
         else if (strcmp(line, "source") == 0) {
             char *save = NULL;
             for (char *tok = strtok_r(eq, ",", &save); tok != NULL; tok = strtok_r(NULL, ",", &save)) {
-                u32vec_push(&j.source, (uint32_t)strtoul(tok, NULL, 10));
+                u32vec_push(&j.source, parse_u32_value(tok, 10U, "source cluster"));
             }
         }
     }
@@ -150,18 +173,18 @@ RelocationJournal relocation_journal_read(const char *path) {
     size_t expected_moves = 0;
     size_t expected_patches = 0;
     while (getline(&line, &cap, fp) >= 0) {
-        line[strcspn(line, "\r\n")] = '\0';
+        infiltratr_trim_line_end(line);
         char *eq = strchr(line, '=');
         if (eq == NULL) continue;
         *eq++ = '\0';
         if (strcmp(line, "device") == 0) j.device_path = ld_xstrdup(eq);
-        else if (strcmp(line, "volume_id") == 0) j.volume_id = (uint32_t)strtoul(eq, NULL, 16);
-        else if (strcmp(line, "stage") == 0) j.stage = (JournalStage)strtol(eq, NULL, 10);
-        else if (strcmp(line, "root_old") == 0) j.root_old = (uint32_t)strtoul(eq, NULL, 10);
-        else if (strcmp(line, "root_new") == 0) j.root_new = (uint32_t)strtoul(eq, NULL, 10);
-        else if (strcmp(line, "move_count") == 0) expected_moves = (size_t)strtoull(eq, NULL, 10);
+        else if (strcmp(line, "volume_id") == 0) j.volume_id = parse_u32_value(eq, 16U, "volume_id");
+        else if (strcmp(line, "stage") == 0) j.stage = parse_stage_value(eq);
+        else if (strcmp(line, "root_old") == 0) j.root_old = parse_u32_value(eq, 10U, "root_old");
+        else if (strcmp(line, "root_new") == 0) j.root_new = parse_u32_value(eq, 10U, "root_new");
+        else if (strcmp(line, "move_count") == 0) expected_moves = parse_size_value(eq, "move_count");
         else if (strcmp(line, "dir_patch_count") == 0) {
-            expected_patches = (size_t)strtoull(eq, NULL, 10);
+            expected_patches = parse_size_value(eq, "dir_patch_count");
         } else if (strcmp(line, "move") == 0) {
             RelocationMove m = {0};
             if (sscanf(eq, "%" SCNu32 ",%" SCNu32 ",%" SCNu32 ",%" SCNu32,
@@ -192,7 +215,7 @@ RelocationJournal relocation_journal_read(const char *path) {
 
 void journal_remove(const char *path) {
     if (unlink(path) != 0 && errno != ENOENT) ld_die_errno("remove journal");
-    fsync_parent_directory(path);
+    ld_path_fsync_parent(path);
 }
 
 bool path_exists(const char *path) {
