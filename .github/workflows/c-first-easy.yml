@@ -3,7 +3,7 @@ name: C-first easy conversions
 
 on:
   push:
-    branches: [c-first-easy]
+    branches: [c-first-easy, c-first-minix]
   workflow_dispatch:
 
 permissions:
@@ -48,6 +48,18 @@ jobs:
             src/core/ld_io.c src/core/ld_runtime.c \
             -o build/linux-defragger-apfs-native-test-direct
           ./build/linux-defragger-apfs-native-test-direct
+
+      - name: Compile and test side-by-side Minix C parser
+        run: |
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/minix/native \
+            gui/filesystems/minix/native/minix_native.c \
+            tests/test_minix_native.c \
+            src/core/ld_io.c \
+            -o build/linux-defragger-minix-native-test-direct
+          ./build/linux-defragger-minix-native-test-direct
 
       - name: Test APFS worker interface
         run: |
