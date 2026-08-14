@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Install permanent Swap C-first guards
+
+on:
+  push:
+    branches: [c-first-swap]
+    paths:
+      - .github/workflows/swap-permanent-guards.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config python3 python3-gi python3-cairo \
+            gir1.2-gtk-3.0 policykit-1 udisks2 util-linux \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Add Swap to architecture requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '
+          /"hfsplus": \{"hfsplus_native.h", "hfsplus_native.c", "hfsplus_worker.c"\},/ && !native_added {
+              print
+              print "        \"swap\": {\"swap_native.h\", \"swap_native.c\", \"swap_worker.c\"},"
+              native_added=1
+              next
+          }
+          /\("linux-defragger-hfsplus-worker", "hfsplus"\),/ && !install_added {
+              print
+              print "        (\"linux-defragger-swap-worker\", \"swap\"),"
+              install_added=1
+              next
+          }
+          { print }
+          END { if (!native_added || !install_added) exit 42 }
+          ' tests/test_architecture.py > tests/test_architecture.py.new
+          mv tests/test_architecture.py.new tests/test_architecture.py
+          test "$(grep -c 'swap_native.h' tests/test_architecture.py)" -eq 1
+          test "$(grep -c 'linux-defragger-swap-worker' tests/test_architecture.py)" -eq 1
+
+      - name: Add permanent Swap worker and adapter regression step
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '
+          /^      - name: Test APFS worker interface$/ && !added {
+              print "      - name: Test production Swap C worker and thin adapter"
+              print "        env:"
+              print "          PYTHONPATH: ${{ github.workspace }}/gui"
+              print "          PYTHONDONTWRITEBYTECODE: '\''1'\''"
+              print "          LINUX_DEFRAGGER_SWAP_WORKER: ${{ github.workspace }}/build/linux-defragger-swap-worker"
+              print "          LINUX_DEFRAGGER_PROC_SWAPS: ${{ github.workspace }}/build/swap-proc-swaps"
+              print "        run: |"
+              print "          cc -std=c11 -O2 -DNDEBUG -D_FORTIFY_SOURCE=3 \\"
+              print "            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \\"
+              print "            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \\"
+              print "            tests/make_swap_fixture.c -o build/make-swap-fixture"
+              print "          build/make-swap-fixture build/swap-adapter-test.img"
+              print "          printf '\''Filename Type Size Used Priority\\n'\'' > \"$LINUX_DEFRAGGER_PROC_SWAPS\""
+              print "          for forbidden in '\''Reader'\'' '\''u32le'\'' '\''_PAGE_SIZES'\'' '\''_SIGS'\'' '\''_PROC_SWAPS'\'' \\"
+              print "                           '\''aggregate_ranges'\'' '\''_runtime_usage'\'' '\''_state_ranges'\'' '\''_header('\''; do"
+              print "            if grep -Fq \"$forbidden\" gui/filesystems/swap/plugin.py; then"
+              print "              echo \"Swap Python adapter contains filesystem implementation: $forbidden\" >&2"
+              print "              exit 1"
+              print "            fi"
+              print "          done"
+              print "          grep -Fq '\''resolve_program(\"swap-native\"'\'' gui/filesystems/swap/plugin.py"
+              print "          ! grep -Fq '\''solaris-swap'\'' gui/filesystems/swap/plugin.py"
+              print "          python3 - <<'\''PY'\''"
+              print "          import os"
+              print "          from pathlib import Path"
+              print "          from filesystems.swap.plugin import INFO, SwapBackend"
+              print "          image = Path('\''build/swap-adapter-test.img'\'')"
+              print "          proc_swaps = Path(os.environ['\''LINUX_DEFRAGGER_PROC_SWAPS'\''])"
+              print "          backend = SwapBackend()"
+              print "          assert INFO.display_name == '\''Linux Swap'\''"
+              print "          assert INFO.aliases == ('\''swap'\'', '\''swapspace'\'', '\''linux-swap'\'')"
+              print "          assert backend.probe(str(image))"
+              print "          inactive = backend.map(str(image), 4)"
+              print "          assert inactive['\''map_accuracy'\''] == '\''exact'\''"
+              print "          assert inactive['\''filesystem_bytes'\''] == 12 * 4096"
+              print "          assert inactive['\''outside_bytes'\''] == 4 * 4096"
+              print "          assert inactive['\''free_bytes'\''] == 9 * 4096"
+              print "          assert inactive['\''unknown_bytes'\''] == 3 * 4096"
+              print "          assert inactive['\''details'\'']['\''uuid'\''] == '\''01020304-0506-0708-090a-0b0c0d0e0f10'\''"
+              print "          assert inactive['\''details'\'']['\''label'\''] == '\''Native Swap'\''"
+              print "          assert [cell['\''outside'\''] for cell in inactive['\''cells'\'']] == [0, 0, 0, 4]"
+              print "          proc_swaps.write_text(f'\''Filename Type Size Used Priority\\n{image.resolve()} file 36 12 -3\\n'\'', encoding='\''utf-8'\'')"
+              print "          active = backend.map(str(image), 4)"
+              print "          assert active['\''map_accuracy'\''] == '\''summary'\''"
+              print "          assert active['\''used_bytes'\''] == 12 * 1024"
+              print "          assert active['\''free_bytes'\''] == 24 * 1024"
+              print "          assert active['\''details'\'']['\''active'\''] is True"
+              print "          assert active['\''details'\'']['\''usage_is_aggregate'\''] is True"
+              print "          assert all(cell['\''used'\''] == 0 for cell in active['\''cells'\''])"
+              print "          assert active['\''cells'\''][-1]['\''outside'\''] == 4"
+              print "          PY"
+              print ""
+              added=1
+          }
+          { print }
+          END { if (!added) exit 42 }
+          ' .github/workflows/c-first-easy.yml > .github/workflows/c-first-easy.yml.new
+          mv .github/workflows/c-first-easy.yml.new .github/workflows/c-first-easy.yml
+          test "$(grep -c 'Test production Swap C worker and thin adapter' .github/workflows/c-first-easy.yml)" -eq 1
+          git diff --check -- tests/test_architecture.py .github/workflows/c-first-easy.yml
+
+      - name: Prove permanent guards before commit
+        env:
+          PYTHONPATH: ${{ github.workspace }}/gui
+          PYTHONDONTWRITEBYTECODE: '1'
+          LINUX_DEFRAGGER_SWAP_WORKER: ${{ github.workspace }}/build/linux-defragger-swap-worker
+          LINUX_DEFRAGGER_PROC_SWAPS: ${{ github.workspace }}/build/swap-proc-swaps
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure -R '^linux-defragger-swap-native$'
+          python3 tests/test_architecture.py
+          cc -std=c11 -O2 -DNDEBUG -D_FORTIFY_SOURCE=3 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            tests/make_swap_fixture.c -o build/make-swap-fixture
+          build/make-swap-fixture build/swap-adapter-test.img
+          printf 'Filename Type Size Used Priority\n' > "$LINUX_DEFRAGGER_PROC_SWAPS"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from filesystems.swap.plugin import SwapBackend
+          image = Path('build/swap-adapter-test.img')
+          proc_swaps = Path(os.environ['LINUX_DEFRAGGER_PROC_SWAPS'])
+          backend = SwapBackend()
+          assert backend.probe(str(image))
+          inactive = backend.map(str(image), 4)
+          assert inactive['map_accuracy'] == 'exact'
+          assert inactive['outside_bytes'] == 4 * 4096
+          proc_swaps.write_text(
+              f'Filename Type Size Used Priority\n{image.resolve()} file 36 12 -3\n',
+              encoding='utf-8',
+          )
+          active = backend.map(str(image), 4)
+          assert active['map_accuracy'] == 'summary'
+          assert active['used_bytes'] == 12 * 1024
+          assert all(cell['used'] == 0 for cell in active['cells'])
+          PY
+
+      - name: Commit only permanent guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -- .github/workflows/c-first-easy.yml tests/test_architecture.py
+          test "$(git diff --cached --name-only | sort)" = $'.github/workflows/c-first-easy.yml\ntests/test_architecture.py'
+          git commit -m 'Make native Swap ownership a permanent regression gate'
+          git push origin HEAD:c-first-swap
