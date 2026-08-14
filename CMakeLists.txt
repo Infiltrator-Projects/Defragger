@@ -217,6 +217,31 @@ target_compile_definitions(linux-defragger-minix-worker PRIVATE
 target_link_libraries(linux-defragger-minix-worker PRIVATE
     linux-defragger-minix-native linux-defragger-core)
 
+# Linux swap identification, metadata and allocation mapping are native C.
+# Python remains only as a temporary GUI/backend adapter.
+add_library(linux-defragger-swap-native STATIC
+    gui/filesystems/swap/native/swap_native.c)
+target_include_directories(linux-defragger-swap-native PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/swap/native"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-swap-native PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-swap-native PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-swap-native PUBLIC linux-defragger-core)
+
+add_executable(linux-defragger-swap-worker
+    gui/filesystems/swap/native/swap_worker.c)
+target_include_directories(linux-defragger-swap-worker PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/swap/native"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-swap-worker PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-swap-worker PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-swap-worker PRIVATE
+    linux-defragger-swap-native linux-defragger-core)
+
 find_package(SQLite3 REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -388,6 +413,8 @@ install(TARGETS linux-defragger-apfs-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/apfs)
 install(TARGETS linux-defragger-minix-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/minix)
+install(TARGETS linux-defragger-swap-worker
+        RUNTIME DESTINATION lib/linux-defragger/filesystems/swap)
 install(TARGETS linux-defragger-xfs-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/xfs)
 install(TARGETS linux-defragger-ext-worker
@@ -451,6 +478,18 @@ if(BUILD_TESTING)
     target_link_libraries(linux-defragger-minix-native-test PRIVATE
         linux-defragger-minix-native linux-defragger-core)
     add_test(NAME linux-defragger-minix-native COMMAND linux-defragger-minix-native-test)
+
+    add_executable(linux-defragger-swap-native-test
+        tests/test_swap_native.c)
+    target_include_directories(linux-defragger-swap-native-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/swap/native"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core" "${LD_GENERATED_DIR}")
+    target_compile_options(linux-defragger-swap-native-test PRIVATE ${LD_WARNING_FLAGS})
+    target_compile_definitions(linux-defragger-swap-native-test PRIVATE
+        _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+    target_link_libraries(linux-defragger-swap-native-test PRIVATE
+        linux-defragger-swap-native linux-defragger-core)
+    add_test(NAME linux-defragger-swap-native COMMAND linux-defragger-swap-native-test)
 
     add_executable(linux-defragger-xfs-metadata-test
         tests/test_xfs_metadata_whitebox.c
