@@ -6,6 +6,7 @@ on:
     branches: [c-first-swap]
     paths:
       - .github/workflows/swap-cmake-patch.yml
+      - gui/filesystems/swap/native/**
 
 permissions:
   contents: write
