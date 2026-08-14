@@ -99,6 +99,7 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         "xfs": {"xfs_native.h", "xfs_common.c", "xfs_catalog.c", "xfs_plan.c", "xfs_metadata.c", "xfs_worker.c"},
         "affs": {"affs_native.h", "affs_native.c", "affs_worker.c"},
         "hfsplus": {"hfsplus_native.h", "hfsplus_native.c", "hfsplus_worker.c"},
+        "swap": {"swap_native.h", "swap_native.c", "swap_worker.c"},
     }
     for filesystem, native_files in required_native.items():
         package = GUI / "filesystems" / filesystem
@@ -147,6 +148,7 @@ def test_build_and_path_registry_install_native_workers() -> None:
         ("linux-defragger-fat-worker", "fat"),
         ("linux-defragger-affs-worker", "affs"),
         ("linux-defragger-hfsplus-worker", "hfsplus"),
+        ("linux-defragger-swap-worker", "swap"),
     ):
         assert worker in cmake
         install_pattern = re.compile(
