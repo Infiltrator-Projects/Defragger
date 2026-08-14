@@ -57,7 +57,7 @@ jobs:
             -Isrc/core -Igui/filesystems/minix/native \
             gui/filesystems/minix/native/minix_native.c \
             tests/test_minix_native.c \
-            src/core/ld_io.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
             -o build/linux-defragger-minix-native-test-direct
           ./build/linux-defragger-minix-native-test-direct
 
