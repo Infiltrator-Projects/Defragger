@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Linux Defragger
 # Author: Shannon Smith
-# Purpose: Read-only Minix filesystem identification and geometry mapping.
+# Purpose: Thin GUI adapter for native C Minix identification and mapping.
 
-"""Read-only Minix filesystem identification backend."""
+"""Read-only Minix backend delegated entirely to the native C worker."""
 
 from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
 
 from backends.base import (
     BackendError,
@@ -13,9 +19,8 @@ from backends.base import (
     CAP_ANALYSE,
     CAP_MAP,
     FilesystemBackend,
-    Reader,
-    aggregate_ranges,
 )
+from core.paths import resolve_program
 
 INFO = BackendInfo(
     "minix",
@@ -25,58 +30,58 @@ INFO = BackendInfo(
     "summary",
 )
 
-_MAGICS = {
-    0x137F: "v1",
-    0x138F: "v1-30char",
-    0x2468: "v2",
-    0x2478: "v2-30char",
-    0x4D5A: "v3",
-}
-
 
 class MinixBackend(FilesystemBackend):
     info = INFO
 
     @staticmethod
-    def _read_superblock(reader: Reader) -> tuple[int, str, str]:
-        superblock = reader.read(1024, 64)
-        for byte_order in ("little", "big"):
-            for offset in (16, 24):
-                magic = int.from_bytes(superblock[offset:offset + 2], byte_order)
-                variant = _MAGICS.get(magic)
-                if variant is not None:
-                    return magic, variant, byte_order
-        raise BackendError("not a recognised Minix filesystem")
+    def _run_native(
+        path: str,
+        mode: str,
+        *options: str,
+    ) -> subprocess.CompletedProcess[str]:
+        anchor = Path(__file__).resolve().parents[2] / "core"
+        worker = resolve_program("minix-native", anchor=anchor)
+        return subprocess.run(
+            [worker, mode, path, *options],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+        )
+
+    @staticmethod
+    def _json_result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            detail = completed.stderr.strip()
+            if detail:
+                raise BackendError(detail) from exc
+            raise BackendError("native Minix worker returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise BackendError("native Minix worker returned a non-object result")
+        if payload.get("filesystem") != "minix":
+            raise BackendError("native Minix worker returned the wrong filesystem identity")
+        return payload
 
     def probe(self, path: str) -> bool:
         try:
-            with Reader(path) as reader:
-                self._read_superblock(reader)
-            return True
-        except (OSError, BackendError):
+            completed = self._run_native(path, "identify")
+            return completed.returncode == 0 and self._json_result(completed)["filesystem"] == "minix"
+        except (BackendError, FileNotFoundError, OSError):
             return False
 
     def map(self, path: str, cells: int) -> dict:
-        with Reader(path) as reader:
-            magic, variant, byte_order = self._read_superblock(reader)
-            unit_size = 1024
-            total_units = max(1, (reader.size + unit_size - 1) // unit_size)
-            return aggregate_ranges(
-                total_units,
-                cells,
-                unit_size,
-                "minix",
-                [(0, total_units, 2)],
-                "summary",
-                {
-                    "magic": hex(magic),
-                    "variant": variant,
-                    "byte_order": byte_order,
-                    "note": (
-                        "Minix filesystem detected; zone bitmap location mapping is not yet decoded"
-                    ),
-                },
-            )
+        completed = self._run_native(path, "map", "--cells", str(max(1, cells)))
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise BackendError(detail or "native Minix mapper failed")
+        payload = self._json_result(completed)
+        if payload.get("schema") != 1 or payload.get("map_accuracy") != "summary":
+            raise BackendError("native Minix mapper returned an invalid map contract")
+        return payload
 
 
 BACKEND = MinixBackend()
