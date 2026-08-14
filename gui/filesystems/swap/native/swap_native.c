@@ -476,7 +476,13 @@ int ld_swap_runtime_usage(const char *path, const char *proc_swaps_path,
     ld_swap_resolve_path(path, wanted, sizeof(wanted));
     char *line = NULL;
     size_t capacity = 0U;
-    (void)getline(&line, &capacity, file);
+    if (getline(&line, &capacity, file) < 0) {
+        free(line);
+        (void)fclose(file);
+        if (error != NULL && error_size != 0U)
+            error[0] = '\0';
+        return 0;
+    }
     int found = 0;
     while (getline(&line, &capacity, file) >= 0) {
         char encoded_path[PATH_MAX];
