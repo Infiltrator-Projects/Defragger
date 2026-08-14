@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Fix Swap proc input warning
+
+on:
+  push:
+    branches: [c-first-swap]
+    paths:
+      - .github/workflows/swap-warning-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Handle an empty proc swaps stream explicitly
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '
+          /\(void\)getline\(&line, &capacity, file\);/ && !done {
+              print "    if (getline(&line, &capacity, file) < 0) {"
+              print "        free(line);"
+              print "        (void)fclose(file);"
+              print "        if (error != NULL && error_size != 0U)"
+              print "            error[0] = '\''\\0'\'';"
+              print "        return 0;"
+              print "    }"
+              done=1
+              next
+          }
+          { print }
+          END { if (!done) exit 42 }
+          ' gui/filesystems/swap/native/swap_native.c > gui/filesystems/swap/native/swap_native.c.new
+          mv gui/filesystems/swap/native/swap_native.c.new gui/filesystems/swap/native/swap_native.c
+          ! grep -Fq '(void)getline(&line, &capacity, file);' gui/filesystems/swap/native/swap_native.c
+          git diff --check -- gui/filesystems/swap/native/swap_native.c
+
+      - name: Compile fortified Swap parser and worker under Werror
+        run: |
+          mkdir -p build-warning/generated
+          cp src/core/version.h.in build-warning/generated/version.h.in
+          printf '#define LD_VERSION "%s"\n' "$(tr -d '\r\n' < VERSION)" > build-warning/generated/version.h
+          cc -std=c11 -O2 -D_FORTIFY_SOURCE=3 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/swap/native \
+            gui/filesystems/swap/native/swap_native.c tests/test_swap_native.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build-warning/linux-defragger-swap-native-test
+          build-warning/linux-defragger-swap-native-test
+          cc -std=c11 -O2 -D_FORTIFY_SOURCE=3 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/swap/native -Ibuild-warning/generated \
+            gui/filesystems/swap/native/swap_native.c \
+            gui/filesystems/swap/native/swap_worker.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build-warning/linux-defragger-swap-worker
+          test "$(build-warning/linux-defragger-swap-worker --version)" = \
+            "linux-defragger-swap-worker $(tr -d '\r\n' < VERSION)"
+
+      - name: Commit only the tested C fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -- gui/filesystems/swap/native/swap_native.c
+          test "$(git diff --cached --name-only)" = "gui/filesystems/swap/native/swap_native.c"
+          git commit -m 'Handle empty proc swaps input in C'
+          git push origin HEAD:c-first-swap
