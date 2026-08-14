@@ -192,6 +192,31 @@ target_compile_definitions(linux-defragger-apfs-worker PRIVATE
 target_link_libraries(linux-defragger-apfs-worker PRIVATE
     linux-defragger-apfs-native linux-defragger-core)
 
+# Minix filesystem identification and superblock geometry are native C.
+# Python is retained only as the GUI/backend adapter.
+add_library(linux-defragger-minix-native STATIC
+    gui/filesystems/minix/native/minix_native.c)
+target_include_directories(linux-defragger-minix-native PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/minix/native"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-minix-native PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-minix-native PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-minix-native PUBLIC linux-defragger-core)
+
+add_executable(linux-defragger-minix-worker
+    gui/filesystems/minix/native/minix_worker.c)
+target_include_directories(linux-defragger-minix-worker PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/minix/native"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-minix-worker PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-minix-worker PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-minix-worker PRIVATE
+    linux-defragger-minix-native linux-defragger-core)
+
 find_package(SQLite3 REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -361,6 +386,8 @@ install(TARGETS linux-defragger-fat-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/fat)
 install(TARGETS linux-defragger-apfs-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/apfs)
+install(TARGETS linux-defragger-minix-worker
+        RUNTIME DESTINATION lib/linux-defragger/filesystems/minix)
 install(TARGETS linux-defragger-xfs-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/xfs)
 install(TARGETS linux-defragger-ext-worker
@@ -412,6 +439,18 @@ if(BUILD_TESTING)
     target_link_libraries(linux-defragger-apfs-native-test PRIVATE
         linux-defragger-apfs-native linux-defragger-core)
     add_test(NAME linux-defragger-apfs-native COMMAND linux-defragger-apfs-native-test)
+
+    add_executable(linux-defragger-minix-native-test
+        tests/test_minix_native.c)
+    target_include_directories(linux-defragger-minix-native-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/minix/native"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core" "${LD_GENERATED_DIR}")
+    target_compile_options(linux-defragger-minix-native-test PRIVATE ${LD_WARNING_FLAGS})
+    target_compile_definitions(linux-defragger-minix-native-test PRIVATE
+        _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+    target_link_libraries(linux-defragger-minix-native-test PRIVATE
+        linux-defragger-minix-native linux-defragger-core)
+    add_test(NAME linux-defragger-minix-native COMMAND linux-defragger-minix-native-test)
 
     add_executable(linux-defragger-xfs-metadata-test
         tests/test_xfs_metadata_whitebox.c
