@@ -129,9 +129,67 @@ jobs:
           assert result['details']['variant'] == 'v3'
           assert result['details']['byte_order'] == 'little'
           with image.open('r+b') as handle:
-              handle.seek(1024 + 24)
-              handle.write(b'\0\0')
+              image.seek(1024 + 24)
+              image.write(b'\0\0')
           assert not backend.probe(str(image))
+          PY
+
+      - name: Test production Swap C worker and thin adapter
+        env:
+          PYTHONPATH: ${{ github.workspace }}/gui
+          PYTHONDONTWRITEBYTECODE: '1'
+          LINUX_DEFRAGGER_SWAP_WORKER: ${{ github.workspace }}/build/linux-defragger-swap-worker
+          LINUX_DEFRAGGER_PROC_SWAPS: ${{ github.workspace }}/build/swap-proc-swaps
+        run: |
+          cc -std=c11 -O2 -DNDEBUG -D_FORTIFY_SOURCE=3 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            tests/make_swap_fixture.c -o build/make-swap-fixture
+          build/make-swap-fixture build/swap-adapter-test.img
+          printf 'Filename Type Size Used Priority\n' > "$LINUX_DEFRAGGER_PROC_SWAPS"
+          for forbidden in 'Reader' 'u32le' '_PAGE_SIZES' '_SIGS' '_PROC_SWAPS' \
+                           'aggregate_ranges' '_runtime_usage' '_state_ranges' '_header('; do
+            if grep -Fq "$forbidden" gui/filesystems/swap/plugin.py; then
+              echo "Swap Python adapter contains filesystem implementation: $forbidden" >&2
+              exit 1
+            fi
+          done
+          grep -Fq 'resolve_program("swap-native"' gui/filesystems/swap/plugin.py
+          ! grep -Fq 'solaris-swap' gui/filesystems/swap/plugin.py
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from filesystems.swap.plugin import INFO, SwapBackend
+
+          image = Path('build/swap-adapter-test.img')
+          proc_swaps = Path(os.environ['LINUX_DEFRAGGER_PROC_SWAPS'])
+          backend = SwapBackend()
+          assert INFO.display_name == 'Linux Swap'
+          assert INFO.aliases == ('swap', 'swapspace', 'linux-swap')
+          assert backend.probe(str(image))
+
+          inactive = backend.map(str(image), 4)
+          assert inactive['map_accuracy'] == 'exact'
+          assert inactive['filesystem_bytes'] == 12 * 4096
+          assert inactive['outside_bytes'] == 4 * 4096
+          assert inactive['free_bytes'] == 9 * 4096
+          assert inactive['unknown_bytes'] == 3 * 4096
+          assert inactive['details']['uuid'] == '01020304-0506-0708-090a-0b0c0d0e0f10'
+          assert inactive['details']['label'] == 'Native Swap'
+          assert [cell['outside'] for cell in inactive['cells']] == [0, 0, 0, 4]
+
+          proc_swaps.write_text(
+              f'Filename Type Size Used Priority\n{image.resolve()} file 36 12 -3\n',
+              encoding='utf-8',
+          )
+          active = backend.map(str(image), 4)
+          assert active['map_accuracy'] == 'summary'
+          assert active['used_bytes'] == 12 * 1024
+          assert active['free_bytes'] == 24 * 1024
+          assert active['details']['active'] is True
+          assert active['details']['usage_is_aggregate'] is True
+          assert all(cell['used'] == 0 for cell in active['cells'])
+          assert active['cells'][-1]['outside'] == 4
           PY
 
       - name: Test APFS worker interface
