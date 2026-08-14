@@ -3,7 +3,8 @@ name: C-first easy conversions
 
 on:
   push:
-    branches: [c-first-easy, c-first-minix]
+    branches:
+      - "c-first-*"
   workflow_dispatch:
 
 permissions:
@@ -61,7 +62,7 @@ jobs:
             -o build/linux-defragger-minix-native-test-direct
           ./build/linux-defragger-minix-native-test-direct
 
-      - name: Test Minix worker interface in C
+      - name: Test Minix worker interface and map contract in C
         run: |
           cc -std=c11 \
             -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
@@ -83,11 +84,55 @@ jobs:
             | grep -q '^{"filesystem":"minix","variant":"v3","byte_order":"little","version":3}$'
           build/linux-defragger-minix-worker-direct analyse-json build/minix-worker-test.img \
             | grep -q '"block_size":4096,"zone_size":8192'
+          output=$(build/linux-defragger-minix-worker map build/minix-worker-test.img --cells 3)
+          printf '%s\n' "$output" | grep -q '^{"schema":1,"backend":"read-only-domain","filesystem":"minix","map_accuracy":"summary","unit_size":1024,"total_units":4,"cell_count":3,"total_bytes":4096,"free_bytes":0,"used_bytes":0,"unknown_bytes":4096,'
+          printf '%s\n' "$output" | grep -q '"start":0,"end":0,"free":0,"used":0,"unknown":1'
+          printf '%s\n' "$output" | grep -q '"start":1,"end":1,"free":0,"used":0,"unknown":1'
+          printf '%s\n' "$output" | grep -q '"start":2,"end":3,"free":0,"used":0,"unknown":2'
+          printf '%s\n' "$output" | grep -q '"magic":"0x4d5a","variant":"v3","byte_order":"little"'
           printf '\0\0' | dd of=build/minix-worker-test.img bs=1 seek=1048 conv=notrunc status=none
-          if build/linux-defragger-minix-worker-direct identify build/minix-worker-test.img; then
+          if build/linux-defragger-minix-worker identify build/minix-worker-test.img; then
             echo 'Minix worker accepted invalid magic' >&2
             exit 1
           fi
+
+      - name: Test production Minix Python adapter against native worker
+        env:
+          PYTHONPATH: ${{ github.workspace }}/gui
+          PYTHONDONTWRITEBYTECODE: '1'
+          LINUX_DEFRAGGER_MINIX_WORKER: ${{ github.workspace }}/build/linux-defragger-minix-worker
+        run: |
+          for forbidden in 'Reader' 'int.from_bytes' '_MAGICS' 'aggregate_ranges'; do
+            if grep -Fq "$forbidden" gui/filesystems/minix/plugin.py; then
+              echo "Minix Python adapter still contains parser primitive: $forbidden" >&2
+              exit 1
+            fi
+          done
+          build/make-minix-fixture build/minix-adapter-test.img
+          python3 - <<'PY'
+          from pathlib import Path
+          from filesystems.minix.plugin import MinixBackend
+
+          image = Path('build/minix-adapter-test.img')
+          backend = MinixBackend()
+          assert backend.probe(str(image))
+          result = backend.map(str(image), 3)
+          assert result['schema'] == 1
+          assert result['filesystem'] == 'minix'
+          assert result['map_accuracy'] == 'summary'
+          assert result['unit_size'] == 1024
+          assert result['total_units'] == 4
+          assert result['cell_count'] == 3
+          assert result['unknown_bytes'] == 4096
+          assert [cell['unknown'] for cell in result['cells']] == [1, 1, 2]
+          assert result['details']['magic'] == '0x4d5a'
+          assert result['details']['variant'] == 'v3'
+          assert result['details']['byte_order'] == 'little'
+          with image.open('r+b') as handle:
+              handle.seek(1024 + 24)
+              handle.write(b'\0\0')
+          assert not backend.probe(str(image))
+          PY
 
       - name: Test APFS worker interface
         run: |
