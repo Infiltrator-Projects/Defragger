@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: C-first easy conversions
+
+on:
+  push:
+    branches: [c-first-easy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config python3 python3-gi python3-cairo \
+            gir1.2-gtk-3.0 policykit-1 udisks2 util-linux \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Build existing project with warnings as errors
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build -j2
+
+      - name: Run existing native C tests
+        run: ctest --test-dir build --output-on-failure -E '^linux-defragger-tests$'
+
+      - name: Compile and test side-by-side APFS C parser
+        run: |
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/apfs/native \
+            gui/filesystems/apfs/native/apfs_native.c \
+            tests/test_apfs_native.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build/linux-defragger-apfs-native-test
+          ./build/linux-defragger-apfs-native-test
