@@ -46,19 +46,11 @@ jobs:
             gui/filesystems/apfs/native/apfs_native.c \
             tests/test_apfs_native.c \
             src/core/ld_io.c src/core/ld_runtime.c \
-            -o build/linux-defragger-apfs-native-test
-          ./build/linux-defragger-apfs-native-test
+            -o build/linux-defragger-apfs-native-test-direct
+          ./build/linux-defragger-apfs-native-test-direct
 
-      - name: Compile and test APFS worker interface
+      - name: Test APFS worker interface
         run: |
-          cc -std=c11 \
-            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
-            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
-            -Isrc/core -Igui/filesystems/apfs/native -Ibuild/generated \
-            gui/filesystems/apfs/native/apfs_native.c \
-            gui/filesystems/apfs/native/apfs_worker.c \
-            src/core/ld_io.c src/core/ld_runtime.c \
-            -o build/linux-defragger-apfs-worker
           test "$(build/linux-defragger-apfs-worker --version)" = \
             "linux-defragger-apfs-worker $(tr -d '\r\n' < VERSION)"
           python3 - <<'PY'
@@ -80,3 +72,43 @@ jobs:
             echo 'APFS worker accepted invalid magic' >&2
             exit 1
           fi
+
+      - name: Test production APFS Python adapter against native worker
+        env:
+          PYTHONPATH: ${{ github.workspace }}/gui
+          PYTHONDONTWRITEBYTECODE: '1'
+          LINUX_DEFRAGGER_APFS_WORKER: ${{ github.workspace }}/build/linux-defragger-apfs-worker
+        run: |
+          python3 - <<'PY'
+          import os
+          import struct
+          import tempfile
+          from filesystems.apfs.plugin import APFSBackend
+
+          fd, path = tempfile.mkstemp(prefix='linux-defragger-apfs-adapter-', suffix='.img')
+          os.close(fd)
+          try:
+              block = bytearray(4096)
+              block[32:36] = b'NXSB'
+              struct.pack_into('<I', block, 36, 4096)
+              struct.pack_into('<Q', block, 40, 64)
+              block[72:88] = bytes(range(1, 17))
+              with open(path, 'wb') as image:
+                  image.write(block)
+              backend = APFSBackend()
+              assert backend.probe(path)
+              result = backend.map(path, 16)
+              assert result['filesystem'] == 'apfs'
+              assert result['unit_size'] == 4096
+              assert result['total_units'] == 64
+              assert result['used_bytes'] == 4096
+              assert result['unknown_bytes'] == 63 * 4096
+              assert result['details']['container_uuid'] == '0102030405060708090a0b0c0d0e0f10'
+              with open(path, 'r+b') as image:
+                  image.seek(32)
+                  image.write(b'NOPE')
+              assert not backend.probe(path)
+          finally:
+              os.unlink(path)
+          PY
+          python3 tests/test_analysis_plugins.py
