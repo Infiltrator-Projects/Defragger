@@ -298,8 +298,8 @@ int ld_swap_read_summary(const char *path, LdSwapSummary *summary,
         if ((uint64_t)page_size > container_bytes)
             continue;
         unsigned char signature[LD_SWAP_SIGNATURE_BYTES];
-        const off_t signature_offset =
-            (off_t)((uint64_t)page_size - LD_SWAP_SIGNATURE_BYTES);
+        const uint64_t signature_offset =
+            (uint64_t)page_size - LD_SWAP_SIGNATURE_BYTES;
         const ssize_t count = ld_pread_full(fd, signature, sizeof(signature),
                                             signature_offset);
         if (count != (ssize_t)sizeof(signature))
