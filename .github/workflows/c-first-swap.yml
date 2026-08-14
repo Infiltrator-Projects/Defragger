@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: C-first Swap conversion
+
+on:
+  push:
+    branches: [c-first-swap]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  swap-native:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Build existing project with warnings as errors
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build -j2
+
+      - name: Run existing native C tests
+        run: ctest --test-dir build --output-on-failure -E '^linux-defragger-tests$'
+
+      - name: Compile and test side-by-side Swap C parser
+        run: |
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/swap/native \
+            gui/filesystems/swap/native/swap_native.c \
+            tests/test_swap_native.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build/linux-defragger-swap-native-test-direct
+          ./build/linux-defragger-swap-native-test-direct
