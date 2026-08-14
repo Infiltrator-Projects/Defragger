@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Keep Swap native tests active in Release builds
+
+on:
+  push:
+    branches: [c-first-swap]
+    paths:
+      - .github/workflows/swap-test-ndebug-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Replace standard assert with always-on CHECK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i '/^#include <assert.h>$/d' tests/test_swap_native.c
+          awk '
+          /^#include <unistd.h>$/ && !added {
+              print
+              print ""
+              print "#define CHECK(condition)                                                        \\\n    do {                                                                        \\\n        if (!(condition)) {                                                     \\\n            (void)fprintf(stderr, \"%s:%d: check failed: %s\\n\",              \\\n                          __FILE__, __LINE__, #condition);                       \\\n            exit(EXIT_FAILURE);                                                 \\\n        }                                                                       \\\n    } while (0)"
+              added=1
+              next
+          }
+          { print }
+          END { if (!added) exit 42 }
+          ' tests/test_swap_native.c > tests/test_swap_native.c.new
+          mv tests/test_swap_native.c.new tests/test_swap_native.c
+          sed -i 's/assert(/CHECK(/g' tests/test_swap_native.c
+          ! grep -Fq 'assert(' tests/test_swap_native.c
+          grep -Fq '#define CHECK(condition)' tests/test_swap_native.c
+          git diff --check -- tests/test_swap_native.c
+
+      - name: Prove tests execute under Release NDEBUG and Werror
+        run: |
+          mkdir -p build-ndebug
+          cc -std=c11 -O2 -DNDEBUG -D_FORTIFY_SOURCE=3 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/swap/native \
+            gui/filesystems/swap/native/swap_native.c \
+            tests/test_swap_native.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build-ndebug/linux-defragger-swap-native-test
+          build-ndebug/linux-defragger-swap-native-test \
+            | grep -q '^native swap parser tests passed$'
+
+      - name: Commit only tested Swap test correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -- tests/test_swap_native.c
+          test "$(git diff --cached --name-only)" = "tests/test_swap_native.c"
+          git commit -m 'Keep Swap native tests active in Release builds'
+          git push origin HEAD:c-first-swap
