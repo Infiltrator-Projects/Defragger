@@ -61,6 +61,34 @@ jobs:
             -o build/linux-defragger-minix-native-test-direct
           ./build/linux-defragger-minix-native-test-direct
 
+      - name: Test Minix worker interface in C
+        run: |
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/minix/native -Ibuild/generated \
+            gui/filesystems/minix/native/minix_native.c \
+            gui/filesystems/minix/native/minix_worker.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build/linux-defragger-minix-worker-direct
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            tests/make_minix_fixture.c \
+            -o build/make-minix-fixture
+          test "$(build/linux-defragger-minix-worker-direct --version)" = \
+            "linux-defragger-minix-worker $(tr -d '\r\n' < VERSION)"
+          build/make-minix-fixture build/minix-worker-test.img
+          build/linux-defragger-minix-worker-direct identify build/minix-worker-test.img \
+            | grep -q '^{"filesystem":"minix","variant":"v3","byte_order":"little","version":3}$'
+          build/linux-defragger-minix-worker-direct analyse-json build/minix-worker-test.img \
+            | grep -q '"block_size":4096,"zone_size":8192'
+          printf '\0\0' | dd of=build/minix-worker-test.img bs=1 seek=1048 conv=notrunc status=none
+          if build/linux-defragger-minix-worker-direct identify build/minix-worker-test.img; then
+            echo 'Minix worker accepted invalid magic' >&2
+            exit 1
+          fi
+
       - name: Test APFS worker interface
         run: |
           test "$(build/linux-defragger-apfs-worker --version)" = \
