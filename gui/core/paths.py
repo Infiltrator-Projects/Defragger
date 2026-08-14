@@ -58,6 +58,11 @@ PROGRAMS: dict[str, ProgramPath] = {
         "/usr/lib/linux-defragger/filesystems/apfs/linux-defragger-apfs-worker",
         "../../build/linux-defragger-apfs-worker"
     ),
+    "minix-native": ProgramPath(
+        "minix-native", "LINUX_DEFRAGGER_MINIX_WORKER",
+        "/usr/lib/linux-defragger/filesystems/minix/linux-defragger-minix-worker",
+        "../../build/linux-defragger-minix-worker"
+    ),
     "mapper": ProgramPath(
         "mapper", "LINUX_DEFRAGGER_MAPPER", "/usr/lib/linux-defragger/allocation_mapper.py", "../allocation_mapper.py"
     ),
