@@ -73,7 +73,7 @@ jobs:
           proc_swaps = Path(os.environ['LINUX_DEFRAGGER_PROC_SWAPS'])
           backend = SwapBackend()
 
-          assert INFO.name == 'Linux Swap'
+          assert INFO.display_name == 'Linux Swap'
           assert INFO.aliases == ('swap', 'swapspace', 'linux-swap')
           assert backend.probe(str(image))
 
