@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Integrate Minix native CMake targets
+
+on:
+  push:
+    branches: [c-first-minix]
+    paths:
+      - .github/workflows/minix-cmake-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config python3 python3-gi python3-cairo \
+            gir1.2-gtk-3.0 policykit-1 udisks2 util-linux \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Insert Minix targets at stable CMake anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '
+          /^find_package\(SQLite3 REQUIRED\)/ && !build_added {
+              print "# Minix filesystem identification and superblock geometry are native C."
+              print "# Python is retained only as the GUI/backend adapter."
+              print "add_library(linux-defragger-minix-native STATIC"
+              print "    gui/filesystems/minix/native/minix_native.c)"
+              print "target_include_directories(linux-defragger-minix-native PUBLIC"
+              print "    \"${CMAKE_CURRENT_SOURCE_DIR}/src/core\""
+              print "    \"${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/minix/native\""
+              print "    \"${LD_GENERATED_DIR}\")"
+              print "target_compile_options(linux-defragger-minix-native PRIVATE ${LD_WARNING_FLAGS})"
+              print "target_compile_definitions(linux-defragger-minix-native PRIVATE"
+              print "    _FILE_OFFSET_BITS=64 _GNU_SOURCE)"
+              print "target_link_libraries(linux-defragger-minix-native PUBLIC linux-defragger-core)"
+              print ""
+              print "add_executable(linux-defragger-minix-worker"
+              print "    gui/filesystems/minix/native/minix_worker.c)"
+              print "target_include_directories(linux-defragger-minix-worker PRIVATE"
+              print "    \"${CMAKE_CURRENT_SOURCE_DIR}/src/core\""
+              print "    \"${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/minix/native\""
+              print "    \"${LD_GENERATED_DIR}\")"
+              print "target_compile_options(linux-defragger-minix-worker PRIVATE ${LD_WARNING_FLAGS})"
+              print "target_compile_definitions(linux-defragger-minix-worker PRIVATE"
+              print "    _FILE_OFFSET_BITS=64 _GNU_SOURCE)"
+              print "target_link_libraries(linux-defragger-minix-worker PRIVATE"
+              print "    linux-defragger-minix-native linux-defragger-core)"
+              print ""
+              build_added=1
+          }
+          /^install\(TARGETS linux-defragger-xfs-worker/ && !install_added {
+              print "install(TARGETS linux-defragger-minix-worker"
+              print "        RUNTIME DESTINATION lib/linux-defragger/filesystems/minix)"
+              install_added=1
+          }
+          /add_executable\(linux-defragger-xfs-metadata-test/ && !test_added {
+              print "    add_executable(linux-defragger-minix-native-test"
+              print "        tests/test_minix_native.c)"
+              print "    target_include_directories(linux-defragger-minix-native-test PRIVATE"
+              print "        \"${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/minix/native\""
+              print "        \"${CMAKE_CURRENT_SOURCE_DIR}/src/core\" \"${LD_GENERATED_DIR}\")"
+              print "    target_compile_options(linux-defragger-minix-native-test PRIVATE ${LD_WARNING_FLAGS})"
+              print "    target_compile_definitions(linux-defragger-minix-native-test PRIVATE"
+              print "        _FILE_OFFSET_BITS=64 _GNU_SOURCE)"
+              print "    target_link_libraries(linux-defragger-minix-native-test PRIVATE"
+              print "        linux-defragger-minix-native linux-defragger-core)"
+              print "    add_test(NAME linux-defragger-minix-native COMMAND linux-defragger-minix-native-test)"
+              print ""
+              test_added=1
+          }
+          { print }
+          END {
+              if (!build_added || !install_added || !test_added) exit 42
+          }
+          ' CMakeLists.txt > CMakeLists.txt.new
+          mv CMakeLists.txt.new CMakeLists.txt
+          test "$(grep -c 'add_library(linux-defragger-minix-native' CMakeLists.txt)" -eq 1
+          test "$(grep -c 'install(TARGETS linux-defragger-minix-worker' CMakeLists.txt)" -eq 1
+          test "$(grep -c 'add_test(NAME linux-defragger-minix-native' CMakeLists.txt)" -eq 1
+          git diff --check -- CMakeLists.txt
+
+      - name: Build and test integrated Minix targets
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure -E '^linux-defragger-tests$'
+          test "$(build/linux-defragger-minix-worker --version)" = \
+            "linux-defragger-minix-worker $(tr -d '\r\n' < VERSION)"
+
+      - name: Commit only tested CMake integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -- CMakeLists.txt
+          test "$(git diff --cached --name-only)" = "CMakeLists.txt"
+          git commit -m 'Integrate native Minix worker into CMake'
+          git push origin HEAD:c-first-minix
