@@ -46,3 +46,82 @@ jobs:
             src/core/ld_io.c src/core/ld_runtime.c \
             -o build/linux-defragger-swap-native-test-direct
           ./build/linux-defragger-swap-native-test-direct
+
+      - name: Compile native Swap worker and C fixture
+        run: |
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/swap/native -Ibuild/generated \
+            gui/filesystems/swap/native/swap_native.c \
+            gui/filesystems/swap/native/swap_worker.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build/linux-defragger-swap-worker-direct
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            tests/make_swap_fixture.c -o build/make-swap-fixture
+          build/make-swap-fixture build/swap-worker-test.img
+          test "$(build/linux-defragger-swap-worker-direct --version)" = \
+            "linux-defragger-swap-worker $(tr -d '\r\n' < VERSION)"
+
+      - name: Test native Swap identity and detailed metadata
+        run: |
+          build/linux-defragger-swap-worker-direct identify build/swap-worker-test.img \
+            | grep -q '^{"filesystem":"swap","format":"linux-v1","page_size":4096,"byte_order":"little"}$'
+          detail=$(build/linux-defragger-swap-worker-direct analyse-json build/swap-worker-test.img)
+          printf '%s\n' "$detail" | grep -q '"last_page":11'
+          printf '%s\n' "$detail" | grep -q '"filesystem_pages":12'
+          printf '%s\n' "$detail" | grep -q '"usable_pages":9'
+          printf '%s\n' "$detail" | grep -q '"bad_pages":2'
+          printf '%s\n' "$detail" | grep -q '"filesystem_bytes":49152'
+          printf '%s\n' "$detail" | grep -q '"outside_bytes":16384'
+          printf '%s\n' "$detail" | grep -q '"uuid":"01020304-0506-0708-090a-0b0c0d0e0f10"'
+          printf '%s\n' "$detail" | grep -q '"label":"Native Swap"'
+
+      - name: Test exact inactive Swap map
+        env:
+          LINUX_DEFRAGGER_PROC_SWAPS: ${{ github.workspace }}/build/empty-proc-swaps
+        run: |
+          printf 'Filename Type Size Used Priority\n' > "$LINUX_DEFRAGGER_PROC_SWAPS"
+          output=$(build/linux-defragger-swap-worker-direct map build/swap-worker-test.img --cells 4)
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q '"map_accuracy":"exact"'
+          printf '%s\n' "$output" | grep -q '"total_units":16,"cell_count":4,"total_bytes":65536,"free_bytes":36864,"used_bytes":0,"unknown_bytes":12288,"filesystem_bytes":49152,"outside_bytes":16384'
+          printf '%s\n' "$output" | grep -q '"start":0,"end":3,"free":2,"used":0,"unknown":1,"bad":1,"outside":0'
+          printf '%s\n' "$output" | grep -q '"start":4,"end":7,"free":3,"used":0,"unknown":0,"bad":1,"outside":0'
+          printf '%s\n' "$output" | grep -q '"start":8,"end":11,"free":4,"used":0,"unknown":0,"bad":0,"outside":0'
+          printf '%s\n' "$output" | grep -q '"start":12,"end":15,"free":0,"used":0,"unknown":0,"bad":0,"outside":4'
+          printf '%s\n' "$output" | grep -q '"active":false'
+
+      - name: Test active Swap aggregate usage without fake slot locations
+        env:
+          LINUX_DEFRAGGER_PROC_SWAPS: ${{ github.workspace }}/build/fake-proc-swaps
+        run: |
+          target=$(realpath build/swap-worker-test.img)
+          printf 'Filename Type Size Used Priority\n%s file 36 12 -3\n' "$target" > "$LINUX_DEFRAGGER_PROC_SWAPS"
+          output=$(build/linux-defragger-swap-worker-direct map build/swap-worker-test.img --cells 4)
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q '"map_accuracy":"summary"'
+          printf '%s\n' "$output" | grep -q '"free_bytes":24576,"used_bytes":12288,"unknown_bytes":49152'
+          printf '%s\n' "$output" | grep -q '"start":0,"end":3,"free":0,"used":0,"unknown":3,"bad":1,"outside":0'
+          printf '%s\n' "$output" | grep -q '"start":12,"end":15,"free":0,"used":0,"unknown":0,"bad":0,"outside":4'
+          printf '%s\n' "$output" | grep -q '"active":true'
+          printf '%s\n' "$output" | grep -q '"priority":-3'
+          printf '%s\n' "$output" | grep -q '"usage_is_aggregate":true'
+          if printf '%s\n' "$output" | grep -q '"used":[1-9]'; then
+            echo 'active Swap worker invented physical used-slot locations' >&2
+            exit 1
+          fi
+
+      - name: Reject invalid worker requests
+        run: |
+          if build/linux-defragger-swap-worker-direct map build/swap-worker-test.img --cells 0; then
+            echo 'Swap worker accepted zero cells' >&2
+            exit 1
+          fi
+          printf 'NOPE' | dd of=build/swap-worker-test.img bs=1 seek=4086 conv=notrunc status=none
+          if build/linux-defragger-swap-worker-direct identify build/swap-worker-test.img; then
+            echo 'Swap worker accepted invalid signature' >&2
+            exit 1
+          fi
