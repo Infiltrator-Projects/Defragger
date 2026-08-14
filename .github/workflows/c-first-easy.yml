@@ -129,8 +129,8 @@ jobs:
           assert result['details']['variant'] == 'v3'
           assert result['details']['byte_order'] == 'little'
           with image.open('r+b') as handle:
-              image.seek(1024 + 24)
-              image.write(b'\0\0')
+              handle.seek(1024 + 24)
+              handle.write(b'\0\0')
           assert not backend.probe(str(image))
           PY
 
