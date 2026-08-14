@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Minix native adapter checkpoint
+
+on:
+  push:
+    branches: [c-first-minix]
+    paths:
+      - .github/workflows/minix-adapter-test.yml
+
+permissions:
+  contents: read
+
+jobs:
+  adapter-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config python3 \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Build native worker and C fixture
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build -j2
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            tests/make_minix_fixture.c -o build/make-minix-fixture
+          build/make-minix-fixture build/minix-adapter-test.img
+
+      - name: Verify Python contains no Minix filesystem parsing
+        shell: bash
+        run: |
+          set -euo pipefail
+          plugin=gui/filesystems/minix/plugin.py
+          for forbidden in 'Reader' 'int.from_bytes' '_MAGICS' 'aggregate_ranges'; do
+            if grep -Fq "$forbidden" "$plugin"; then
+              echo "Minix Python adapter still contains parser primitive: $forbidden" >&2
+              exit 1
+            fi
+          done
+          grep -Fq 'resolve_program("minix-native"' "$plugin"
+
+      - name: Exercise real Minix Python-to-C adapter
+        env:
+          PYTHONPATH: ${{ github.workspace }}/gui
+          PYTHONDONTWRITEBYTECODE: '1'
+          LINUX_DEFRAGGER_MINIX_WORKER: ${{ github.workspace }}/build/linux-defragger-minix-worker
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from filesystems.minix.plugin import MinixBackend
+
+          image = Path('build/minix-adapter-test.img')
+          backend = MinixBackend()
+          assert backend.probe(str(image))
+          result = backend.map(str(image), 3)
+          assert result['schema'] == 1
+          assert result['filesystem'] == 'minix'
+          assert result['map_accuracy'] == 'summary'
+          assert result['unit_size'] == 1024
+          assert result['total_units'] == 4
+          assert result['cell_count'] == 3
+          assert result['unknown_bytes'] == 4096
+          assert [cell['unknown'] for cell in result['cells']] == [1, 1, 2]
+          assert result['details']['magic'] == '0x4d5a'
+          assert result['details']['variant'] == 'v3'
+          assert result['details']['byte_order'] == 'little'
+
+          with image.open('r+b') as handle:
+              handle.seek(1024 + 24)
+              handle.write(b'\0\0')
+          assert not backend.probe(str(image))
+          PY
