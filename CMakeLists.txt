@@ -167,6 +167,31 @@ target_compile_definitions(linux-defragger-fat-worker PRIVATE
 target_link_libraries(linux-defragger-fat-worker PRIVATE
     linux-defragger-core Threads::Threads)
 
+# APFS remains analysis-only, but its on-disk NX superblock interpretation is
+# native C. Python is retained only as the GUI/backend adapter.
+add_library(linux-defragger-apfs-native STATIC
+    gui/filesystems/apfs/native/apfs_native.c)
+target_include_directories(linux-defragger-apfs-native PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/apfs/native"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-apfs-native PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-apfs-native PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-apfs-native PUBLIC linux-defragger-core)
+
+add_executable(linux-defragger-apfs-worker
+    gui/filesystems/apfs/native/apfs_worker.c)
+target_include_directories(linux-defragger-apfs-worker PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/apfs/native"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-apfs-worker PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-apfs-worker PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-apfs-worker PRIVATE
+    linux-defragger-apfs-native linux-defragger-core)
+
 find_package(SQLite3 REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -270,7 +295,6 @@ target_compile_definitions(linux-defragger-exfat-worker PRIVATE
 target_link_libraries(linux-defragger-exfat-worker PRIVATE
     linux-defragger-exfat-native linux-defragger-core OpenSSL::Crypto)
 
-
 add_library(linux-defragger-affs-native STATIC
     gui/filesystems/affs/native/affs_native.c)
 target_include_directories(linux-defragger-affs-native PUBLIC
@@ -335,6 +359,8 @@ install(TARGETS linux-defragger-affs-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/affs)
 install(TARGETS linux-defragger-fat-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/fat)
+install(TARGETS linux-defragger-apfs-worker
+        RUNTIME DESTINATION lib/linux-defragger/filesystems/apfs)
 install(TARGETS linux-defragger-xfs-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/xfs)
 install(TARGETS linux-defragger-ext-worker
@@ -369,13 +395,24 @@ install(FILES packaging/io.github.linuxdefragger.desktop
 install(FILES packaging/io.github.linuxdefragger.svg
         DESTINATION share/icons/hicolor/scalable/apps)
 
-
 install(FILES README.md docs/DESIGN.md
         DESTINATION share/doc/linux-defragger)
 install(FILES LICENSE
         DESTINATION share/doc/linux-defragger RENAME COPYING.GPL-3.0)
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(linux-defragger-apfs-native-test
+        tests/test_apfs_native.c)
+    target_include_directories(linux-defragger-apfs-native-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/apfs/native"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core" "${LD_GENERATED_DIR}")
+    target_compile_options(linux-defragger-apfs-native-test PRIVATE ${LD_WARNING_FLAGS})
+    target_compile_definitions(linux-defragger-apfs-native-test PRIVATE
+        _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+    target_link_libraries(linux-defragger-apfs-native-test PRIVATE
+        linux-defragger-apfs-native linux-defragger-core)
+    add_test(NAME linux-defragger-apfs-native COMMAND linux-defragger-apfs-native-test)
+
     add_executable(linux-defragger-xfs-metadata-test
         tests/test_xfs_metadata_whitebox.c
         gui/filesystems/xfs/native/xfs_common.c)
