@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Minix native map checkpoint
+
+on:
+  push:
+    branches: [c-first-minix]
+    paths:
+      - .github/workflows/minix-map-test.yml
+
+permissions:
+  contents: read
+
+jobs:
+  map-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Build normal project Minix worker under Werror
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure -R '^linux-defragger-minix-native$'
+
+      - name: Create C fixture and verify native map contract
+        run: |
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            tests/make_minix_fixture.c -o build/make-minix-fixture
+          build/make-minix-fixture build/minix-map-test.img
+          output=$(build/linux-defragger-minix-worker map build/minix-map-test.img --cells 3)
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q '^{"schema":1,"backend":"read-only-domain","filesystem":"minix","map_accuracy":"summary","unit_size":1024,"total_units":4,"cell_count":3,"total_bytes":4096,"free_bytes":0,"used_bytes":0,"unknown_bytes":4096,'
+          printf '%s\n' "$output" | grep -q '"start":0,"end":0,"free":0,"used":0,"unknown":1'
+          printf '%s\n' "$output" | grep -q '"start":1,"end":1,"free":0,"used":0,"unknown":1'
+          printf '%s\n' "$output" | grep -q '"start":2,"end":3,"free":0,"used":0,"unknown":2'
+          printf '%s\n' "$output" | grep -q '"magic":"0x4d5a","variant":"v3","byte_order":"little"'
+          if build/linux-defragger-minix-worker map build/minix-map-test.img --cells 0; then
+            echo 'Minix worker accepted zero cells' >&2
+            exit 1
+          fi
