@@ -48,3 +48,35 @@ jobs:
             src/core/ld_io.c src/core/ld_runtime.c \
             -o build/linux-defragger-apfs-native-test
           ./build/linux-defragger-apfs-native-test
+
+      - name: Compile and test APFS worker interface
+        run: |
+          cc -std=c11 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/apfs/native -Ibuild/generated \
+            gui/filesystems/apfs/native/apfs_native.c \
+            gui/filesystems/apfs/native/apfs_worker.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build/linux-defragger-apfs-worker
+          test "$(build/linux-defragger-apfs-worker --version)" = \
+            "linux-defragger-apfs-worker $(tr -d '\r\n' < VERSION)"
+          python3 - <<'PY'
+          import struct
+          p = 'build/apfs-worker-test.img'
+          b = bytearray(4096)
+          b[32:36] = b'NXSB'
+          struct.pack_into('<I', b, 36, 4096)
+          struct.pack_into('<Q', b, 40, 123456)
+          b[72:88] = bytes(range(1, 17))
+          open(p, 'wb').write(b)
+          PY
+          build/linux-defragger-apfs-worker identify build/apfs-worker-test.img \
+            | grep -q '^{"filesystem":"apfs","block_size":4096,"block_count":123456}$'
+          build/linux-defragger-apfs-worker analyse-json build/apfs-worker-test.img \
+            | grep -q '^{"filesystem":"apfs","block_size":4096,"block_count":123456,"container_uuid":"0102030405060708090a0b0c0d0e0f10"}$'
+          printf 'NOPE' | dd of=build/apfs-worker-test.img bs=1 seek=32 conv=notrunc status=none
+          if build/linux-defragger-apfs-worker identify build/apfs-worker-test.img; then
+            echo 'APFS worker accepted invalid magic' >&2
+            exit 1
+          fi
