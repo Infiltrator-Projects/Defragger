@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "infiltratr/core.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "ld_stop.h"
@@ -23,8 +24,10 @@ int main(void) {
     if (ld_read_le32(encoded + 2) != UINT32_C(0x89abcdef)) return fail("le32 codec");
 
     uint64_t result = 0;
-    if (!ld_u64_add(10, 20, &result) || result != 30) return fail("checked addition");
-    if (ld_u64_add(UINT64_MAX, 1, &result)) return fail("addition overflow");
+    if (!infiltratr_u64_add_checked(10, 20, &result) || result != 30)
+        return fail("checked addition");
+    if (infiltratr_u64_add_checked(UINT64_MAX, 1, &result))
+        return fail("addition overflow");
 
     char path[] = "/tmp/linux-defragger-core-test.XXXXXX";
     int fd = mkstemp(path);

@@ -232,11 +232,13 @@ static int capacity_preflight(const char *journal_path, const ExtGeometry *geome
     free(parent);
     uint64_t available = (uint64_t)info.f_bavail * (uint64_t)info.f_frsize;
     uint64_t allocated_blocks = geometry->total_blocks - geometry->free_blocks;
-    uint64_t stage_bytes = allocated_blocks * geometry->block_size;
-    uint64_t plan_bytes = allocated_blocks > UINT64_MAX / 96U ? UINT64_MAX : allocated_blocks * 96U;
-    if (plan_bytes <= UINT64_MAX - (64U * 1024U * 1024U)) plan_bytes += 64U * 1024U * 1024U;
-    uint64_t required = stage_bytes > UINT64_MAX - plan_bytes ? UINT64_MAX : stage_bytes + plan_bytes;
-    required += required / 20U;
+    uint64_t stage_bytes = infiltratr_u64_multiply_saturating(
+        allocated_blocks, geometry->block_size);
+    uint64_t plan_bytes = infiltratr_u64_multiply_saturating(allocated_blocks, 96U);
+    plan_bytes = infiltratr_u64_add_saturating(
+        plan_bytes, UINT64_C(64) * 1024U * 1024U);
+    uint64_t required = infiltratr_u64_add_saturating(stage_bytes, plan_bytes);
+    required = infiltratr_u64_add_saturating(required, required / 20U);
     if (available < required) {
         ext_set_error(error,
             "EXT safe staging has only %llu MB available; approximately %llu MB is required",

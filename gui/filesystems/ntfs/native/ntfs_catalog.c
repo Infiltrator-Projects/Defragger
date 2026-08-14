@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ntfs_native.h"
 
+#include "infiltratr/core.h"
 #include "ld_runtime.h"
 
 #include <ctype.h>
@@ -164,9 +165,13 @@ static bool growth_object_ok(const NtfsLayout *layout, const NtfsCatalogue *cata
     if (count == 0) return true;
     if (count != 1 || stream == NULL || ntfs_fragment_count(&stream->runs) != 1U || stream->runs.items[0].sparse) return false;
     uint64_t start=stream->runs.items[0].lcn, clusters=stream->clusters;
-    uint64_t reserve=(clusters*10U+99U)/100U;
-    if (start > UINT64_MAX-clusters || start+clusters > layout->bitmap_bytes*8U) return false;
-    for(uint64_t c=start+clusters; c<start+clusters+reserve; ++c) if(ntfs_bitmap_bit(layout,c)) return false;
+    uint64_t reserve=clusters/10U + (clusters%10U != 0U ? 1U : 0U);
+    uint64_t data_end=0U, reserve_end=0U;
+    if (!infiltratr_u64_add_checked(start, clusters, &data_end) ||
+        data_end > layout->bitmap_bytes*8U ||
+        !infiltratr_u64_add_checked(data_end, reserve, &reserve_end))
+        return false;
+    for(uint64_t c=data_end; c<reserve_end; ++c) if(ntfs_bitmap_bit(layout,c)) return false;
     return true;
 }
 

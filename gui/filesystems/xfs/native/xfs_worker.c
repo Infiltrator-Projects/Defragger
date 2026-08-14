@@ -271,23 +271,23 @@ static char *canonical_path(const char *path, char **error) {
 }
 
 static int capacity_preflight(const char *journal, const XfsCatalogue *catalogue, char **error) {
-    uint64_t used_blocks = 0;
-    for (size_t index = 0; index < catalogue->used_ranges.count; ++index)
-        used_blocks += catalogue->used_ranges.items[index].end - catalogue->used_ranges.items[index].start;
-    uint64_t stage_bytes = used_blocks * catalogue->geometry.block_size;
-    uint64_t movable = xfs_catalogue_movable_blocks(catalogue);
-    uint64_t plan_bytes = movable > (UINT64_MAX - UINT64_C(64) * 1024 * 1024) / 72U
-        ? UINT64_MAX : movable * 72U + UINT64_C(64) * 1024 * 1024;
-    uint64_t repair_margin = stage_bytes / 20U;
-    if (repair_margin < UINT64_C(256) * 1024 * 1024) repair_margin = UINT64_C(256) * 1024 * 1024;
-    uint64_t required = stage_bytes;
-    if (UINT64_MAX - required < plan_bytes) {
-        required = UINT64_MAX;
-    } else {
-        required += plan_bytes;
-        if (UINT64_MAX - required < repair_margin) required = UINT64_MAX;
-        else required += repair_margin;
+    uint64_t used_blocks = 0U;
+    for (size_t index = 0; index < catalogue->used_ranges.count; ++index) {
+        const uint64_t blocks = catalogue->used_ranges.items[index].end -
+                                catalogue->used_ranges.items[index].start;
+        used_blocks = infiltratr_u64_add_saturating(used_blocks, blocks);
     }
+    uint64_t stage_bytes = infiltratr_u64_multiply_saturating(
+        used_blocks, catalogue->geometry.block_size);
+    uint64_t movable = xfs_catalogue_movable_blocks(catalogue);
+    uint64_t plan_bytes = infiltratr_u64_multiply_saturating(movable, 72U);
+    plan_bytes = infiltratr_u64_add_saturating(
+        plan_bytes, UINT64_C(64) * 1024U * 1024U);
+    uint64_t repair_margin = stage_bytes / 20U;
+    if (repair_margin < UINT64_C(256) * 1024U * 1024U)
+        repair_margin = UINT64_C(256) * 1024U * 1024U;
+    uint64_t required = infiltratr_u64_add_saturating(stage_bytes, plan_bytes);
+    required = infiltratr_u64_add_saturating(required, repair_margin);
     char *parent = ld_path_parent_directory(journal);
     struct statvfs fs;
     if (statvfs(parent, &fs) != 0) {
@@ -370,9 +370,11 @@ static uint64_t commit_range_bytes(const XfsCatalogue *catalogue) {
     uint64_t total = 0U;
     for (size_t index = 0; index < catalogue->used_ranges.count; ++index) {
         uint64_t blocks = catalogue->used_ranges.items[index].end - catalogue->used_ranges.items[index].start;
-        uint64_t bytes = blocks * (uint64_t)catalogue->geometry.block_size;
-        if (UINT64_MAX - total < bytes) return UINT64_MAX;
-        total += bytes;
+        uint64_t bytes = infiltratr_u64_multiply_saturating(
+            blocks, (uint64_t)catalogue->geometry.block_size);
+        if (bytes == UINT64_MAX ||
+            !infiltratr_u64_add_checked(total, bytes, &total))
+            return UINT64_MAX;
     }
     return total;
 }

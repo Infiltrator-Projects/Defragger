@@ -161,12 +161,12 @@ def test_build_and_path_registry_install_native_workers() -> None:
 
 def test_infiltratr_common_integration() -> None:
     common = ROOT / "shared" / "infiltratr-common"
-    assert (common / "VERSION").read_text().strip() == "1.4.0"
+    assert (common / "VERSION").read_text().strip() == "1.5.0"
     gitmodules = (ROOT / ".gitmodules").read_text()
     assert "shared/infiltratr-common" in gitmodules
     assert "Infiltrator-Libraries.git" in gitmodules
     cmake = (ROOT / "CMakeLists.txt").read_text()
-    assert "e4547c49400875da3e1a5638366903a01374b350" in cmake
+    assert "a0e75ffbe4e038c74c8f1e3d589f2dae87b2b7bb" in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/core.c' in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/posix.c' in cmake
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
@@ -179,6 +179,14 @@ def test_infiltratr_common_integration() -> None:
     assert "infiltratr_parse_u64" in fat_journal
     assert "infiltratr_parse_u64_range" in fat_journal
     assert "infiltratr_trim_line_end" in fat_journal
+    production_c = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in [*Path(ROOT / "src").rglob("*.c"),
+                     *Path(GUI / "filesystems").rglob("*.c")]
+    )
+    assert "infiltratr_u64_add_checked" in production_c
+    assert "infiltratr_u64_add_saturating" in production_c
+    assert "ld_u64_add" not in production_c
     for filesystem, worker in (("ext4", "ext_worker.c"), ("ntfs", "ntfs_worker.c"),
                                ("exfat", "exfat_worker.c"), ("xfs", "xfs_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()

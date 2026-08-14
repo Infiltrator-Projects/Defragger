@@ -18,8 +18,6 @@ void *ld_xrealloc(void *pointer, size_t size);
 char *ld_xstrdup(const char *text);
 char *ld_xstrndup(const char *text, size_t length);
 
-bool ld_u64_add(uint64_t left, uint64_t right, uint64_t *result);
-
 static inline uint16_t ld_read_le16(const uint8_t *p) {
     return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
 }

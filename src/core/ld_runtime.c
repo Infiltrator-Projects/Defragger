@@ -58,9 +58,3 @@ char *ld_xstrndup(const char *text, size_t length) {
     return copy;
 }
 
-bool ld_u64_add(uint64_t left, uint64_t right, uint64_t *result) {
-    if (left > UINT64_MAX - right) return false;
-    *result = left + right;
-    return true;
-}
-

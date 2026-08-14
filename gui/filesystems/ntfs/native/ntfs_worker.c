@@ -247,11 +247,13 @@ static int capacity_preflight(const char *journal_path, const NtfsVolume *volume
     uint64_t used = 0;
     for (uint64_t c = 0; c < volume->total_clusters; ++c) if (ntfs_bitmap_bit(layout, c)) used++;
     uint64_t available = (uint64_t)info.f_bavail * (uint64_t)info.f_frsize;
-    uint64_t stage_bytes = used * volume->cluster_size;
-    uint64_t plan_bytes = used > UINT64_MAX / 80U ? UINT64_MAX : used * 80U;
-    if (plan_bytes <= UINT64_MAX - (64U * 1024U * 1024U)) plan_bytes += 64U * 1024U * 1024U;
-    uint64_t required = stage_bytes > UINT64_MAX - plan_bytes ? UINT64_MAX : stage_bytes + plan_bytes;
-    required += required / 20U;
+    uint64_t stage_bytes = infiltratr_u64_multiply_saturating(
+        used, volume->cluster_size);
+    uint64_t plan_bytes = infiltratr_u64_multiply_saturating(used, 80U);
+    plan_bytes = infiltratr_u64_add_saturating(
+        plan_bytes, UINT64_C(64) * 1024U * 1024U);
+    uint64_t required = infiltratr_u64_add_saturating(stage_bytes, plan_bytes);
+    required = infiltratr_u64_add_saturating(required, required / 20U);
     if (available < required) {
         ntfs_set_error(error, "NTFS safe staging has only %llu MB available; approximately %llu MB is required",
                        (unsigned long long)(available / (1024U * 1024U)),

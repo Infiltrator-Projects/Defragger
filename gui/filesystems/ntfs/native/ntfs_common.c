@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ntfs_native.h"
 
+#include "infiltratr/core.h"
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
@@ -64,9 +65,16 @@ int ntfs_runs_push(NtfsRunVec *runs, uint64_t lcn, uint64_t length, bool sparse)
     if (length == 0) return 0;
     if (runs->count != 0) {
         NtfsRun *last = &runs->items[runs->count - 1U];
-        if (last->sparse == sparse && (sparse || last->lcn + last->length == lcn)) {
-            if (UINT64_MAX - last->length < length) return -1;
-            last->length += length;
+        uint64_t last_end = 0U;
+        const bool contiguous = sparse ||
+            (infiltratr_u64_add_checked(last->lcn, last->length, &last_end) &&
+             last_end == lcn);
+        if (last->sparse == sparse && contiguous) {
+            uint64_t combined_length = 0U;
+            if (!infiltratr_u64_add_checked(last->length, length,
+                                            &combined_length))
+                return -1;
+            last->length = combined_length;
             return 0;
         }
     }

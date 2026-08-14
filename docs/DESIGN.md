@@ -51,19 +51,19 @@ Filesystem-neutral C mechanics are implemented once:
 - exact interruption-safe `pread` and `pwrite` loops;
 - exclusive raw-device opening, geometry and overlap-aware mounted-target rejection;
 - rotational/serial-flash policy and resource defaults;
-- checked allocation, endian codecs and overflow helpers;
+- checked allocation and endian codecs;
 - signal-safe Stop state;
 - generated version ownership.
 
 Generic C primitives that are also useful to other Infiltrator applications are
-not reimplemented here. Linux Defragger pins Infiltratr Common 1.4.0 at
-exact commit `e4547c49400875da3e1a5638366903a01374b350` and currently consumes its core and POSIX provider
+not reimplemented here. Linux Defragger pins Infiltratr Common 1.5.0 at
+exact commit `a0e75ffbe4e038c74c8f1e3d589f2dae87b2b7bb` and currently consumes its core and POSIX provider
 for strict integer parsing/range validation, bounded string operations, line-end
 trimming, bounded realpath handling, small sysfs scalar reads, prefix matching and
-saturating unit conversion. Defragger keeps its checked-overflow arithmetic, raw
-`pread`/`pwrite` loops, device safety and Stop state local, while each filesystem
-engine owns its journalled staging/transaction mechanics because those semantics
-are application-specific or are not yet supplied by Common with the required contract.
+saturating unit conversion. Defragger uses Common's checked and saturating uint64 arithmetic where the
+required contract matches. Raw `pread`/`pwrite` loops, device safety and Stop state
+remain local, while each filesystem engine owns its journalled staging/transaction
+mechanics because those semantics are application-specific.
 
 This directory contains no filesystem registration or dispatch logic.
 
