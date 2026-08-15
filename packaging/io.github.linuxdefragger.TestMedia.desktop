@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Linux Defragger Test Media
+GenericName=Filesystem Test Media Builder
+Comment=Build and verify deliberately fragmented sacrificial filesystem test disks
+Exec=linux-defragger-test-media
+Icon=drive-removable-media
+Terminal=false
+Categories=System;Utility;
+Keywords=filesystem;defrag;test;media;disk;fragmentation;
+StartupNotify=true
