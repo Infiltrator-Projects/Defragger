@@ -6,11 +6,15 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from dataclasses import dataclass
-from typing import Any, Iterable
+from dataclasses import dataclass, field
+from typing import Any, Callable, Iterable
 
 from .formatting import human_bytes
 from .backend_catalog import BackendCatalog
+
+
+RunCommand = Callable[..., subprocess.CompletedProcess[str]]
+_GENERIC_FAT_TYPES = frozenset({"vfat", "fat", "msdos"})
 
 
 def json_bool(value: Any) -> bool:
@@ -27,6 +31,21 @@ def flatten_lsblk(nodes: Iterable[dict[str, Any]]) -> Iterable[dict[str, Any]]:
         yield from flatten_lsblk(node.get("children") or [])
 
 
+def fat_variant(fstype: str, fs_version: str) -> str:
+    """Return FAT12/FAT16/FAT32 when Linux metadata is precise enough."""
+
+    raw = str(fstype or "").strip().lower()
+    if raw in {"fat12", "fat16", "fat32"}:
+        return raw
+    if raw not in _GENERIC_FAT_TYPES:
+        return ""
+    version = str(fs_version or "").strip().lower().replace(" ", "")
+    for variant in ("fat12", "fat16", "fat32"):
+        if version in {variant, variant[3:]}:
+            return variant
+    return ""
+
+
 @dataclass(slots=True)
 class Volume:
     catalog: BackendCatalog
@@ -41,6 +60,15 @@ class Volume:
     model: str
     transport: str
     image: bool = False
+    fs_version: str = ""
+    filesystem_uuid: str = ""
+    partition_uuid: str = ""
+    _cache_nonce: object = field(
+        default_factory=object,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     @property
     def mounted(self) -> bool:
@@ -48,27 +76,80 @@ class Volume:
 
     @property
     def normalized_fstype(self) -> str:
-        return self.catalog.normalize(self.fstype)
+        variant = fat_variant(self.fstype, self.fs_version)
+        return variant or self.catalog.normalize(self.fstype)
+
+    @property
+    def display_fstype(self) -> str:
+        raw = self.fstype.strip().lower()
+        variant = fat_variant(raw, self.fs_version)
+        if variant:
+            return variant
+        if raw in _GENERIC_FAT_TYPES:
+            return "fat"
+        return self.normalized_fstype
 
     @property
     def capabilities(self) -> int:
-        return self.catalog.capabilities_for(self.fstype)
+        return self.catalog.capabilities_for(self.normalized_fstype)
+
+    @property
+    def cache_key(self) -> tuple[object, ...]:
+        """Identify the filesystem instance, not merely its reusable path."""
+
+        if self.image:
+            try:
+                stat = os.stat(self.path)
+            except OSError:
+                return ("image-ephemeral", self.path, self._cache_nonce)
+            return (
+                "image",
+                self.path,
+                stat.st_dev,
+                stat.st_ino,
+                stat.st_size,
+                stat.st_mtime_ns,
+                self.normalized_fstype,
+            )
+
+        filesystem_uuid = self.filesystem_uuid.strip().lower()
+        partition_uuid = self.partition_uuid.strip().lower()
+        if filesystem_uuid or partition_uuid:
+            return (
+                "device",
+                self.path,
+                filesystem_uuid,
+                partition_uuid,
+                self.normalized_fstype,
+                self.size,
+            )
+
+        # A filesystem with no stable UUID must not inherit analysis from a
+        # different object discovered later at the same device path.
+        return ("device-ephemeral", self.path, self._cache_nonce)
 
     @property
     def display_name(self) -> str:
         label = self.label or self.model or self.name
         status = "mounted" if self.mounted else "unmounted"
         kind = "image" if self.image else (self.transport or "device")
-        filesystem = self.normalized_fstype.upper()
+        filesystem = self.display_fstype.upper()
         return (
             f"{self.path} — {label} — {filesystem} — {human_bytes(self.size)} — "
             f"{kind}, {status}"
         )
 
 
-def discover_volumes(catalog: BackendCatalog) -> list[Volume]:
-    columns = "NAME,PATH,TYPE,FSTYPE,LABEL,SIZE,MOUNTPOINTS,RM,RO,MODEL,TRAN"
-    result = subprocess.run(
+def discover_volumes(
+    catalog: BackendCatalog,
+    *,
+    run: RunCommand = subprocess.run,
+) -> list[Volume]:
+    columns = (
+        "NAME,PATH,TYPE,FSTYPE,FSVER,LABEL,UUID,PARTUUID,SIZE,"
+        "MOUNTPOINTS,RM,RO,MODEL,TRAN"
+    )
+    result = run(
         ["lsblk", "--json", "--bytes", "--output", columns],
         check=True,
         text=True,
@@ -90,11 +171,18 @@ def discover_volumes(catalog: BackendCatalog) -> list[Volume]:
                 fstype=fstype,
                 label=str(node.get("label") or ""),
                 size=int(node.get("size") or 0),
-                mountpoints=[str(item) for item in (node.get("mountpoints") or []) if item],
+                mountpoints=[
+                    str(item)
+                    for item in (node.get("mountpoints") or [])
+                    if item
+                ],
                 removable=json_bool(node.get("rm")),
                 readonly=json_bool(node.get("ro")),
                 model=str(node.get("model") or "").strip(),
                 transport=str(node.get("tran") or ""),
+                fs_version=str(node.get("fsver") or ""),
+                filesystem_uuid=str(node.get("uuid") or ""),
+                partition_uuid=str(node.get("partuuid") or ""),
             )
         )
     volumes.sort(key=lambda volume: (not volume.removable, volume.path))
