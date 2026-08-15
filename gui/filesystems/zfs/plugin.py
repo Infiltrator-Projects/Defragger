@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Linux Defragger
 # Author: Shannon Smith
-# Purpose: Read-only ZFS member identification and geometry mapping.
+# Purpose: Thin GUI adapter for native C ZFS/OpenZFS member identification and summary mapping.
 
-"""Read-only ZFS member identification and summary backend."""
+"""Read-only ZFS member backend delegated entirely to the native C worker."""
 
 from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
 
 from backends.base import (
     BackendError,
@@ -13,9 +19,8 @@ from backends.base import (
     CAP_ANALYSE,
     CAP_MAP,
     FilesystemBackend,
-    Reader,
-    aggregate_ranges,
 )
+from core.paths import resolve_program
 
 INFO = BackendInfo(
     "zfs",
@@ -25,62 +30,58 @@ INFO = BackendInfo(
     "summary",
 )
 
-_UBER_MAGIC_LE = b"\x0c\xb1\xba\x00\x00\x00\x00\x00"
-_UBER_MAGIC_BE = _UBER_MAGIC_LE[::-1]
-_WINDOW_SIZE = 4 * 1024 * 1024
-
 
 class ZfsBackend(FilesystemBackend):
     info = INFO
 
     @staticmethod
-    def _find_uberblock(reader: Reader) -> tuple[int, str]:
-        if reader.size:
-            windows = (
-                (0, min(reader.size, _WINDOW_SIZE)),
-                (max(0, reader.size - _WINDOW_SIZE), min(reader.size, _WINDOW_SIZE)),
-            )
-        else:
-            windows = ((0, _WINDOW_SIZE),)
-        for offset, length in windows:
-            if length < 8:
-                continue
-            data = reader.read(offset, length)
-            for magic, byte_order in ((_UBER_MAGIC_LE, "little"), (_UBER_MAGIC_BE, "big")):
-                position = data.find(magic)
-                if position >= 0:
-                    return offset + position, byte_order
-        raise BackendError("not a recognised ZFS member")
+    def _run_native(
+        path: str,
+        mode: str,
+        *options: str,
+    ) -> subprocess.CompletedProcess[str]:
+        anchor = Path(__file__).resolve().parents[2] / "core"
+        worker = resolve_program("zfs-native", anchor=anchor)
+        return subprocess.run(
+            [worker, mode, path, *options],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+        )
+
+    @staticmethod
+    def _json_result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            detail = completed.stderr.strip()
+            if detail:
+                raise BackendError(detail) from exc
+            raise BackendError("native ZFS worker returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise BackendError("native ZFS worker returned a non-object result")
+        if payload.get("filesystem") != "zfs":
+            raise BackendError("native ZFS worker returned the wrong filesystem identity")
+        return payload
 
     def probe(self, path: str) -> bool:
         try:
-            with Reader(path) as reader:
-                self._find_uberblock(reader)
-            return True
-        except (OSError, BackendError):
+            completed = self._run_native(path, "identify")
+            return completed.returncode == 0 and self._json_result(completed)["filesystem"] == "zfs"
+        except (BackendError, FileNotFoundError, OSError):
             return False
 
     def map(self, path: str, cells: int) -> dict:
-        with Reader(path) as reader:
-            position, byte_order = self._find_uberblock(reader)
-            unit_size = 512
-            total_units = max(1, (reader.size + unit_size - 1) // unit_size)
-            return aggregate_ranges(
-                total_units,
-                cells,
-                unit_size,
-                "zfs",
-                [(0, total_units, 2)],
-                "summary",
-                {
-                    "uberblock_magic_offset": position,
-                    "byte_order": byte_order,
-                    "note": (
-                        "ZFS member detected; exact allocation requires pool-wide metaslab and "
-                        "space-map traversal"
-                    ),
-                },
-            )
+        completed = self._run_native(path, "map", "--cells", str(max(1, cells)))
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise BackendError(detail or "native ZFS mapper failed")
+        payload = self._json_result(completed)
+        if payload.get("schema") != 1 or payload.get("map_accuracy") != "summary":
+            raise BackendError("native ZFS mapper returned an invalid map contract")
+        return payload
 
 
 BACKEND = ZfsBackend()
