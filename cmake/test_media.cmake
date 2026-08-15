@@ -5,7 +5,8 @@ pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
 
 add_library(linux-defragger-test-media-core STATIC
     test_media/test_media_core.c
-    test_media/test_media_worker.c)
+    test_media/test_media_worker.c
+    test_media/test_media_amiga.c)
 target_include_directories(linux-defragger-test-media-core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/test_media"
     "${LD_GENERATED_DIR}")
@@ -26,7 +27,35 @@ target_compile_definitions(linux-defragger-test-media PRIVATE
 target_link_libraries(linux-defragger-test-media PRIVATE
     linux-defragger-test-media-core PkgConfig::GTK3 OpenSSL::Crypto)
 
+add_executable(linux-defragger-test-media-mkfs-ofs
+    test_media/test_media_amiga_mkfs.c)
+target_include_directories(linux-defragger-test-media-mkfs-ofs PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_media")
+target_compile_options(linux-defragger-test-media-mkfs-ofs PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-test-media-mkfs-ofs PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE LDTM_AMIGA_DOSTYPE=0 LDTM_AMIGA_LABEL="LD_OFS")
+target_link_libraries(linux-defragger-test-media-mkfs-ofs PRIVATE
+    linux-defragger-test-media-core)
+set_target_properties(linux-defragger-test-media-mkfs-ofs PROPERTIES
+    OUTPUT_NAME test-media-mkfs-ofs)
+
+add_executable(linux-defragger-test-media-mkfs-ffs
+    test_media/test_media_amiga_mkfs.c)
+target_include_directories(linux-defragger-test-media-mkfs-ffs PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_media")
+target_compile_options(linux-defragger-test-media-mkfs-ffs PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-test-media-mkfs-ffs PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE LDTM_AMIGA_DOSTYPE=1 LDTM_AMIGA_LABEL="LD_FFS")
+target_link_libraries(linux-defragger-test-media-mkfs-ffs PRIVATE
+    linux-defragger-test-media-core)
+set_target_properties(linux-defragger-test-media-mkfs-ffs PROPERTIES
+    OUTPUT_NAME test-media-mkfs-ffs)
+
 install(TARGETS linux-defragger-test-media RUNTIME DESTINATION bin)
+install(TARGETS
+    linux-defragger-test-media-mkfs-ofs
+    linux-defragger-test-media-mkfs-ffs
+    RUNTIME DESTINATION lib/linux-defragger)
 install(FILES packaging/io.github.linuxdefragger.TestMedia.desktop
         DESTINATION share/applications)
 
