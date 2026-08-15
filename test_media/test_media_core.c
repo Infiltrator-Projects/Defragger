@@ -21,9 +21,9 @@ static const LdtmFilesystemSpec LDTM_SPECS[LDTM_SPEC_COUNT] = {
     {"ext4", "LD_EXT4", 2048U, 200U, LDTM_CREATOR_EXT4, "e2fsprogs", ""},
     {"xfs", "LD_XFS", 2048U, 200U, LDTM_CREATOR_XFS, "xfsprogs", ""},
     {"btrfs", "LD_BTRFS", 2048U, 200U, LDTM_CREATOR_BTRFS, "btrfs-progs", ""},
-    {"ofs", "LD_OFS", 1024U, 200U, LDTM_CREATOR_AMIGA_OFS, "",
+    {"ofs", "LD_OFS", 1024U, 200U, LDTM_CREATOR_AFFS, "",
      "Amiga Old File System DOS\\0; formatted by the built-in first-party C creator."},
-    {"ffs", "LD_FFS", 1024U, 200U, LDTM_CREATOR_AMIGA_FFS, "",
+    {"ffs", "LD_FFS", 1024U, 200U, LDTM_CREATOR_AFFS, "",
      "Amiga Fast File System DOS\\1; formatted by the built-in first-party C creator."},
     {"sfs", "LD_SFS", 1024U, 200U, LDTM_CREATOR_MANUAL, "",
      "Amiga Smart File System SFS/SFS2 roadmap slot; no Linux Defragger engine or creator yet."},
@@ -134,14 +134,16 @@ const char *ldtm_creator_program(const LdtmFilesystemSpec *spec) {
         case LDTM_CREATOR_EXT4: return "mkfs.ext4";
         case LDTM_CREATOR_XFS: return "mkfs.xfs";
         case LDTM_CREATOR_BTRFS: return "mkfs.btrfs";
+        case LDTM_CREATOR_AFFS:
+            if (strcmp(spec->key, "ofs") == 0) return "/usr/lib/linux-defragger/test-media-mkfs-ofs";
+            if (strcmp(spec->key, "ffs") == 0) return "/usr/lib/linux-defragger/test-media-mkfs-ffs";
+            return NULL;
         case LDTM_CREATOR_HFS: return "hformat";
         case LDTM_CREATOR_HFSPLUS: return "mkfs.hfsplus";
         case LDTM_CREATOR_MINIX: return "mkfs.minix";
         case LDTM_CREATOR_UFS: return "mkfs.ufs";
         case LDTM_CREATOR_ZFS: return "zpool";
         case LDTM_CREATOR_SWAP: return "mkswap";
-        case LDTM_CREATOR_AMIGA_OFS:
-        case LDTM_CREATOR_AMIGA_FFS:
         case LDTM_CREATOR_MANUAL: return NULL;
     }
     return NULL;
@@ -184,11 +186,11 @@ int ldtm_spec_creator_available(const LdtmFilesystemSpec *spec,
                                 char *detail, size_t detail_capacity) {
     const char *program;
     if (detail == NULL || detail_capacity == 0U || spec == NULL) return 0;
-    if (spec->creator == LDTM_CREATOR_AMIGA_OFS) {
+    if (spec->creator == LDTM_CREATOR_AFFS && strcmp(spec->key, "ofs") == 0) {
         (void)snprintf(detail, detail_capacity, "Built-in C creator: Amiga DOS\\0 OFS");
         return 1;
     }
-    if (spec->creator == LDTM_CREATOR_AMIGA_FFS) {
+    if (spec->creator == LDTM_CREATOR_AFFS && strcmp(spec->key, "ffs") == 0) {
         (void)snprintf(detail, detail_capacity, "Built-in C creator: Amiga DOS\\1 FFS");
         return 1;
     }
