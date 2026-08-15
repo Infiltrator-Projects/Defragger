@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: UFS 107 production adapter
+
+on:
+  push:
+    branches: [c-first-ufs-107]
+    paths: [.github/workflows/ufs-107-adapter.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config python3 \
+            libext2fs-dev libsqlite3-dev libssl-dev
+      - name: Build normal project and UFS worker
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON -DBUILD_TESTING=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure -R linux-defragger-ufs-native
+          test -x build/linux-defragger-ufs-worker
+      - name: Test real Python to C UFS adapter
+        env:
+          PYTHONPATH: ${{ github.workspace }}/gui
+          PYTHONDONTWRITEBYTECODE: '1'
+          LINUX_DEFRAGGER_UFS_WORKER: ${{ github.workspace }}/build/linux-defragger-ufs-worker
+        run: |
+          for forbidden in 'Reader' '_CANDIDATES' '_MAGICS' 'aggregate_ranges' 'data.find'; do
+            if grep -Fq "$forbidden" gui/filesystems/ufs/plugin.py; then
+              echo "UFS Python adapter still contains filesystem parser logic: $forbidden" >&2
+              exit 1
+            fi
+          done
+          truncate -s 300000 build/ufs-adapter.img
+          printf '\x00\x01\x19\x54' | dd of=build/ufs-adapter.img bs=1 seek=$((8192+321)) conv=notrunc status=none
+          python3 - <<'PY'
+          from filesystems.ufs.plugin import UfsBackend
+          p = 'build/ufs-adapter.img'
+          backend = UfsBackend()
+          assert backend.probe(p)
+          result = backend.map(p, 5)
+          assert result['schema'] == 1
+          assert result['filesystem'] == 'ufs'
+          assert result['map_accuracy'] == 'summary'
+          assert result['unit_size'] == 512
+          assert result['total_units'] == 586
+          assert result['cell_count'] == 5
+          assert result['unknown_bytes'] == 586 * 512
+          assert result['details']['variant'] == 'ufs1-be'
+          assert result['details']['version'] == 1
+          assert result['details']['byte_order'] == 'big'
+          assert result['details']['superblock_offset'] == 8192
+          assert result['details']['magic_offset'] == 8513
+          with open(p, 'r+b') as image:
+              image.seek(8513)
+              image.write(b'NOPE')
+          assert not backend.probe(p)
+          PY
