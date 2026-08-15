@@ -2,6 +2,7 @@
 #include "test_media.h"
 #include "affs_native.h"
 
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,13 +17,24 @@
     } \
 } while (0)
 
-static int production_parser_accepts(const char *path, uint8_t dostype, int expect_ffs) {
+static int production_parser_accepts(const char *path, uint8_t dostype, int expect_ffs,
+                                     size_t expected_files, size_t fragmented_targets,
+                                     size_t minimum_fragments) {
     AffsVolume volume;
     char *error = NULL;
+    size_t fragmented = 0U;
     int result = 1;
     if (affs_scan(path, false, &volume, &error) == 0) {
+        size_t index;
+        for (index = 0U; index < volume.files.n; ++index) {
+            if (volume.files.v[index].byte_size > 0U &&
+                affs_fragments(&volume.files.v[index].data) >= minimum_fragments) {
+                ++fragmented;
+            }
+        }
         if (volume.dostype == dostype && (volume.ffs ? 1 : 0) == expect_ffs &&
-            volume.bitmap_blocks.n > 25U && volume.bitmap_ext_blocks.n > 0U) {
+            volume.bitmap_blocks.n > 25U && volume.bitmap_ext_blocks.n > 0U &&
+            volume.files.n == expected_files && fragmented == fragmented_targets) {
             result = 0;
         }
         affs_close(&volume);
@@ -31,8 +43,41 @@ static int production_parser_accepts(const char *path, uint8_t dostype, int expe
     return result;
 }
 
-static int test_amiga_formatters(void) {
+static int corrupt_first_payload_block(const char *path) {
+    AffsVolume volume;
+    char *error = NULL;
+    uint32_t data_block = 0U;
+    int fd = -1;
+    unsigned char byte;
+    size_t index;
+    int result = 1;
+    if (affs_scan(path, false, &volume, &error) != 0) goto cleanup;
+    for (index = 0U; index < volume.files.n; ++index) {
+        if (volume.files.v[index].byte_size > 0U && volume.files.v[index].data.n > 0U) {
+            data_block = volume.files.v[index].data.v[0];
+            break;
+        }
+    }
+    affs_close(&volume);
+    if (data_block == 0U) goto cleanup;
+    fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd < 0) goto cleanup;
+    if (pread(fd, &byte, 1U, (off_t)data_block * 512 + 64) != 1) goto cleanup;
+    byte ^= UINT8_C(0x5a);
+    if (pwrite(fd, &byte, 1U, (off_t)data_block * 512 + 64) != 1 || fsync(fd) != 0) goto cleanup;
+    result = 0;
+cleanup:
+    if (fd >= 0) (void)close(fd);
+    free(error);
+    return result;
+}
+
+static int test_amiga_formatters_and_payload(void) {
     char path[] = "/tmp/linux-defragger-amiga-media.XXXXXX";
+    const LdtmFragmentProfile tiny = {0U, 0U, 2U, 4U, 8U, 16U, 16U};
+    const size_t retained_entries = tiny.directory_initial / 2U + tiny.directory_second;
+    const size_t expected_files = (size_t)tiny.files + retained_entries;
+    char detail[512];
     int fd = mkstemp(path);
     if (fd < 0) return 1;
     if (ftruncate(fd, (off_t)(128U * LDTM_MIB)) != 0) {
@@ -44,17 +89,29 @@ static int test_amiga_formatters(void) {
         (void)unlink(path);
         return 1;
     }
+
     if (ldtm_format_amiga_volume(path, 0U, "LD_OFS") != 0 ||
         ldtm_validate_amiga_volume(path, 0U) != 0 ||
         ldtm_validate_amiga_volume(path, 1U) == 0 ||
-        production_parser_accepts(path, 0U, 0) != 0) {
+        production_parser_accepts(path, 0U, 0, 0U, 0U, 1U) != 0 ||
+        ldtm_populate_amiga_volume(path, 0U, &tiny) != 0 ||
+        ldtm_verify_amiga_payload(path, 0U, &tiny, detail, sizeof(detail)) != 0 ||
+        production_parser_accepts(path, 0U, 0, expected_files, tiny.files, tiny.chunks) != 0 ||
+        corrupt_first_payload_block(path) != 0 ||
+        ldtm_verify_amiga_payload(path, 0U, &tiny, detail, sizeof(detail)) == 0) {
         (void)unlink(path);
         return 1;
     }
+
     if (ldtm_format_amiga_volume(path, 1U, "LD_FFS") != 0 ||
         ldtm_validate_amiga_volume(path, 1U) != 0 ||
         ldtm_validate_amiga_volume(path, 0U) == 0 ||
-        production_parser_accepts(path, 1U, 1) != 0) {
+        production_parser_accepts(path, 1U, 1, 0U, 0U, 1U) != 0 ||
+        ldtm_populate_amiga_volume(path, 1U, &tiny) != 0 ||
+        ldtm_verify_amiga_payload(path, 1U, &tiny, detail, sizeof(detail)) != 0 ||
+        production_parser_accepts(path, 1U, 1, expected_files, tiny.files, tiny.chunks) != 0 ||
+        corrupt_first_payload_block(path) != 0 ||
+        ldtm_verify_amiga_payload(path, 1U, &tiny, detail, sizeof(detail)) == 0) {
         (void)unlink(path);
         return 1;
     }
@@ -102,8 +159,10 @@ int main(void) {
     CHECK(ldtm_target_payload_bytes(ffs) == UINT64_C(200) * LDTM_MIB);
     CHECK(small.directory_initial == 128U);
     CHECK(small.directory_second == 128U);
+    CHECK(normal.chunks == 100U);
     CHECK(normal.directory_initial == 4096U);
     CHECK(normal.directory_second == 4096U);
+    CHECK((normal.directory_initial / 2U + normal.directory_second) == 6144U);
     CHECK((small.directory_initial / 2U + small.directory_second) == 192U);
 
     CHECK(ofs->creator == LDTM_CREATOR_AFFS);
@@ -119,7 +178,7 @@ int main(void) {
     CHECK(zfs->package_hint != NULL && strcmp(zfs->package_hint, "zfsutils-linux") == 0);
     CHECK(apfs->creator == LDTM_CREATOR_MANUAL);
     CHECK(ldtm_creator_program(apfs) == NULL);
-    CHECK(test_amiga_formatters() == 0);
+    CHECK(test_amiga_formatters_and_payload() == 0);
 
     CHECK(ldtm_transport_is_field_media(0, "mmc") == 1);
     CHECK(ldtm_transport_is_field_media(0, "usb") == 1);
