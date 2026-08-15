@@ -34,6 +34,11 @@ NATIVE_WRITERS = {
 }
 
 
+def _cmake_source() -> str:
+    paths = [ROOT / "CMakeLists.txt", *sorted((ROOT / "cmake").glob("*.cmake"))]
+    return "\n".join(path.read_text() for path in paths if path.is_file())
+
+
 def test_plugin_discovery_and_native_worker_contracts() -> None:
     names = discover_plugin_names()
     registry = Registry()
@@ -100,6 +105,7 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         "affs": {"affs_native.h", "affs_native.c", "affs_worker.c"},
         "hfsplus": {"hfsplus_native.h", "hfsplus_native.c", "hfsplus_worker.c"},
         "swap": {"swap_native.h", "swap_native.c", "swap_worker.c"},
+        "ufs": {"ufs_native.h", "ufs_native.c", "ufs_worker.c"},
     }
     for filesystem, native_files in required_native.items():
         package = GUI / "filesystems" / filesystem
@@ -109,8 +115,6 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         assert native_files <= {path.name for path in native.iterdir() if path.is_file()}
         assert len((package / "plugin.py").read_text().splitlines()) < 260
 
-    # A mutating filesystem may not grow a second Python implementation beside
-    # its native worker. These names represent implementation logic, not GUI glue.
     forbidden_python = {
         "writer.py", "planner.py", "relocator.py", "transaction.py", "metadata.py",
         "volume.py", "catalog.py", "codec.py", "bitmap.py", "record.py", "model.py",
@@ -121,8 +125,11 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         package = GUI / "filesystems" / filesystem
         assert not ({path.name for path in package.glob("*.py")} & forbidden_python)
 
-    # NTFS mutation verification must prove the exact durable plan rather than
-    # delegating Growth Defrag correctness to the analyser's coarse summary.
+    ufs_plugin = (GUI / "filesystems" / "ufs" / "plugin.py").read_text()
+    for forbidden in ("Reader", "_CANDIDATES", "_MAGICS", "aggregate_ranges", "data.find"):
+        assert forbidden not in ufs_plugin
+    assert 'resolve_program("ufs-native"' in ufs_plugin
+
     ntfs_plan = (GUI / "filesystems" / "ntfs" / "native" / "ntfs_plan.c").read_text()
     assert "fixed_primary" in ntfs_plan
     assert "growth&&!catalogue.growth_10_satisfied" not in ntfs_plan.replace(" ", "")
@@ -134,11 +141,11 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
     assert hfs_analyser.is_file()
     hfs_source = hfs_analyser.read_text()
     assert "libhfs" not in hfs_source
-    assert "vendor/" not in (ROOT / "CMakeLists.txt").read_text()
+    assert "vendor/" not in _cmake_source()
 
 
 def test_build_and_path_registry_install_native_workers() -> None:
-    cmake = (ROOT / "CMakeLists.txt").read_text()
+    cmake = _cmake_source()
     paths = (GUI / "core" / "paths.py").read_text()
     for worker, filesystem in (
         ("linux-defragger-ext-worker", "ext4"),
@@ -149,6 +156,7 @@ def test_build_and_path_registry_install_native_workers() -> None:
         ("linux-defragger-affs-worker", "affs"),
         ("linux-defragger-hfsplus-worker", "hfsplus"),
         ("linux-defragger-swap-worker", "swap"),
+        ("linux-defragger-ufs-worker", "ufs"),
     ):
         assert worker in cmake
         install_pattern = re.compile(
@@ -167,7 +175,7 @@ def test_infiltratr_common_integration() -> None:
     gitmodules = (ROOT / ".gitmodules").read_text()
     assert "shared/infiltratr-common" in gitmodules
     assert "Infiltrator-Libraries.git" in gitmodules
-    cmake = (ROOT / "CMakeLists.txt").read_text()
+    cmake = _cmake_source()
     assert "a0e75ffbe4e038c74c8f1e3d589f2dae87b2b7bb" in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/core.c' in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/posix.c' in cmake
