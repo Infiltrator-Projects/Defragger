@@ -55,10 +55,12 @@ dpkg --compare-versions "${VERSION}+native1" gt "$VERSION"
 NEXT_REVISION=${VERSION%-*}-$(( ${VERSION##*-} + 1 ))
 dpkg --compare-versions "$NEXT_REVISION" gt "${VERSION}+native1"
 
-grep -q -- '-march=x86-64' "$ROOT/CMakeLists.txt"
-grep -q -- '-mtune=generic' "$ROOT/CMakeLists.txt"
-grep -q -- '-march=native' "$ROOT/CMakeLists.txt"
-grep -q -- '-mtune=native' "$ROOT/CMakeLists.txt"
+CMAKE_SOURCE="$WORK/cmake-source.txt"
+cat "$ROOT/CMakeLists.txt" "$ROOT"/cmake/*.cmake >"$CMAKE_SOURCE"
+grep -q -- '-march=x86-64' "$CMAKE_SOURCE"
+grep -q -- '-mtune=generic' "$CMAKE_SOURCE"
+grep -q -- '-march=native' "$CMAKE_SOURCE"
+grep -q -- '-mtune=native' "$CMAKE_SOURCE"
 grep -Fq "printf 'Version: %s\\n' \"\$PACKAGE_VERSION\"" \
     "$ROOT/packaging/build-deb.sh"
 if grep -Fq "printf 'Version: %s\\n' \"\$VERSION\"" \
