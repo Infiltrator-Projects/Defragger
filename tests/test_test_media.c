@@ -17,6 +17,10 @@ int main(void) {
     char script[8192];
     const LdtmFilesystemSpec *fat12;
     const LdtmFilesystemSpec *fat16;
+    const LdtmFilesystemSpec *affs;
+    const LdtmFilesystemSpec *ufs;
+    const LdtmFilesystemSpec *zfs;
+    const LdtmFilesystemSpec *apfs;
     LdtmFragmentProfile small;
     LdtmFragmentProfile normal;
     size_t count = 0U;
@@ -28,7 +32,13 @@ int main(void) {
 
     fat12 = ldtm_find_spec("fat12");
     fat16 = ldtm_find_spec("fat16");
+    affs = ldtm_find_spec("affs");
+    ufs = ldtm_find_spec("ufs");
+    zfs = ldtm_find_spec("zfs");
+    apfs = ldtm_find_spec("apfs");
     CHECK(fat12 != NULL && fat16 != NULL);
+    CHECK(affs != NULL && ufs != NULL && zfs != NULL && apfs != NULL);
+
     small = ldtm_fragment_profile(fat12);
     normal = ldtm_fragment_profile(fat16);
     CHECK(ldtm_target_payload_bytes(fat12) == UINT64_C(4) * LDTM_MIB);
@@ -38,6 +48,14 @@ int main(void) {
     CHECK(normal.directory_initial == 4096U);
     CHECK(normal.directory_second == 4096U);
     CHECK((small.directory_initial / 2U + small.directory_second) == 192U);
+
+    CHECK(strcmp(ldtm_creator_program(affs), "mkfs.affs") == 0);
+    CHECK(strcmp(ldtm_creator_program(ufs), "mkfs.ufs") == 0);
+    CHECK(affs->package_hint != NULL && affs->package_hint[0] == '\0');
+    CHECK(ufs->package_hint != NULL && ufs->package_hint[0] == '\0');
+    CHECK(zfs->package_hint != NULL && strcmp(zfs->package_hint, "zfsutils-linux") == 0);
+    CHECK(apfs->creator == LDTM_CREATOR_MANUAL);
+    CHECK(ldtm_creator_program(apfs) == NULL);
 
     CHECK(ldtm_transport_is_field_media(0, "mmc") == 1);
     CHECK(ldtm_transport_is_field_media(0, "usb") == 1);
