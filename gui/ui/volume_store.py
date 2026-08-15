@@ -71,6 +71,29 @@ class VolumeStore:
         self.volumes.append(volume)
         return self.select(len(self.volumes) - 1)
 
+    def replace(self, volume: Volume) -> None:
+        """Replace one discovered path while preserving a matching cached map."""
+
+        for index, existing in enumerate(self.volumes):
+            if existing.path != volume.path:
+                continue
+            old_current = self.current is existing or (
+                self.current is not None and self.current.path == volume.path
+            )
+            self.volumes[index] = volume
+            if old_current:
+                self.current = volume
+            break
+        else:
+            self.volumes.append(volume)
+            if self.current is not None and self.current.path == volume.path:
+                self.current = volume
+
+        fresh_key = volume.cache_key
+        for key in tuple(self.map_cache):
+            if len(key) > 1 and key[1] == volume.path and key != fresh_key:
+                del self.map_cache[key]
+
     def select(self, index: int) -> int:
         """Select an index, or clear selection when it is outside the list."""
 
