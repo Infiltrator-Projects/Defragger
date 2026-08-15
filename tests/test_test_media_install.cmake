@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+if(NOT DEFINED LD_BINARY_DIR)
+    message(FATAL_ERROR "LD_BINARY_DIR is required")
+endif()
+
+set(_root "${LD_BINARY_DIR}/test-media-install-root")
+file(REMOVE_RECURSE "${_root}")
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "DESTDIR=${_root}"
+            "${CMAKE_COMMAND}" --install "${LD_BINARY_DIR}" --prefix /usr
+    RESULT_VARIABLE _install_result
+    OUTPUT_VARIABLE _install_stdout
+    ERROR_VARIABLE _install_stderr)
+if(NOT _install_result EQUAL 0)
+    message(FATAL_ERROR
+        "staged Test Media install failed (${_install_result})\n${_install_stdout}\n${_install_stderr}")
+endif()
+
+foreach(_path IN ITEMS
+    "usr/bin/linux-defragger-test-media"
+    "usr/lib/linux-defragger/test-media-mkfs-ofs"
+    "usr/lib/linux-defragger/test-media-mkfs-ffs"
+    "usr/share/applications/io.github.linuxdefragger.TestMedia.desktop")
+    if(NOT EXISTS "${_root}/${_path}")
+        message(FATAL_ERROR "staged Test Media install is missing ${_path}")
+    endif()
+endforeach()
+
+file(REMOVE_RECURSE "${_root}")
+message(STATUS "Test Media staged install contains GUI plus OFS/FFS C creators")
