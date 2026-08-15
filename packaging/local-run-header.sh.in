@@ -43,7 +43,7 @@ fi
 
 MISSING=''
 for package in build-essential cmake dpkg-dev python3 python3-gi python3-cairo \
-               gir1.2-gtk-3.0 policykit-1 udisks2 util-linux \
+               gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux \
                libext2fs-dev libsqlite3-dev libssl-dev; do
     if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | \
          grep -q '^install ok installed$'; then
