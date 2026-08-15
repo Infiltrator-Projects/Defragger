@@ -1,11 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Linux Defragger
 # Author: Shannon Smith
-# Purpose: Read-only UFS filesystem identification and geometry mapping.
+# Purpose: Thin GUI adapter for native C UFS1/UFS2 identification and summary mapping.
 
-"""Read-only UFS filesystem identification and mapping backend."""
+"""Read-only UFS backend delegated entirely to the native C worker."""
 
 from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
 
 from backends.base import (
     BackendError,
@@ -13,9 +19,8 @@ from backends.base import (
     CAP_ANALYSE,
     CAP_MAP,
     FilesystemBackend,
-    Reader,
-    aggregate_ranges,
 )
+from core.paths import resolve_program
 
 INFO = BackendInfo(
     "ufs",
@@ -25,62 +30,58 @@ INFO = BackendInfo(
     "summary",
 )
 
-# UFS superblocks occur at filesystem-dependent backup locations. Probe common
-# primary offsets and search each superblock window for known UFS1/UFS2 magic.
-_CANDIDATES = (8192, 65536, 262144)
-_MAGICS = {
-    b"\x54\x19\x01\x00": "ufs1-le",
-    b"\x00\x01\x19\x54": "ufs1-be",
-    b"\x19\x01\x54\x19": "ufs2-le",
-    b"\x19\x54\x01\x19": "ufs2-be",
-}
-
 
 class UfsBackend(FilesystemBackend):
     info = INFO
 
     @staticmethod
-    def _find_superblock(reader: Reader) -> tuple[int, int, str]:
-        for offset in _CANDIDATES:
-            if reader.size and offset >= reader.size:
-                continue
-            length = min(8192, max(0, reader.size - offset)) if reader.size else 8192
-            if length < 512:
-                continue
-            data = reader.read(offset, length)
-            for magic, variant in _MAGICS.items():
-                position = data.find(magic)
-                if position >= 0:
-                    return offset, position, variant
-        raise BackendError("not a recognised UFS volume")
+    def _run_native(
+        path: str,
+        mode: str,
+        *options: str,
+    ) -> subprocess.CompletedProcess[str]:
+        anchor = Path(__file__).resolve().parents[2] / "core"
+        worker = resolve_program("ufs-native", anchor=anchor)
+        return subprocess.run(
+            [worker, mode, path, *options],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+        )
+
+    @staticmethod
+    def _json_result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            detail = completed.stderr.strip()
+            if detail:
+                raise BackendError(detail) from exc
+            raise BackendError("native UFS worker returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise BackendError("native UFS worker returned a non-object result")
+        if payload.get("filesystem") != "ufs":
+            raise BackendError("native UFS worker returned the wrong filesystem identity")
+        return payload
 
     def probe(self, path: str) -> bool:
         try:
-            with Reader(path) as reader:
-                self._find_superblock(reader)
-            return True
-        except (OSError, BackendError):
+            completed = self._run_native(path, "identify")
+            return completed.returncode == 0 and self._json_result(completed)["filesystem"] == "ufs"
+        except (BackendError, FileNotFoundError, OSError):
             return False
 
     def map(self, path: str, cells: int) -> dict:
-        with Reader(path) as reader:
-            offset, position, variant = self._find_superblock(reader)
-            unit_size = 512
-            total_units = max(1, (reader.size + unit_size - 1) // unit_size)
-            return aggregate_ranges(
-                total_units,
-                cells,
-                unit_size,
-                "ufs",
-                [(0, total_units, 2)],
-                "summary",
-                {
-                    "variant": variant,
-                    "superblock_offset": offset,
-                    "magic_offset": offset + position,
-                    "note": "UFS detected; cylinder-group allocation locations not yet decoded",
-                },
-            )
+        completed = self._run_native(path, "map", "--cells", str(max(1, cells)))
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise BackendError(detail or "native UFS mapper failed")
+        payload = self._json_result(completed)
+        if payload.get("schema") != 1 or payload.get("map_accuracy") != "summary":
+            raise BackendError("native UFS mapper returned an invalid map contract")
+        return payload
 
 
 BACKEND = UfsBackend()
