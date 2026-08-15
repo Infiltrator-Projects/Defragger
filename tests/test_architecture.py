@@ -107,6 +107,7 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         "swap": {"swap_native.h", "swap_native.c", "swap_worker.c"},
         "ufs": {"ufs_native.h", "ufs_native.c", "ufs_worker.c"},
         "zfs": {"zfs_native.h", "zfs_native.c", "zfs_worker.c"},
+        "hfs": {"analyser.c"},
     }
     for filesystem, native_files in required_native.items():
         package = GUI / "filesystems" / filesystem
@@ -135,6 +136,11 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
     for forbidden in ("Reader", "_UBER_MAGIC_LE", "_UBER_MAGIC_BE", "_WINDOW_SIZE", "aggregate_ranges", "data.find"):
         assert forbidden not in zfs_plugin
     assert 'resolve_program("zfs-native"' in zfs_plugin
+
+    hfs_plugin = (GUI / "filesystems" / "hfs" / "plugin.py").read_text()
+    for forbidden in ("Reader", "aggregate_bitmap", "u16be", "u32be", "bitmap_sector", "candidates ="):
+        assert forbidden not in hfs_plugin
+    assert 'resolve_program("hfs-native"' in hfs_plugin
 
     ntfs_plan = (GUI / "filesystems" / "ntfs" / "native" / "ntfs_plan.c").read_text()
     assert "fixed_primary" in ntfs_plan
@@ -172,6 +178,13 @@ def test_build_and_path_registry_install_native_workers() -> None:
         )
         assert install_pattern.search(cmake), f"{worker} has no package install rule"
         assert worker in paths
+    assert "linux-defragger-hfs-analyser" in cmake
+    assert re.search(
+        r"install\(TARGETS\s+linux-defragger-hfs-analyser\s+"
+        r"RUNTIME DESTINATION lib/linux-defragger/filesystems/hfs\)",
+        cmake,
+    )
+    assert "hfs_analyser" in paths
     for obsolete in ("ext-raw", "ntfs-raw", "exfat-raw"):
         assert obsolete not in paths
 
