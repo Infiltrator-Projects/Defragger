@@ -133,6 +133,39 @@ grep -q 'preparation complete: 64 clusters moved in 1 transaction' \
     fail "FAT16 preparation did not remain bounded to one 64-cluster transaction"
 python3 "$ROOT/tests/verify_fat16_workspace_image.py" "$WORK/fat16-workspace.img"
 
+# FAT16: collapsing a verified 10% Growth layout back to zero-gap packing must
+# walk forward in bounded workspace batches. It must not bounce thousands of
+# one-cluster files through the terminal workspace one object at a time.
+"$FAT_WORKER" growth-defrag "$WORK/fat16-workspace.img" \
+    --write --confirm "$WORK/fat16-workspace.img" \
+    --journal "$WORK/fat16-workspace-growth.journal" --growth-percent 10 \
+    >"$WORK/fat16-workspace-growth.log" 2>&1
+grep -q 'canonical 10% growth gaps verified' \
+    "$WORK/fat16-workspace-growth.log" || \
+    fail "FAT16 Growth layout was not independently verified"
+"$FAT_WORKER" defrag "$WORK/fat16-workspace.img" \
+    --write --confirm "$WORK/fat16-workspace.img" \
+    --journal "$WORK/fat16-growth-to-packed.journal" --live-map-cells 2048 \
+    >"$WORK/fat16-growth-to-packed.log" 2>&1
+grep -q 'Defragment forward layout batch:' \
+    "$WORK/fat16-growth-to-packed.log" || \
+    fail "FAT16 Growth-to-Defragment did not use forward workspace batches"
+if grep -q 'Growth layout cleared\|Defragment layout staged one' \
+    "$WORK/fat16-growth-to-packed.log"; then
+    fail "FAT16 Growth-to-Defragment still bounced individual objects"
+fi
+transactions=$(sed -n \
+    's/^Defragment layout I\/O:.* in \([0-9][0-9]*\) transactions$/\1/p' \
+    "$WORK/fat16-growth-to-packed.log")
+[[ -n "$transactions" && "$transactions" -le 10 ]] || \
+    fail "FAT16 Growth-to-Defragment exceeded ten layout transactions: ${transactions:-missing}"
+forward_batches=$(grep -c '^Defragment forward layout batch:' \
+    "$WORK/fat16-growth-to-packed.log")
+live_updates=$(grep -c '^@@LIVE_MAP ' "$WORK/fat16-growth-to-packed.log")
+[[ "$live_updates" -eq "$forward_batches" ]] || \
+    fail "FAT16 live map exposed transient staging allocations: ${live_updates} updates for ${forward_batches} completed batches"
+python3 "$ROOT/tests/verify_fat16_workspace_image.py" "$WORK/fat16-workspace.img"
+
 # Write confirmation is mandatory and the classic HFS helper is read-only.
 if "$FAT_WORKER" defrag "$WORK/gapped.img" --write --confirm wrong \
     --journal "$WORK/wrong-confirm.journal" >"$WORK/wrong-confirm.log" 2>&1; then

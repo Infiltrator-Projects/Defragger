@@ -215,7 +215,7 @@ static const U32Vec *find_growth_object_chain(Fat32 *fs, const GrowthObject *obj
             return &files->v[i].chain;
         }
     }
-    ld_die("growth-defrag object disappeared during rescan");
+    ld_die("layout object disappeared during rescan");
     return NULL;
 }
 
@@ -265,6 +265,262 @@ static bool growth_batch_can_add(const Fat32 *fs, const U32Vec *chain,
     return true;
 }
 
+typedef struct {
+    size_t object_index;
+    uint32_t staged_at;
+} ForwardStageItem;
+
+/* A canonical zero-gap rewrite of an already-contiguous layout is a leftward
+   compaction.  Walking that plan backwards makes every low target depend on an
+   object that has not moved yet, so the general fallback has to bounce one
+   object through the terminal workspace and evacuate its blockers.  Walking
+   forward removes that dependency.  Whole consecutive batches are staged in
+   the existing largest-object workspace, then placed in one second journalled
+   transaction.  The live map is emitted only after placement, never for the
+   transient terminal copy. */
+static bool execute_forward_compaction(
+    Fat32 *fs,
+    const char *journal_path,
+    GrowthObjectList *objects,
+    uint32_t workspace_start,
+    size_t workspace_clusters,
+    size_t object_batch_limit,
+    size_t cluster_batch_limit,
+    const char *layout_name,
+    GrowthStats *stats
+) {
+    size_t next = 0;
+    size_t remaining = objects->len;
+
+    while (next < objects->len) {
+        if (ld_stop_requested()) {
+            stats->interrupted = true;
+            fprintf(stderr,
+                    "%s stopped safely during layout between complete batches.\n",
+                    layout_name);
+            return true;
+        }
+
+        DirRefList current_refs = {0};
+        FileList current_files = scan_files(fs, &current_refs);
+
+        while (next < objects->len) {
+            GrowthObject *object = &objects->v[next];
+            const FileRecord *current_file = NULL;
+            U32Vec local_root = {0};
+            const U32Vec *chain = find_growth_object_chain(
+                fs, object, &current_files, &local_root, &current_file);
+            (void)current_file;
+            if (chain->len != object->clusters) {
+                u32vec_free(&local_root);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("layout object changed size during forward compaction");
+            }
+            bool exact = chain_is_exact_run(chain, object->target);
+            u32vec_free(&local_root);
+            if (!exact) break;
+            next++;
+            remaining--;
+        }
+        if (next == objects->len) {
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            break;
+        }
+
+        ForwardStageItem *items = ld_xmalloc(
+            object_batch_limit * sizeof(*items));
+        RelocationMove *stage_moves = NULL;
+        size_t stage_move_count = 0;
+        size_t stage_move_cap = 0;
+        size_t batch_objects = 0;
+        size_t batch_files = 0;
+        size_t batch_directories = 0;
+        uint8_t *source_seen = ld_xcalloc(
+            (size_t)fs->max_cluster + 1, 1);
+
+        size_t candidate = next;
+        while (candidate < objects->len &&
+               batch_objects < object_batch_limit) {
+            GrowthObject *object = &objects->v[candidate];
+            const FileRecord *current_file = NULL;
+            U32Vec local_root = {0};
+            const U32Vec *chain = find_growth_object_chain(
+                fs, object, &current_files, &local_root, &current_file);
+            (void)current_file;
+            if (chain->len != object->clusters) {
+                u32vec_free(&local_root);
+                free(source_seen);
+                free(stage_moves);
+                free(items);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("layout object changed size during forward compaction");
+            }
+            if (chain_is_exact_run(chain, object->target)) {
+                u32vec_free(&local_root);
+                break;
+            }
+            if (!chain_is_exact_run(chain, chain->v[0]) ||
+                object->target > chain->v[0]) {
+                u32vec_free(&local_root);
+                free(source_seen);
+                free(stage_moves);
+                free(items);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                return false;
+            }
+            if (batch_objects != 0 &&
+                (stage_move_count >= cluster_batch_limit ||
+                 object->clusters > workspace_clusters - stage_move_count ||
+                 object->clusters > cluster_batch_limit - stage_move_count)) {
+                u32vec_free(&local_root);
+                break;
+            }
+            if (batch_objects == 0 && object->clusters > workspace_clusters) {
+                u32vec_free(&local_root);
+                free(source_seen);
+                free(stage_moves);
+                free(items);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("forward compaction object exceeds the staging workspace");
+            }
+
+            if (stage_move_count + chain->len > stage_move_cap) {
+                size_t new_cap = stage_move_cap == 0 ? chain->len : stage_move_cap;
+                while (new_cap < stage_move_count + chain->len) new_cap *= 2;
+                stage_moves = ld_xrealloc(
+                    stage_moves, new_cap * sizeof(*stage_moves));
+                stage_move_cap = new_cap;
+            }
+            uint32_t staged_at = workspace_start + (uint32_t)stage_move_count;
+            for (size_t i = 0; i < chain->len; i++) {
+                uint32_t source = chain->v[i];
+                stage_moves[stage_move_count++] = (RelocationMove){
+                    .source = source,
+                    .destination = staged_at + (uint32_t)i,
+                };
+                source_seen[source] = 1;
+            }
+            items[batch_objects++] = (ForwardStageItem){
+                .object_index = candidate,
+                .staged_at = staged_at,
+            };
+            if (object->is_dir) batch_directories++;
+            else batch_files++;
+            candidate++;
+            u32vec_free(&local_root);
+        }
+
+        bool targets_release_with_batch = batch_objects != 0;
+        for (size_t item_index = 0;
+             item_index < batch_objects && targets_release_with_batch;
+             item_index++) {
+            const GrowthObject *object =
+                &objects->v[items[item_index].object_index];
+            uint64_t target_end64 =
+                (uint64_t)object->target + object->clusters - 1;
+            if (target_end64 > fs->max_cluster) {
+                targets_release_with_batch = false;
+                break;
+            }
+            for (uint32_t cluster = object->target;
+                 cluster <= (uint32_t)target_end64; cluster++) {
+                if (!fat_is_free(fs, cluster) && !source_seen[cluster]) {
+                    targets_release_with_batch = false;
+                    break;
+                }
+                if (cluster == UINT32_MAX) break;
+            }
+        }
+        free(source_seen);
+        if (!targets_release_with_batch) {
+            free(stage_moves);
+            free(items);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            return false;
+        }
+
+        detail_log(
+            "layout-forward-stage: %zu object%s / %zu cluster%s -> workspace "
+            "cluster %" PRIu32 "\n",
+            batch_objects, batch_objects == 1 ? "" : "s",
+            stage_move_count, stage_move_count == 1 ? "" : "s",
+            workspace_start);
+        fat_relocation_execute(
+            fs, &current_refs, journal_path, stage_moves, stage_move_count,
+            &g_io, detail_log);
+        stats->transactions++;
+        stats->clusters_copied += stage_move_count;
+        free(stage_moves);
+        filelist_free(&current_files);
+        dirreflist_free(&current_refs);
+
+        current_refs = (DirRefList){0};
+        current_files = scan_files(fs, &current_refs);
+        RelocationMove *place_moves = ld_xmalloc(
+            stage_move_count * sizeof(*place_moves));
+        size_t place_move_count = 0;
+        for (size_t item_index = 0; item_index < batch_objects; item_index++) {
+            GrowthObject *object = &objects->v[items[item_index].object_index];
+            const FileRecord *current_file = NULL;
+            U32Vec local_root = {0};
+            const U32Vec *chain = find_growth_object_chain(
+                fs, object, &current_files, &local_root, &current_file);
+            (void)current_file;
+            if (!chain_is_exact_run(chain, items[item_index].staged_at) ||
+                !cluster_range_is_free(fs, object->target, object->clusters)) {
+                u32vec_free(&local_root);
+                free(place_moves);
+                free(items);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("forward compaction batch could not reopen its released targets");
+            }
+            for (size_t i = 0; i < chain->len; i++) {
+                place_moves[place_move_count++] = (RelocationMove){
+                    .source = chain->v[i],
+                    .destination = object->target + (uint32_t)i,
+                };
+            }
+            u32vec_free(&local_root);
+        }
+
+        detail_log(
+            "layout-forward-place: %zu object%s / %zu cluster%s from workspace\n",
+            batch_objects, batch_objects == 1 ? "" : "s",
+            place_move_count, place_move_count == 1 ? "" : "s");
+        relocation_execute_moves(
+            fs, &current_refs, journal_path, place_moves, place_move_count);
+        stats->transactions++;
+        stats->clusters_copied += place_move_count;
+        stats->objects_moved += batch_objects;
+        stats->files_moved += batch_files;
+        stats->directories_moved += batch_directories;
+        next += batch_objects;
+        remaining -= batch_objects;
+        fprintf(stderr,
+                "%s forward layout batch: %zu object%s (%zu file%s, "
+                "%zu director%s), %zu cluster%s staged and placed in 2 journal "
+                "transactions; %zu object%s %s.\n",
+                layout_name, batch_objects, batch_objects == 1 ? "" : "s",
+                batch_files, batch_files == 1 ? "" : "s",
+                batch_directories, batch_directories == 1 ? "y" : "ies",
+                place_move_count, place_move_count == 1 ? "" : "s",
+                remaining, remaining == 1 ? "" : "s",
+                remaining == 1 ? "remains" : "remain");
+        free(place_moves);
+        free(items);
+        filelist_free(&current_files);
+        dirreflist_free(&current_refs);
+    }
+    return true;
+}
+
 static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                                         unsigned requested_percent,
                                         size_t batch_clusters) {
@@ -293,6 +549,8 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                                      " with a 10% post-file reserve");
     GrowthPreflight preflight = growth_layout_preflight(
         fs, &initial_files, requested_percent);
+    bool contiguous_zero_gap_compaction =
+        requested_percent == 0 && preflight.issue == GROWTH_PREFLIGHT_OK;
     size_t existing_reserve = preflight.reserve_clusters;
     bool canonical_verified = false;
     if (regular_files != 0 && preflight.issue == GROWTH_PREFLIGHT_OK) {
@@ -413,7 +671,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
     uint64_t terminal = terminal_free_clusters(fs);
     if (terminal < initial_largest) {
         growth_object_list_free(&objects);
-        ld_die("growth-defrag could not create a terminal workspace large enough for the largest object");
+        ld_die("layout rewrite could not create a terminal workspace large enough for the largest object");
     }
     unsigned applied_percent = requested_percent;
     size_t reserve_total = 0;
@@ -421,7 +679,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
     if (!plan_growth_layout(fs, &objects, applied_percent, workspace_start,
                             &reserve_total, &layout_end)) {
         growth_object_list_free(&objects);
-        ld_die("growth-defrag could not fit the requested growth layout below the staging workspace");
+        ld_die("layout rewrite could not fit the requested layout below the staging workspace");
     }
     stats.applied_percent = applied_percent;
     stats.reserve_clusters = reserve_total;
@@ -442,6 +700,22 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
     fprintf(stderr,
             "%s layout batching: up to %zu objects or %zu clusters per journal transaction.\n",
             layout_name, object_batch_limit, cluster_batch_limit);
+
+    if (contiguous_zero_gap_compaction) {
+        bool completed_forward = execute_forward_compaction(
+            fs, journal_path, &objects, workspace_start, initial_largest,
+            object_batch_limit, cluster_batch_limit, layout_name, &stats);
+        if (completed_forward) {
+            fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
+            fat32_sync(fs);
+            growth_object_list_free(&objects);
+            return stats;
+        }
+        fprintf(stderr,
+                "%s forward layout encountered a non-leftward dependency; "
+                "continuing with the general safe planner.\n",
+                layout_name);
+    }
 
     while (reverse != 0) {
         if (ld_stop_requested()) {
@@ -481,7 +755,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
                 growth_object_list_free(&objects);
-                ld_die("growth-defrag object changed size during offline operation");
+                ld_die("layout object changed size during offline operation");
             }
             if (chain_is_exact_run(chain, object->target)) {
                 reverse--;
@@ -524,7 +798,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 destination_seen[destination] = 1;
             }
             detail_log(
-                "growth-place: %s %s (%zu clusters) -> cluster %" PRIu32
+                "layout-place: %s %s (%zu clusters) -> cluster %" PRIu32
                 " with %zu reserved cluster%s after it\n",
                 object->is_dir ? "DIR" : "FILE", object->path,
                 object->clusters, object->target, object->reserve_after,
@@ -584,7 +858,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
             filelist_free(&current_files);
             dirreflist_free(&current_refs);
             growth_object_list_free(&objects);
-            ld_die("growth-defrag object changed size during offline operation");
+            ld_die("layout object changed size during offline operation");
         }
         U32Vec original_chain = {0};
         for (size_t i = 0; i < chain->len; i++) u32vec_push(&original_chain, chain->v[i]);
@@ -594,9 +868,9 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
             filelist_free(&current_files);
             dirreflist_free(&current_refs);
             growth_object_list_free(&objects);
-            ld_die("growth-defrag staging workspace is unexpectedly occupied");
+            ld_die("layout staging workspace is unexpectedly occupied");
         }
-        detail_log("growth-stage: %s %s (%zu clusters) -> workspace cluster %" PRIu32 "\n",
+        detail_log("layout-stage: %s %s (%zu clusters) -> workspace cluster %" PRIu32 "\n",
                    object->is_dir ? "DIR" : "FILE", object->path,
                    object->clusters, workspace_start);
         growth_move_chain(fs, &current_refs, chain, workspace_start,
@@ -631,7 +905,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
                 growth_object_list_free(&objects);
-                ld_die("growth-defrag target range exceeds the filesystem");
+                ld_die("layout target range exceeds the filesystem");
             }
             uint32_t target_end = (uint32_t)target_end64;
             U32Vec blocker_destinations = {0};
@@ -645,7 +919,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                     filelist_free(&current_files);
                     dirreflist_free(&current_refs);
                     growth_object_list_free(&objects);
-                    ld_die("growth-defrag staged source cluster was unexpectedly reused");
+                    ld_die("layout staged source cluster was unexpectedly reused");
                 }
                 u32vec_push(&blocker_destinations, candidate);
             }
@@ -662,7 +936,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
                 growth_object_list_free(&objects);
-                ld_die("growth-defrag could not allocate safe source slots for target blockers");
+                ld_die("layout rewrite could not allocate safe source slots for target blockers");
             }
 
             RelocationMove *blocker_moves = ld_xmalloc(blocker_count * sizeof(*blocker_moves));
@@ -678,7 +952,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 if (cluster == UINT32_MAX) break;
             }
             detail_log(
-                "growth-unblock: moved %zu blocking cluster%s out of target %" PRIu32
+                "layout-unblock: moved %zu blocking cluster%s out of target %" PRIu32
                 "-%" PRIu32 " using the staged object's released source slots\n",
                 blocker_count, blocker_count == 1 ? "" : "s",
                 object->target, target_end);
@@ -688,8 +962,9 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
             stats.transactions++;
             stats.clusters_copied += blocker_count;
             fprintf(stderr,
-                    "Growth layout cleared %zu blocking cluster%s from %s's target range.\n",
-                    blocker_count, blocker_count == 1 ? "" : "s", object->path);
+                    "%s layout cleared %zu blocking cluster%s from %s's target range.\n",
+                    layout_name, blocker_count,
+                    blocker_count == 1 ? "" : "s", object->path);
             free(blocker_moves);
             u32vec_free(&blocker_destinations);
 
@@ -708,7 +983,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
                 growth_object_list_free(&objects);
-                ld_die("growth-defrag staged object changed while clearing its target");
+                ld_die("layout staged object changed while clearing its target");
             }
             if (!cluster_range_is_free(fs, object->target, object->clusters)) {
                 u32vec_free(&original_chain);
@@ -716,12 +991,12 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
                 growth_object_list_free(&objects);
-                ld_die("growth-defrag target range remained occupied after blocker evacuation");
+                ld_die("layout target range remained occupied after blocker evacuation");
             }
         }
 
         detail_log(
-            "growth-place: %s %s -> cluster %" PRIu32
+            "layout-place: %s %s -> cluster %" PRIu32
             " with %zu reserved cluster%s after it\n",
             object->is_dir ? "DIR" : "FILE", object->path,
             object->target, object->reserve_after,
