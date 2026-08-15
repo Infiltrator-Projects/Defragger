@@ -73,6 +73,11 @@ PROGRAMS: dict[str, ProgramPath] = {
         "/usr/lib/linux-defragger/filesystems/ufs/linux-defragger-ufs-worker",
         "../../build/linux-defragger-ufs-worker"
     ),
+    "zfs-native": ProgramPath(
+        "zfs-native", "LINUX_DEFRAGGER_ZFS_WORKER",
+        "/usr/lib/linux-defragger/filesystems/zfs/linux-defragger-zfs-worker",
+        "../../build/linux-defragger-zfs-worker"
+    ),
     "mapper": ProgramPath(
         "mapper", "LINUX_DEFRAGGER_MAPPER", "/usr/lib/linux-defragger/allocation_mapper.py", "../allocation_mapper.py"
     ),
