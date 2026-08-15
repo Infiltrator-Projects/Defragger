@@ -177,12 +177,20 @@ def test_map_presenter_handles_domain_and_swap_maps() -> None:
         outside_bytes=0,
         free_bytes=6 * 4096,
         used_bytes=2 * 4096,
-        details={"active": True, "used_pages": 2},
+        details={"active": True, "page_size": 4096},
     )
     swap_view = present_allocation_map(swap, 0)
     assert swap_view.files_title == "Usage"
+    assert swap_view.files_value == "8.0 KB used · 2 pages"
     assert swap_view.fragmentation_value == "Not applicable"
-    assert "not exposed by the Linux kernel" in swap_view.caption
+    assert "aggregate usage only" in swap_view.caption
+    assert "2 pages" in swap_view.status
+    assert "physical occupied slot locations are unavailable" in swap_view.analysis_log
+
+    swap["used_bytes"] = 4096
+    swap["free_bytes"] = 7 * 4096
+    one_page = present_allocation_map(swap, 0)
+    assert one_page.files_value == "4.0 KB used · 1 page"
 
 
 def test_invalid_map_is_rejected_before_widget_state_changes() -> None:

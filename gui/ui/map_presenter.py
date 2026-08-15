@@ -154,8 +154,16 @@ def _domain_presentation(
     fragmentation_value: str
     if is_swap:
         files_title = "Usage"
-        used_pages = int(details.get("used_pages", 0))
-        files_value = f"{human_bytes(used_bytes)} used · {used_pages:,} pages"
+        swap_page_size = int(details.get("page_size") or data.get("unit_size") or 512)
+        if swap_page_size <= 0:
+            raise AllocationMapError("swap page size must be positive")
+        used_pages = (
+            (used_bytes + swap_page_size - 1) // swap_page_size
+            if used_bytes
+            else 0
+        )
+        page_word = "page" if used_pages == 1 else "pages"
+        files_value = f"{human_bytes(used_bytes)} used · {used_pages:,} {page_word}"
         fragmentation_value = "Not applicable"
     elif has_fragmentation:
         files_value = (
@@ -195,7 +203,11 @@ def _domain_presentation(
     units_per_cell = total_units / cell_count
 
     if is_swap and bool(details.get("active")):
-        caption = "Physical occupied swap-slot locations are not exposed by the Linux kernel"
+        caption = (
+            f"Active swap · {human_bytes(used_bytes)} used of "
+            f"{human_bytes(filesystem_bytes)} · aggregate usage only; "
+            "physical slot locations unavailable"
+        )
     elif is_swap:
         caption = (
             f"Inactive swap area · approximately {units_per_cell:,.1f} "
@@ -213,11 +225,16 @@ def _domain_presentation(
         )
 
     unknown = f" · {human_bytes(unknown_bytes)} location unknown" if unknown_bytes else ""
-    if is_swap:
-        state = "active" if bool(details.get("active")) else "inactive"
+    if is_swap and bool(details.get("active")):
         status = (
-            f"SWAP {state} · {human_bytes(used_bytes)} used · "
-            f"{human_bytes(free_bytes)} free · physical slot locations unavailable"
+            f"SWAP active · {human_bytes(used_bytes)} used of "
+            f"{human_bytes(filesystem_bytes)} · {used_pages:,} {page_word} · "
+            "aggregate usage only; physical slot locations unavailable"
+        )
+    elif is_swap:
+        status = (
+            f"SWAP inactive · {human_bytes(free_bytes)} usable free · "
+            "exact page map"
         )
     elif has_fragmentation:
         status = (
@@ -235,7 +252,18 @@ def _domain_presentation(
             f"{human_bytes(used_bytes)} allocated{unknown}"
         )
 
-    if has_fragmentation:
+    if is_swap and bool(details.get("active")):
+        analysis_log = (
+            f"Analysis complete: active SWAP uses {human_bytes(used_bytes)} "
+            f"across {used_pages:,} {page_word}. Aggregate usage is known; "
+            "physical occupied slot locations are unavailable."
+        )
+    elif is_swap:
+        analysis_log = (
+            "Analysis complete: inactive SWAP has no occupied pages; "
+            "the header, bad pages, free pages and outside tail are mapped exactly."
+        )
+    elif has_fragmentation:
         analysis_log = (
             f"Analysis complete: {_required_int(data, 'fragmented_files')} fragmented files, "
             f"{_required_int(data, 'fragmented_directories')} fragmented directories."
