@@ -106,6 +106,7 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         "hfsplus": {"hfsplus_native.h", "hfsplus_native.c", "hfsplus_worker.c"},
         "swap": {"swap_native.h", "swap_native.c", "swap_worker.c"},
         "ufs": {"ufs_native.h", "ufs_native.c", "ufs_worker.c"},
+        "zfs": {"zfs_native.h", "zfs_native.c", "zfs_worker.c"},
     }
     for filesystem, native_files in required_native.items():
         package = GUI / "filesystems" / filesystem
@@ -129,6 +130,11 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
     for forbidden in ("Reader", "_CANDIDATES", "_MAGICS", "aggregate_ranges", "data.find"):
         assert forbidden not in ufs_plugin
     assert 'resolve_program("ufs-native"' in ufs_plugin
+
+    zfs_plugin = (GUI / "filesystems" / "zfs" / "plugin.py").read_text()
+    for forbidden in ("Reader", "_UBER_MAGIC_LE", "_UBER_MAGIC_BE", "_WINDOW_SIZE", "aggregate_ranges", "data.find"):
+        assert forbidden not in zfs_plugin
+    assert 'resolve_program("zfs-native"' in zfs_plugin
 
     ntfs_plan = (GUI / "filesystems" / "ntfs" / "native" / "ntfs_plan.c").read_text()
     assert "fixed_primary" in ntfs_plan
@@ -157,6 +163,7 @@ def test_build_and_path_registry_install_native_workers() -> None:
         ("linux-defragger-hfsplus-worker", "hfsplus"),
         ("linux-defragger-swap-worker", "swap"),
         ("linux-defragger-ufs-worker", "ufs"),
+        ("linux-defragger-zfs-worker", "zfs"),
     ):
         assert worker in cmake
         install_pattern = re.compile(
