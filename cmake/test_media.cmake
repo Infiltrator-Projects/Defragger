@@ -80,4 +80,9 @@ if(BUILD_TESTING)
         COMMAND "${CMAKE_COMMAND}"
             -DLD_BINARY_DIR=${CMAKE_BINARY_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_test_media_install.cmake")
+    add_test(NAME linux-defragger-test-media-ufs-makefs
+        COMMAND /bin/sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ufs_makefs.sh"
+            "$<TARGET_FILE:linux-defragger-ufs-worker>")
+    set_tests_properties(linux-defragger-test-media-ufs-makefs
+        PROPERTIES SKIP_RETURN_CODE 77)
 endif()
