@@ -66,6 +66,11 @@ int ldtm_spec_creator_available(const LdtmFilesystemSpec *spec,
                                 char *detail, size_t detail_capacity);
 int ldtm_format_amiga_volume(const char *path, uint8_t dostype, const char *label);
 int ldtm_validate_amiga_volume(const char *path, uint8_t expected_dostype);
+int ldtm_populate_amiga_volume(const char *path, uint8_t dostype,
+                               const LdtmFragmentProfile *profile);
+int ldtm_verify_amiga_payload(const char *path, uint8_t dostype,
+                              const LdtmFragmentProfile *profile,
+                              char *detail, size_t detail_capacity);
 int ldtm_canonicalize_device(const char *input, char *output, size_t output_capacity);
 int ldtm_is_whole_block_device(const char *device);
 int ldtm_is_system_disk(const char *device);
