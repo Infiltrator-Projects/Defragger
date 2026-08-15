@@ -23,6 +23,11 @@ PROGRAMS: dict[str, ProgramPath] = {
         "/usr/lib/linux-defragger/filesystems/hfsplus/linux-defragger-hfsplus-worker",
         "../../build/linux-defragger-hfsplus-worker"
     ),
+    "hfs-native": ProgramPath(
+        "hfs-native", "LINUX_DEFRAGGER_HFS_ANALYSER",
+        "/usr/lib/linux-defragger/filesystems/hfs/hfs_analyser",
+        "../../build/hfs_analyser"
+    ),
     "affs-native": ProgramPath(
         "affs-native", "LINUX_DEFRAGGER_AFFS_WORKER",
         "/usr/lib/linux-defragger/filesystems/affs/linux-defragger-affs-worker",
