@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: UFS 107 final architecture gate
+
+on:
+  push:
+    branches: [c-first-ufs-107]
+    paths: [.github/workflows/ufs-107-final.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config python3 \
+            libext2fs-dev libsqlite3-dev libssl-dev
+      - name: Build exact branch with warnings as errors
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON -DBUILD_TESTING=ON
+          cmake --build build -j2
+      - name: Prove UFS native C and permanent architecture contract
+        env:
+          PYTHONPATH: ${{ github.workspace }}/gui
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          ctest --test-dir build --output-on-failure -R linux-defragger-ufs-native
+          python3 tests/test_architecture.py
+          DESTDIR="$PWD/stage" cmake --install build
+          test -x stage/usr/local/lib/linux-defragger/filesystems/ufs/linux-defragger-ufs-worker
+          grep -Fq 'resolve_program("ufs-native"' gui/filesystems/ufs/plugin.py
+          for forbidden in 'Reader' '_CANDIDATES' '_MAGICS' 'aggregate_ranges' 'data.find'; do
+            ! grep -Fq "$forbidden" gui/filesystems/ufs/plugin.py
+          done
