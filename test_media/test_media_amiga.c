@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#define _FILE_OFFSET_BITS 64
-#define _GNU_SOURCE
 #include "test_media.h"
 
 #include <errno.h>
