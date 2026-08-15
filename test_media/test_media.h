@@ -7,7 +7,7 @@
 
 #define LDTM_MIB UINT64_C(1048576)
 #define LDTM_GIB UINT64_C(1073741824)
-#define LDTM_SPEC_COUNT 18U
+#define LDTM_SPEC_COUNT 21U
 #define LDTM_STATE_ROOT "/var/tmp/linux-defragger-test-media"
 
 typedef enum {
@@ -21,7 +21,8 @@ typedef enum {
     LDTM_CREATOR_EXT4,
     LDTM_CREATOR_XFS,
     LDTM_CREATOR_BTRFS,
-    LDTM_CREATOR_AFFS,
+    LDTM_CREATOR_AMIGA_OFS,
+    LDTM_CREATOR_AMIGA_FFS,
     LDTM_CREATOR_HFS,
     LDTM_CREATOR_HFSPLUS,
     LDTM_CREATOR_MINIX,
@@ -64,6 +65,8 @@ const char *ldtm_creator_program(const LdtmFilesystemSpec *spec);
 int ldtm_program_available(const char *program);
 int ldtm_spec_creator_available(const LdtmFilesystemSpec *spec,
                                 char *detail, size_t detail_capacity);
+int ldtm_format_amiga_volume(const char *path, uint8_t dostype, const char *label);
+int ldtm_validate_amiga_volume(const char *path, uint8_t expected_dostype);
 int ldtm_canonicalize_device(const char *input, char *output, size_t output_capacity);
 int ldtm_is_whole_block_device(const char *device);
 int ldtm_is_system_disk(const char *device);
