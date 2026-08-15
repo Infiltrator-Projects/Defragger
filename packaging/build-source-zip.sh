@@ -24,11 +24,16 @@ esac
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-source-zip.XXXXXX")
 trap 'rm -rf "$STAGE"' EXIT HUP INT TERM
 ln -s "$ROOT" "$STAGE/$ARCHIVE_BASENAME"
+TEMP_OUTPUT="$STAGE/${ARCHIVE_BASENAME}.zip"
 
 (
     cd "$STAGE"
-    zip -X -q -9 -r "$OUTPUT" "$ARCHIVE_BASENAME" \
+    zip -X -q -9 -r "$TEMP_OUTPUT" "$ARCHIVE_BASENAME" \
         -x "$ARCHIVE_BASENAME/.git/*" \
+           "$ARCHIVE_BASENAME/.git" \
+           "$ARCHIVE_BASENAME/*/.git" \
+           "$ARCHIVE_BASENAME/*/*/.git" \
+           "$ARCHIVE_BASENAME/*/*/*/.git" \
            "$ARCHIVE_BASENAME/__pycache__/*" \
            "$ARCHIVE_BASENAME/*/__pycache__/*" \
            "$ARCHIVE_BASENAME/*/*/__pycache__/*" \
@@ -40,5 +45,6 @@ ln -s "$ROOT" "$STAGE/$ARCHIVE_BASENAME"
            "$ARCHIVE_BASENAME/release/*" \
            "$ARCHIVE_BASENAME/*.deb" "$ARCHIVE_BASENAME/*.run" "$ARCHIVE_BASENAME/*.zip"
 )
+mv -f -- "$TEMP_OUTPUT" "$OUTPUT"
 
 printf '%s\n' "$OUTPUT"

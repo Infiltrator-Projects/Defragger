@@ -215,12 +215,12 @@ def _domain_presentation(
         )
     elif outside_bytes:
         caption = (
-            f"Pixel map: {cell_count:,} cells · white tail is outside the "
+            f"Allocation grid: {cell_count:,} cells · white tail is outside the "
             "active filesystem boundary"
         )
     else:
         caption = (
-            f"Pixel map: {cell_count:,} cells · approximately "
+            f"Allocation grid: {cell_count:,} cells · approximately "
             f"{units_per_cell:,.1f} {unit_label} per cell"
         )
 
@@ -333,7 +333,7 @@ def _fat_presentation(
         ),
         unit_label="clusters",
         caption=(
-            f"Pixel map: {cell_count:,} cells · approximately "
+            f"Allocation grid: {cell_count:,} cells · approximately "
             f"{units_per_cell:,.1f} clusters per cell"
         ),
         status=(

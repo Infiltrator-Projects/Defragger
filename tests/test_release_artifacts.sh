@@ -15,9 +15,20 @@ sh -n "$ROOT/packaging/build-source-zip.sh"
 "$ROOT/packaging/build-local-run.sh" "$RUN" >/dev/null
 "$ROOT/packaging/build-source-zip.sh" "$SOURCE_ZIP" >/dev/null
 [ -f "$SOURCE_ZIP" ]
+printf '%s\n' stale >"$WORK/stale-entry.txt"
+(cd "$WORK" && zip -q "$SOURCE_ZIP" stale-entry.txt)
+"$ROOT/packaging/build-source-zip.sh" "$SOURCE_ZIP" >/dev/null
 unzip -Z1 "$SOURCE_ZIP" >"$WORK/source-files.txt"
+if grep -qx 'stale-entry.txt' "$WORK/source-files.txt"; then
+    printf '%s\n' 'Source archive rebuild retained a stale entry.' >&2
+    exit 1
+fi
 grep -qx "Defragger-${VERSION}/CMakeLists.txt" "$WORK/source-files.txt"
 grep -qx "Defragger-${VERSION}/packaging/build-source-zip.sh" "$WORK/source-files.txt"
+if grep -Eq '(^|/)\.git(/|$)' "$WORK/source-files.txt"; then
+    printf '%s\n' 'Source archive contains Git worktree metadata.' >&2
+    exit 1
+fi
 if grep -Eq '(^|/)linux-defragger-[^/]*-local-source\.zip$' "$WORK/source-files.txt"; then
     printf '%s\n' 'Source archive contains the obsolete local-source ZIP name.' >&2
     exit 1

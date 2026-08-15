@@ -37,7 +37,7 @@ if [ "${LD_INSTALLER_TEST_COMMAND:-0}" = 1 ]; then
             fi
             ;;
         sudo) shift 0; exec "$@" ;;
-        gcc|make) exit 0 ;;
+        gcc|make|makefs) exit 0 ;;
         apt-get)
             printf '%s\n' 'The isolated installer test unexpectedly invoked APT.' >&2
             exit 1
@@ -59,7 +59,7 @@ RUN=$1
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-installer-test.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
-for command_name in dpkg-query dpkg cmake sudo gcc make apt-get; do
+for command_name in dpkg-query dpkg cmake sudo gcc make makefs apt-get; do
     ln -s "$ROOT/tests/test_local_installer_end_to_end.sh" \
         "$WORK/$command_name"
 done

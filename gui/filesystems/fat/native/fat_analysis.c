@@ -193,12 +193,23 @@ static void json_print_string(const char *value) {
     putchar('"');
 }
 
-static void mark_map_chain(uint8_t *flags, const U32Vec *chain, bool directory,
-                           bool fragmented) {
-    uint8_t value = MAP_CLUSTER_USED;
-    if (directory) value |= MAP_CLUSTER_DIRECTORY;
-    if (fragmented) value |= MAP_CLUSTER_FRAGMENTED;
-    for (size_t i = 0; i < chain->len; i++) flags[chain->v[i]] |= value;
+/* Blue/purple already identifies the first physical extent of every object.
+   Red identifies the displaced extents after a chain discontinuity.  Marking
+   every cluster of a fragmented file red made a large file look as though its
+   entire allocation were physically fragmented, which was both misleading and
+   visually overwhelmed small FAT maps. */
+static void mark_map_chain(uint8_t *flags, const U32Vec *chain, bool directory) {
+    uint8_t base = MAP_CLUSTER_USED;
+    bool displaced_extent = false;
+    if (directory) base |= MAP_CLUSTER_DIRECTORY;
+    for (size_t i = 0; i < chain->len; i++) {
+        if (i != 0 && chain->v[i] != chain->v[i - 1] + 1) {
+            displaced_extent = true;
+        }
+        uint8_t value = base;
+        if (displaced_extent) value |= MAP_CLUSTER_FRAGMENTED;
+        flags[chain->v[i]] |= value;
+    }
 }
 
 static bool growth_layout_satisfied_for_map(Fat32 *fs, const FileList *files,
@@ -249,7 +260,7 @@ void fat_analysis_print_map_json(Fat32 *fs, const FileList *files, size_t reques
 
     U32Vec root_chain = filesystem_root_chain(fs);
     size_t root_fragments = filesystem_root_fragments(fs);
-    mark_map_chain(flags, &root_chain, true, root_fragments > 1);
+    mark_map_chain(flags, &root_chain, true);
     if (root_fragments > worst_fragments) {
         worst_fragments = root_fragments;
         worst_path = "<root directory>";
@@ -264,7 +275,7 @@ void fat_analysis_print_map_json(Fat32 *fs, const FileList *files, size_t reques
             regular++;
             if (f->fragments > 1) fragmented_files++;
         }
-        mark_map_chain(flags, &f->chain, f->is_dir, f->fragments > 1);
+        mark_map_chain(flags, &f->chain, f->is_dir);
         if (f->fragments > worst_fragments) {
             worst_fragments = f->fragments;
             worst_path = f->path;
@@ -353,13 +364,13 @@ static LiveMapCell *build_live_map_cells(Fat32 *fs, const FileList *files, size_
     }
     U32Vec root_chain = filesystem_root_chain(fs);
     size_t root_fragments = filesystem_root_fragments(fs);
-    mark_map_chain(flags, &root_chain, true, root_fragments > 1);
+    mark_map_chain(flags, &root_chain, true);
     if (root_fragments > 1) fd++;
     for (size_t i = 0; i < files->len; i++) {
         const FileRecord *f = &files->v[i];
         if (f->is_dir) { if (f->fragments > 1) fd++; }
         else { if (f->fragments > 1) ff++; }
-        mark_map_chain(flags, &f->chain, f->is_dir, f->fragments > 1);
+        mark_map_chain(flags, &f->chain, f->is_dir);
     }
     LiveMapCell *out = ld_xcalloc(cells, sizeof(*out));
     for (size_t i = 0; i < cells; i++) {
@@ -493,5 +504,4 @@ void fat_analysis_verify_layout_policy(Fat32 *fs, unsigned reserve_percent) {
     filelist_free(&files);
     dirreflist_free(&refs);
 }
-
 

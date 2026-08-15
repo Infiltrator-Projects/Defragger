@@ -71,7 +71,8 @@ static char *default_journal_path(const char *device_path) {
 
 static bool cluster_is_movable_allocation(const Fat32 *fs, uint32_t cluster) {
     uint32_t value = fat_value(fs, cluster);
-    return value != 0 && value != fat_bad_value(fs);
+    return value != 0 && value != fat_bad_value(fs) &&
+           !(value >= fat_reserved_min(fs) && value < fat_eoc_min(fs));
 }
 
 static uint64_t count_free_clusters(const Fat32 *fs) {
@@ -95,85 +96,7 @@ static uint64_t terminal_free_clusters(const Fat32 *fs) {
 typedef struct {
     size_t clusters_moved;
     size_t transactions;
-    size_t whole_objects;
-    size_t whole_clusters;
-    size_t staged_objects;
-    size_t staged_clusters;
-    size_t extent_transactions;
-    size_t extent_clusters;
-    size_t singleton_transactions;
 } PackingStats;
-
-typedef struct {
-    bool is_dir;
-    const U32Vec *chain;
-    const char *path;
-    uint32_t destination;
-} PlannedWholeObject;
-
-static uint32_t chain_min_cluster(const U32Vec *chain) {
-    uint32_t minimum = UINT32_MAX;
-    for (size_t i = 0; i < chain->len; i++) {
-        if (chain->v[i] < minimum) minimum = chain->v[i];
-    }
-    return minimum;
-}
-
-static bool chain_contains_cluster(const U32Vec *chain, uint32_t cluster) {
-    for (size_t i = 0; i < chain->len; i++) {
-        if (chain->v[i] == cluster) return true;
-    }
-    return false;
-}
-
-static bool chain_lies_above_destination(const U32Vec *chain, uint32_t destination) {
-    if (chain->len == 0 || chain->len > UINT32_MAX) return false;
-    uint64_t end64 = (uint64_t)destination + chain->len - 1;
-    if (end64 > UINT32_MAX) return false;
-    uint32_t end = (uint32_t)end64;
-    for (size_t i = 0; i < chain->len; i++) {
-        if (chain->v[i] <= end) return false;
-    }
-    return true;
-}
-
-static bool first_free_run_below_high_water(const Fat32 *fs, uint32_t *start_out,
-                                             size_t *length_out, uint32_t *highest_out) {
-    uint32_t highest = 1;
-    for (uint32_t c = fs->max_cluster; c >= 2; c--) {
-        if (cluster_is_movable_allocation(fs, c)) {
-            highest = c;
-            break;
-        }
-        if (c == 2) break;
-    }
-    *highest_out = highest;
-    if (highest < 2) return false;
-
-    for (uint32_t c = 2; c <= highest; c++) {
-        if (!fat_is_free(fs, c)) continue;
-        uint32_t start = c;
-        size_t length = 0;
-        while (c <= highest && fat_is_free(fs, c)) {
-            length++;
-            if (c == highest) break;
-            c++;
-        }
-        *start_out = start;
-        *length_out = length;
-        return true;
-    }
-    return false;
-}
-
-static bool better_whole_object(uint32_t minimum, size_t clusters, const char *path,
-                                bool have_best, uint32_t best_minimum,
-                                size_t best_clusters, const char *best_path) {
-    if (!have_best) return true;
-    if (minimum != best_minimum) return minimum < best_minimum;
-    if (clusters != best_clusters) return clusters > best_clusters;
-    return strcmp(path, best_path) < 0;
-}
 
 static void relocation_execute_moves(Fat32 *fs, const DirRefList *dir_refs,
                                   const char *journal_path,
@@ -184,286 +107,77 @@ static void relocation_execute_moves(Fat32 *fs, const DirRefList *dir_refs,
     fat_analysis_emit_live_map_update(fs);
 }
 
-static PackingStats growth_prepare_volume(Fat32 *fs, const char *journal_path,
-                                   size_t max_clusters, size_t batch_clusters,
-                                   size_t max_transactions,
-                                   bool allow_extent_fallback) {
+/* Phase 2 needs one reusable free run as large as the largest object.  Older
+   releases obtained it by stably chasing every low hole to the end of the
+   volume.  On a FAT16 volume with thousands of one-cluster files that turned a
+   bounded staging requirement into thousands of one-object transactions and
+   almost two full copies of the live data.  Evacuating only the terminal
+   workspace is sufficient: the canonical planner retains the original object
+   order and phase 2 performs the actual layout rewrite. */
+static PackingStats prepare_terminal_workspace(Fat32 *fs, const char *journal_path,
+                                                uint32_t workspace_start,
+                                                size_t workspace_clusters,
+                                                size_t batch_clusters) {
     PackingStats stats = {0};
     if (batch_clusters == 0) batch_clusters = 4096;
+    if (workspace_clusters == 0 || workspace_start < 2 ||
+        (uint64_t)workspace_start + workspace_clusters - 1 > fs->max_cluster) {
+        ld_die("invalid terminal staging workspace");
+    }
 
     for (;;) {
         if (ld_stop_requested()) {
-            fprintf(stderr, "interrupt requested; stopping packing between transactions\n");
+            fprintf(stderr,
+                    "interrupt requested; stopping workspace preparation between transactions\n");
             break;
         }
-        if (max_transactions != 0 && stats.transactions >= max_transactions) break;
-        size_t remaining = max_clusters == 0 ? SIZE_MAX : max_clusters - stats.clusters_moved;
-        if (remaining == 0) break;
 
         DirRefList dir_refs = {0};
         FileList files = scan_files(fs, &dir_refs);
-        U32Vec root_chain = filesystem_root_chain(fs);
-
-        uint32_t hole_start = 0;
-        size_t hole_length = 0;
-        uint32_t highest = 1;
-        if (!first_free_run_below_high_water(fs, &hole_start, &hole_length, &highest)) {
-            u32vec_free(&root_chain);
-            filelist_free(&files);
-            dirreflist_free(&dir_refs);
-            break;
-        }
-
-        bool *selected_files = ld_xcalloc(files.len, 1);
-        bool selected_root = false;
-        RelocationMove *moves = NULL;
+        size_t move_cap = batch_clusters < workspace_clusters
+                              ? batch_clusters : workspace_clusters;
+        RelocationMove *moves = ld_xmalloc(move_cap * sizeof(*moves));
         size_t move_count = 0;
-        size_t move_cap = 0;
-        PlannedWholeObject *planned = NULL;
-        size_t planned_count = 0;
-        size_t planned_cap = 0;
-        uint32_t destination = hole_start;
-        size_t hole_remaining = hole_length;
-
-        for (;;) {
-            bool have_best = false;
-            bool best_is_root = false;
-            size_t best_index = 0;
-            const U32Vec *best_chain = NULL;
-            const char *best_path = NULL;
-            bool best_is_dir = false;
-            uint32_t best_minimum = 0;
-            size_t available = remaining - move_count;
-            if (available == 0 || hole_remaining == 0) break;
-
-            size_t transaction_available = move_count == 0 && batch_clusters < available
-                                           ? available : batch_clusters > move_count
-                                           ? batch_clusters - move_count : 0;
-            if (move_count != 0 && transaction_available == 0) break;
-
-            if (!selected_root && root_chain.len != 0 && root_chain.len <= hole_remaining &&
-                root_chain.len <= available &&
-                (move_count == 0 || root_chain.len <= transaction_available) &&
-                chain_lies_above_destination(&root_chain, destination)) {
-                uint32_t minimum = chain_min_cluster(&root_chain);
-                if (better_whole_object(minimum, root_chain.len, "<root directory>",
-                                        have_best, best_minimum,
-                                        best_chain == NULL ? 0 : best_chain->len, best_path)) {
-                    have_best = true;
-                    best_is_root = true;
-                    best_chain = &root_chain;
-                    best_path = "<root directory>";
-                    best_is_dir = true;
-                    best_minimum = minimum;
-                }
+        uint32_t destination = 2;
+        for (uint32_t source = workspace_start;
+             source <= fs->max_cluster && move_count < move_cap; source++) {
+            if (!cluster_is_movable_allocation(fs, source)) continue;
+            while (destination < workspace_start && !fat_is_free(fs, destination)) {
+                destination++;
             }
-
-            for (size_t i = 0; i < files.len; i++) {
-                const FileRecord *candidate = &files.v[i];
-                if (selected_files[i] || candidate->chain.len == 0 ||
-                    candidate->chain.len > hole_remaining || candidate->chain.len > available ||
-                    (move_count != 0 && candidate->chain.len > transaction_available) ||
-                    !chain_lies_above_destination(&candidate->chain, destination)) {
-                    continue;
-                }
-                uint32_t minimum = chain_min_cluster(&candidate->chain);
-                if (better_whole_object(minimum, candidate->chain.len, candidate->path,
-                                        have_best, best_minimum,
-                                        best_chain == NULL ? 0 : best_chain->len, best_path)) {
-                    have_best = true;
-                    best_is_root = false;
-                    best_index = i;
-                    best_chain = &candidate->chain;
-                    best_path = candidate->path;
-                    best_is_dir = candidate->is_dir;
-                    best_minimum = minimum;
-                }
+            if (destination >= workspace_start) {
+                free(moves);
+                filelist_free(&files);
+                dirreflist_free(&dir_refs);
+                ld_die("terminal workspace evacuation ran out of free clusters below the workspace");
             }
-
-            if (!have_best) break;
-            if (move_count + best_chain->len > move_cap) {
-                size_t new_cap = move_cap == 0 ? best_chain->len : move_cap;
-                while (new_cap < move_count + best_chain->len) new_cap *= 2;
-                moves = ld_xrealloc(moves, new_cap * sizeof(*moves));
-                move_cap = new_cap;
-            }
-            for (size_t i = 0; i < best_chain->len; i++) {
-                moves[move_count++] = (RelocationMove){
-                    .source = best_chain->v[i],
-                    .destination = destination + (uint32_t)i,
-                };
-            }
-            if (planned_count == planned_cap) {
-                size_t new_cap = planned_cap == 0 ? 16 : planned_cap * 2;
-                planned = ld_xrealloc(planned, new_cap * sizeof(*planned));
-                planned_cap = new_cap;
-            }
-            planned[planned_count++] = (PlannedWholeObject){
-                .is_dir = best_is_dir,
-                .chain = best_chain,
-                .path = best_path,
+            moves[move_count++] = (RelocationMove){
+                .source = source,
                 .destination = destination,
             };
-            if (best_is_root) selected_root = true;
-            else selected_files[best_index] = true;
-            destination += (uint32_t)best_chain->len;
-            hole_remaining -= best_chain->len;
+            destination++;
         }
 
-        if (move_count != 0) {
-            for (size_t i = 0; i < planned_count; i++) {
-                detail_log("pack-whole: %s %s (%zu clusters) -> cluster %" PRIu32 "\n",
-                           planned[i].is_dir ? "DIR" : "FILE", planned[i].path,
-                           planned[i].chain->len, planned[i].destination);
-            }
-            relocation_execute_moves(fs, &dir_refs, journal_path, moves, move_count);
-            stats.transactions++;
-            stats.clusters_moved += move_count;
-            stats.whole_clusters += move_count;
-            stats.whole_objects += planned_count;
-            fprintf(stderr,
-                    "pack: moved %zu whole object%s / %zu clusters (total %zu); "
-                    "terminal free run now %" PRIu64 " clusters\n",
-                    planned_count, planned_count == 1 ? "" : "s", move_count,
-                    stats.clusters_moved, terminal_free_clusters(fs));
-            free(planned);
+        if (move_count == 0) {
             free(moves);
-            free(selected_files);
-            u32vec_free(&root_chain);
-            filelist_free(&files);
-            dirreflist_free(&dir_refs);
-            continue;
-        }
-
-        free(planned);
-        free(moves);
-        free(selected_files);
-
-        /* A small hole immediately before a contiguous object cannot accept that
-           whole object directly because the source and destination overlap. Move
-           the object temporarily into the terminal free run. On the next pass its
-           old allocation has merged with the hole, allowing whole-chain packing. */
-        uint32_t source = hole_start + (uint32_t)hole_length;
-        uint64_t terminal_count64 = terminal_free_clusters(fs);
-        const U32Vec *stage_chain = NULL;
-        const char *stage_path = NULL;
-        bool stage_is_dir = false;
-        if (source <= highest && cluster_is_movable_allocation(fs, source)) {
-            if (root_chain.len != 0 && chain_contains_cluster(&root_chain, source)) {
-                stage_chain = &root_chain;
-                stage_path = "<root directory>";
-                stage_is_dir = true;
-            } else {
-                for (size_t i = 0; i < files.len; i++) {
-                    const FileRecord *candidate = &files.v[i];
-                    if (candidate->chain.len != 0 &&
-                        chain_contains_cluster(&candidate->chain, source)) {
-                        stage_chain = &candidate->chain;
-                        stage_path = candidate->path;
-                        stage_is_dir = candidate->is_dir;
-                        break;
-                    }
-                }
-            }
-        }
-        if (stage_chain != NULL && stage_chain->len <= terminal_count64 &&
-            stage_chain->len <= remaining) {
-            uint32_t terminal_start = fs->max_cluster - (uint32_t)terminal_count64 + 1;
-            moves = ld_xmalloc(stage_chain->len * sizeof(*moves));
-            for (size_t i = 0; i < stage_chain->len; i++) {
-                moves[i] = (RelocationMove){
-                    .source = stage_chain->v[i],
-                    .destination = terminal_start + (uint32_t)i,
-                };
-            }
-            detail_log(
-                    "pack-stage: %s %s (%zu clusters) -> terminal cluster %" PRIu32
-                    " to expand the low free run\n",
-                    stage_is_dir ? "DIR" : "FILE", stage_path, stage_chain->len,
-                    terminal_start);
-            relocation_execute_moves(fs, &dir_refs, journal_path, moves, stage_chain->len);
-            stats.transactions++;
-            stats.clusters_moved += stage_chain->len;
-            stats.staged_objects++;
-            stats.staged_clusters += stage_chain->len;
-            fprintf(stderr,
-                    "pack: staged one whole object / %zu clusters (total %zu); "
-                    "terminal free run now %" PRIu64 " clusters\n",
-                    stage_chain->len, stats.clusters_moved, terminal_free_clusters(fs));
-            free(moves);
-            u32vec_free(&root_chain);
-            filelist_free(&files);
-            dirreflist_free(&dir_refs);
-            continue;
-        }
-
-        if (!allow_extent_fallback) {
-            fprintf(stderr,
-                    "pack: stopped at free run cluster %" PRIu32
-                    "+%zu because no complete file or directory can be moved or "
-                    "staged there without fragmenting it\n",
-                    hole_start, hole_length);
-            u32vec_free(&root_chain);
             filelist_free(&files);
             dirreflist_free(&dir_refs);
             break;
         }
 
-        /* No complete chain fits and no contiguous object can be staged. Shift
-           the next physical allocated extent downward without reversing or
-           scattering its cluster order. */
-        while (source <= highest && !cluster_is_movable_allocation(fs, source)) source++;
-        if (source > highest) {
-            fprintf(stderr,
-                    "pack: cannot fill the free run at cluster %" PRIu32
-                    " because no movable allocation follows it\n", hole_start);
-            u32vec_free(&root_chain);
-            filelist_free(&files);
-            dirreflist_free(&dir_refs);
-            break;
-        }
-        size_t source_run = 0;
-        uint32_t c = source;
-        while (c <= highest && cluster_is_movable_allocation(fs, c)) {
-            source_run++;
-            if (c == highest) break;
-            c++;
-        }
-        size_t count = hole_length;
-        if (count > source_run) count = source_run;
-        if (count > batch_clusters) count = batch_clusters;
-        if (count > remaining) count = remaining;
-        if (count == 0) {
-            u32vec_free(&root_chain);
-            filelist_free(&files);
-            dirreflist_free(&dir_refs);
-            break;
-        }
-
-        moves = ld_xmalloc(count * sizeof(*moves));
-        for (size_t i = 0; i < count; i++) {
-            moves[i] = (RelocationMove){
-                .source = source + (uint32_t)i,
-                .destination = hole_start + (uint32_t)i,
-            };
-        }
-        detail_log(
-                "pack-extent: shifted %zu contiguous cluster%s from %" PRIu32
-                " to %" PRIu32 " without reordering\n",
-                count, count == 1 ? "" : "s", source, hole_start);
-        relocation_execute_moves(fs, &dir_refs, journal_path, moves, count);
+        detail_log("workspace-evacuate: %zu cluster%s from terminal range %" PRIu32
+                   "-%" PRIu32 "\n",
+                   move_count, move_count == 1 ? "" : "s", workspace_start,
+                   fs->max_cluster);
+        relocation_execute_moves(fs, &dir_refs, journal_path, moves, move_count);
         stats.transactions++;
-        stats.clusters_moved += count;
-        stats.extent_clusters += count;
-        stats.extent_transactions++;
-        if (count == 1) stats.singleton_transactions++;
+        stats.clusters_moved += move_count;
         fprintf(stderr,
-                "pack: moved ordered extent of %zu cluster%s (total %zu); "
-                "terminal free run now %" PRIu64 " clusters\n",
-                count, count == 1 ? "" : "s", stats.clusters_moved,
+                "workspace: evacuated %zu cluster%s (total %zu); terminal free run "
+                "now %" PRIu64 " clusters\n",
+                move_count, move_count == 1 ? "" : "s", stats.clusters_moved,
                 terminal_free_clusters(fs));
         free(moves);
-        u32vec_free(&root_chain);
         filelist_free(&files);
         dirreflist_free(&dir_refs);
     }
@@ -651,13 +365,13 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
         dirreflist_free(&initial_refs);
         ld_die("layout rewrite does not have enough free clusters for the requested reserve plus a safe staging workspace");
     }
-    growth_object_list_free(&initial_objects);
     filelist_free(&initial_files);
     dirreflist_free(&initial_refs);
 
+    uint32_t workspace_start = fs->max_cluster - (uint32_t)initial_largest + 1;
     fprintf(stderr,
-            "%s phase 1: consolidating allocation into a safe terminal workspace.\n",
-            layout_name);
+            "%s phase 1: creating a %zu-cluster terminal staging workspace.\n",
+            layout_name, initial_largest);
     size_t preparation_batch_clusters = batch_clusters;
     if (preparation_batch_clusters == 4096) {
         preparation_batch_clusters = automatic_growth_batch_clusters(fs);
@@ -665,8 +379,9 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
     fprintf(stderr,
             "%s preparation batching: up to %zu clusters per journal transaction.\n",
             layout_name, preparation_batch_clusters);
-    PackingStats packing_stats = growth_prepare_volume(
-        fs, journal_path, 0, preparation_batch_clusters, 0, true);
+    PackingStats packing_stats = prepare_terminal_workspace(
+        fs, journal_path, workspace_start, initial_largest,
+        preparation_batch_clusters);
     stats.packing_clusters = packing_stats.clusters_moved;
     stats.packing_transactions = packing_stats.transactions;
     if (ld_stop_requested()) {
@@ -679,7 +394,13 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 packing_stats.transactions,
                 packing_stats.transactions == 1 ? "" : "s");
         fprintf(stderr,
-                "The growth-space layout was not started, so no expansion gaps were applied.\n");
+                "The canonical layout phase was not started; the filesystem is valid "
+                "but %s is incomplete.\n",
+                requested_percent == 0 ? "Defragment" : "Growth Defrag");
+        if (requested_percent != 0) {
+            fprintf(stderr, "No growth-space reserve was applied.\n");
+        }
+        growth_object_list_free(&initial_objects);
         return stats;
     }
     fprintf(stderr,
@@ -687,30 +408,19 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
             layout_name, packing_stats.clusters_moved, packing_stats.clusters_moved == 1 ? "" : "s",
             packing_stats.transactions, packing_stats.transactions == 1 ? "" : "s");
 
-    DirRefList refs = {0};
-    FileList files = scan_files(fs, &refs);
-    size_t largest = 0;
-    regular_clusters = 0;
-    regular_files = 0;
-    directories = 0;
-    GrowthObjectList objects = build_growth_objects(
-        fs, &files, &largest, &regular_clusters, &regular_files, &directories);
+    GrowthObjectList objects = initial_objects;
+    initial_objects = (GrowthObjectList){0};
     uint64_t terminal = terminal_free_clusters(fs);
-    if (terminal < largest) {
+    if (terminal < initial_largest) {
         growth_object_list_free(&objects);
-        filelist_free(&files);
-        dirreflist_free(&refs);
         ld_die("growth-defrag could not create a terminal workspace large enough for the largest object");
     }
-    uint32_t workspace_start = fs->max_cluster - (uint32_t)largest + 1;
     unsigned applied_percent = requested_percent;
     size_t reserve_total = 0;
     uint32_t layout_end = 1;
     if (!plan_growth_layout(fs, &objects, applied_percent, workspace_start,
                             &reserve_total, &layout_end)) {
         growth_object_list_free(&objects);
-        filelist_free(&files);
-        dirreflist_free(&refs);
         ld_die("growth-defrag could not fit the requested growth layout below the staging workspace");
     }
     stats.applied_percent = applied_percent;
@@ -725,8 +435,6 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
     fprintf(stderr,
             "Final planned layout ends at cluster %" PRIu32 "; reusable staging workspace begins at cluster %" PRIu32 ".\n",
             layout_end, workspace_start);
-    filelist_free(&files);
-    dirreflist_free(&refs);
 
     size_t reverse = objects.len;
     size_t object_batch_limit = automatic_growth_batch_objects();
@@ -1027,8 +735,8 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
         else stats.files_moved++;
         reverse--;
         fprintf(stderr,
-                "Growth layout staged one %s in %u journal transactions; %zu object%s remain.\n",
-                object->is_dir ? "directory" : "file",
+                "%s layout staged one %s in %u journal transactions; %zu object%s remain.\n",
+                layout_name, object->is_dir ? "directory" : "file",
                 target_blockers_evacuated ? 3U : 2U,
                 reverse, reverse == 1 ? "" : "s");
         u32vec_free(&original_chain);
@@ -1326,6 +1034,9 @@ int main(int argc, char **argv) {
             printf("Defragment layout I/O:    %zu clusters in %zu completed transaction%s\n",
                    packed.clusters_copied + packed.packing_clusters,
                    transactions, transactions == 1 ? "" : "s");
+            printf("Defragment canonical layout: Incomplete; phase 2 %s\n",
+                   packed.layout_started ? "stopped between batches" : "was not started");
+            printf("Defragment verification:  Not run; a zero-fragment scan does not prove zero-gap packing\n");
         } else {
             result_status = "completed";
             size_t transactions = packed.transactions + packed.packing_transactions;
@@ -1364,6 +1075,7 @@ int main(int argc, char **argv) {
                    growth.packing_transactions == 1 ? "" : "s");
             printf("Growth Defrag reserve applied: No\n");
             printf("Growth Defrag layout phase:    Not started\n");
+            printf("Growth Defrag verification:    Not run; canonical 10%% layout is incomplete\n");
         } else if (growth.interrupted) {
             result_status = "stopped";
             printf("Growth Defrag status:          Stopped safely during layout\n");
@@ -1379,6 +1091,7 @@ int main(int argc, char **argv) {
                    growth.clusters_copied, growth.transactions,
                    growth.transactions == 1 ? "" : "s");
             printf("Growth Defrag reserve applied: Partial; the requested layout is incomplete\n");
+            printf("Growth Defrag verification:    Not run; canonical 10%% layout is incomplete\n");
         } else {
             result_status = "completed";
             printf("Growth Defrag status:          Completed\n");
@@ -1396,6 +1109,9 @@ int main(int argc, char **argv) {
         }
         files = scan_files(&fs, NULL);
         fat_analysis_print(&fs, &files);
+        if (!growth.interrupted) {
+            fat_analysis_verify_layout_policy(&fs, growth_percent);
+        }
 
     }
     if (mutating) print_io_statistics();

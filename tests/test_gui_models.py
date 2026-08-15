@@ -16,6 +16,7 @@ from backends.base import CAP_DEFRAG, CAP_GROWTH_DEFRAG, CAP_RECOVER
 from core.protocol import EngineEventParser, OperationResult
 from ui.backend_catalog import BackendCatalog
 from ui.devices import Volume
+from ui.map_geometry import allocation_grid, block_bounds, source_cell_at
 from ui.map_presenter import AllocationMapError, present_allocation_map
 from ui.operation_status import successful_completion
 
@@ -139,8 +140,34 @@ def test_map_presenter_validates_and_normalises_fat_map() -> None:
     assert view.free_value == "20.0 KB (62.5%)"
     assert view.fragmentation_value == "1 files · 0 dirs"
     assert view.unit_label == "clusters"
+    assert view.caption.startswith("Allocation grid:")
     assert view.cells[0]["outside"] == 0
     assert view.analysis_log.endswith("1 fragmented files, 0 fragmented directories.")
+
+
+def test_small_filesystems_use_square_allocation_blocks_not_row_stripes() -> None:
+    geometry = allocation_grid(2044, 1190, 260)
+    assert geometry.uses_one_block_per_cell
+    assert geometry.columns == 97
+    assert geometry.rows == 22
+
+    first = block_bounds(geometry, 0)
+    last_in_first_row = block_bounds(geometry, geometry.columns - 1)
+    first_in_second_row = block_bounds(geometry, geometry.columns)
+    assert first[2] - first[0] in (12, 13)
+    assert first[3] - first[1] in (11, 12)
+    assert last_in_first_row[1] == first[1]
+    assert first_in_second_row[1] > first[1]
+    assert source_cell_at(geometry, first[0], first[1]) == 0
+    assert source_cell_at(
+        geometry,
+        first_in_second_row[0],
+        first_in_second_row[1],
+    ) == geometry.columns
+
+    sampled = allocation_grid(300, 10, 10)
+    assert not sampled.uses_one_block_per_cell
+    assert source_cell_at(sampled, 9, 9) == 297
 
 
 def test_map_presenter_handles_domain_and_swap_maps() -> None:
@@ -272,6 +299,7 @@ def test_about_dialog_matches_the_standard_project_identity() -> None:
 def main() -> None:
     test_catalog_is_validated_immutable_and_instance_owned()
     test_map_presenter_validates_and_normalises_fat_map()
+    test_small_filesystems_use_square_allocation_blocks_not_row_stripes()
     test_map_presenter_handles_domain_and_swap_maps()
     test_invalid_map_is_rejected_before_widget_state_changes()
     test_result_protocol_replaces_worker_output_text_matching()

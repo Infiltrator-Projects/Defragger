@@ -106,6 +106,9 @@ fi
 # FAT12 and FAT16 use the same raw canonical planner.
 for kind in fat12 fat16; do
     python3 "$ROOT/tests/make_fat12_16_image.py" "$kind" "$WORK/$kind-defrag.img" fragmented >/dev/null
+    "$FAT_WORKER" map "$WORK/$kind-defrag.img" --cells 100000 \
+        >"$WORK/$kind-fragment-map.json"
+    python3 "$ROOT/tests/verify_fragment_map.py" "$WORK/$kind-fragment-map.json"
     "$FAT_WORKER" defrag "$WORK/$kind-defrag.img" \
         --write --confirm "$WORK/$kind-defrag.img" --journal "$WORK/$kind-defrag.journal" \
         >"$WORK/$kind-defrag.log" 2>&1
@@ -117,6 +120,18 @@ for kind in fat12 fat16; do
         --growth-percent 10 >"$WORK/$kind-growth.log" 2>&1
     python3 "$ROOT/tests/verify_growth_fat12_16.py" "$kind" "$WORK/$kind-growth.img"
 done
+
+# FAT16: preparation must evacuate only the largest object's terminal workspace,
+# not chase thousands of low one-cluster holes through separate transactions.
+python3 "$ROOT/tests/make_fat16_workspace_image.py" "$WORK/fat16-workspace.img" >/dev/null
+"$FAT_WORKER" defrag "$WORK/fat16-workspace.img" \
+    --write --confirm "$WORK/fat16-workspace.img" \
+    --journal "$WORK/fat16-workspace.journal" \
+    >"$WORK/fat16-workspace.log" 2>&1
+grep -q 'preparation complete: 64 clusters moved in 1 transaction' \
+    "$WORK/fat16-workspace.log" || \
+    fail "FAT16 preparation did not remain bounded to one 64-cluster transaction"
+python3 "$ROOT/tests/verify_fat16_workspace_image.py" "$WORK/fat16-workspace.img"
 
 # Write confirmation is mandatory and the classic HFS helper is read-only.
 if "$FAT_WORKER" defrag "$WORK/gapped.img" --write --confirm wrong \

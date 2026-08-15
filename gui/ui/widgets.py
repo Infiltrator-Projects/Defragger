@@ -7,12 +7,14 @@ from typing import Any
 
 from gi.repository import Gtk
 
+from .map_geometry import MapGeometry, allocation_grid, block_bounds, source_cell_at
+
 MIN_MAP_CELLS = 256
 MAX_MAP_CELLS = 1048576
 
 
 class DiskMap(Gtk.DrawingArea):
-    """Render allocation data as a dense dynamically sized pixel map."""
+    """Render allocation data as a dense dynamically sized block grid."""
 
     COLORS = {
         "free": (0.92, 0.94, 0.96),
@@ -30,7 +32,7 @@ class DiskMap(Gtk.DrawingArea):
         super().__init__()
         self.cells: list[dict[str, int]] = []
         self.unit_label = "clusters"
-        self._layout: tuple[int, int, int] | None = None
+        self._layout: MapGeometry | None = None
         self.set_size_request(640, 260)
         self.set_has_tooltip(True)
         self.connect("draw", self._draw)
@@ -101,21 +103,30 @@ class DiskMap(Gtk.DrawingArea):
             )
             cr.show_text(message)
             return False
-        columns, rows = width, height
-        total_pixels = columns * rows
-        self._layout = (columns, rows, total_pixels)
         cell_count = len(self.cells)
-        last_source = -1
-        colour = self.COLORS["background"]
-        for pixel_index in range(total_pixels):
-            source_index = min(cell_count - 1, (pixel_index * cell_count) // total_pixels)
-            if source_index != last_source:
-                colour = self._cell_colour(self.cells[source_index])
-                last_source = source_index
-            row, column = divmod(pixel_index, columns)
-            cr.set_source_rgb(*colour)
-            cr.rectangle(float(column), float(row), 1.0, 1.0)
-            cr.fill()
+        self._layout = allocation_grid(cell_count, width, height)
+        if self._layout.uses_one_block_per_cell:
+            for source_index, cell in enumerate(self.cells):
+                x0, y0, x1, y1 = block_bounds(self._layout, source_index)
+                cr.set_source_rgb(*self._cell_colour(cell))
+                cr.rectangle(float(x0), float(y0), float(x1 - x0), float(y1 - y0))
+                cr.fill()
+        else:
+            total_pixels = width * height
+            last_source = -1
+            colour = self.COLORS["background"]
+            for pixel_index in range(total_pixels):
+                source_index = min(
+                    cell_count - 1,
+                    (pixel_index * cell_count) // total_pixels,
+                )
+                if source_index != last_source:
+                    colour = self._cell_colour(self.cells[source_index])
+                    last_source = source_index
+                row, column = divmod(pixel_index, width)
+                cr.set_source_rgb(*colour)
+                cr.rectangle(float(column), float(row), 1.0, 1.0)
+                cr.fill()
         return False
 
     def _query_tooltip(
@@ -128,11 +139,9 @@ class DiskMap(Gtk.DrawingArea):
     ) -> bool:
         if not self.cells or self._layout is None:
             return False
-        columns, rows, total_pixels = self._layout
-        if x < 0 or y < 0 or x >= columns or y >= rows:
+        index = source_cell_at(self._layout, x, y)
+        if index is None:
             return False
-        pixel_index = int(y) * columns + int(x)
-        index = min(len(self.cells) - 1, (pixel_index * len(self.cells)) // total_pixels)
         cell = self.cells[index]
         tooltip.set_text(
             f"{self.unit_label.capitalize()} {cell['start']:,}–{cell['end']:,}\n"

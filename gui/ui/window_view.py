@@ -421,7 +421,7 @@ class WindowView:
         ):
             card.set_value("—")
         self.map_caption.set_text(
-            "Pixel map · every available drawable pixel increases map detail."
+            "Allocation grid · detail increases with the available drawing area."
         )
 
     def apply_map_presentation(self, presentation: MapPresentation) -> None:
