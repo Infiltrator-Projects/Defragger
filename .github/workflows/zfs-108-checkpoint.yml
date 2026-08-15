@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: ZFS 108 native checkpoint
+
+on:
+  push:
+    branches: [c-first-zfs-108]
+    paths: [.github/workflows/zfs-108-checkpoint.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config libext2fs-dev libsqlite3-dev libssl-dev
+      - name: Prove 107 baseline
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON -DBUILD_TESTING=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure -E '^linux-defragger-tests$'
+      - name: Compile and test ZFS native parser and worker
+        run: |
+          cc -std=c11 -O2 -DNDEBUG -D_FORTIFY_SOURCE=3 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/zfs/native \
+            gui/filesystems/zfs/native/zfs_native.c tests/test_zfs_native.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build/linux-defragger-zfs-native-test-direct
+          ./build/linux-defragger-zfs-native-test-direct
+          cc -std=c11 -O2 -DNDEBUG -D_FORTIFY_SOURCE=3 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/zfs/native -Ibuild/generated \
+            gui/filesystems/zfs/native/zfs_native.c gui/filesystems/zfs/native/zfs_worker.c \
+            src/core/ld_io.c src/core/ld_runtime.c \
+            -o build/linux-defragger-zfs-worker-direct
+          test "$(build/linux-defragger-zfs-worker-direct --version)" = \
+            "linux-defragger-zfs-worker $(tr -d '\r\n' < VERSION)"
+          truncate -s $((10*1024*1024)) build/zfs-worker.img
+          printf '\x00\x00\x00\x00\x00\xba\xb1\x0c' | dd of=build/zfs-worker.img bs=1 seek=$((10*1024*1024-4096)) conv=notrunc status=none
+          build/linux-defragger-zfs-worker-direct identify build/zfs-worker.img | grep -q '^{"filesystem":"zfs","byte_order":"big"}$'
+          output=$(build/linux-defragger-zfs-worker-direct map build/zfs-worker.img --cells 8)
+          printf '%s\n' "$output" | grep -q '"filesystem":"zfs","map_accuracy":"summary","unit_size":512'
+          printf '%s\n' "$output" | grep -q '"uberblock_magic_offset":10481664,"byte_order":"big"'
