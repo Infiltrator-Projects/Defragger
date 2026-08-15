@@ -69,9 +69,28 @@ class VolumeCoordinator:
         )
 
     def select(self, index: int) -> VolumeSelection:
-        """Select a volume and return its cached allocation map, if any."""
+        """Select a volume, revalidate its identity, and return a safe cache hit."""
 
         self.store.select(index)
+        selected = self.current
+        if selected is not None and not selected.image:
+            try:
+                fresh = next(
+                    (
+                        volume
+                        for volume in self._discover(self.catalog)
+                        if volume.path == selected.path
+                    ),
+                    None,
+                )
+            except Exception:
+                # Discovery failure must never make an old map look current.
+                self.store.invalidate(selected.path)
+            else:
+                if fresh is None:
+                    self.store.invalidate(selected.path)
+                else:
+                    self.store.replace(fresh)
         return VolumeSelection(self.current, self.store.cached_map())
 
     def open_image(self, filename: str) -> Volume:
