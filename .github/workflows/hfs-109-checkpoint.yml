@@ -1,0 +1,367 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Classic HFS 109 native-map checkpoint
+
+on:
+  push:
+    branches: [c-first-hfs-109]
+    paths: [.github/workflows/hfs-109-checkpoint.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: c-first-hfs-109
+      - name: Extend the existing HFS analyser in place
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('gui/filesystems/hfs/native/analyser.c')
+          s = p.read_text()
+
+          old = '''    uint32_t allocation_block_size;
+              uint16_t allocation_start_block;
+              uint16_t total_allocation_blocks;
+              uint32_t header_files;
+              uint32_t header_directories;
+          '''
+          new = '''    uint32_t allocation_block_size;
+              uint16_t allocation_start_block;
+              uint16_t total_allocation_blocks;
+              uint16_t bitmap_start_block;
+              uint16_t header_free_blocks;
+              uint32_t header_files;
+              uint32_t header_directories;
+          '''
+          if s.count(old) != 1:
+              raise SystemExit(f'HFS volume-field anchor count {s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          old = '''    volume->total_allocation_blocks = be16(mdb + 18U);
+              volume->allocation_block_size = be32(mdb + 20U);
+              volume->allocation_start_block = be16(mdb + 28U);
+              volume->header_files = be32(mdb + 84U);
+              volume->header_directories = be32(mdb + 88U);
+          '''
+          new = '''    volume->bitmap_start_block = be16(mdb + 14U);
+              volume->total_allocation_blocks = be16(mdb + 18U);
+              volume->allocation_block_size = be32(mdb + 20U);
+              volume->allocation_start_block = be16(mdb + 28U);
+              volume->header_free_blocks = be16(mdb + 34U);
+              volume->header_files = be32(mdb + 84U);
+              volume->header_directories = be32(mdb + 88U);
+          '''
+          if s.count(old) != 1:
+              raise SystemExit(f'HFS MDB-field anchor count {s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          old = '''    if (!volume->extents_file.extent_count || !volume->catalog_file.extent_count ||
+                  volume->extents_file.size_bytes < HFS_LOGICAL_BLOCK_SIZE ||
+                  volume->catalog_file.size_bytes < HFS_LOGICAL_BLOCK_SIZE)
+                  return -1;
+              return 0;
+          }
+          '''
+          new = '''    /* The allocation bitmap is independently useful even when the deeper
+               * Extents/Catalog B-trees are damaged or unsupported.  scan-json remains
+               * strict; the exact map command deliberately preserves the old GUI's
+               * allocation-map fallback behaviour. */
+              return 0;
+          }
+          '''
+          if s.count(old) != 1:
+              raise SystemExit(f'HFS shallow-MDB anchor count {s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          old_main = '''int main(int argc, char **argv)
+          {
+              if (argc != 3 || strcmp(argv[1], "scan-json") != 0) {
+                  fprintf(stderr, "usage: hfs-analyser scan-json DEVICE\\n");
+                  return 2;
+              }
+              return scan_json(argv[2]);
+          }
+          '''
+          new_main = r'''static int hfs_open_volume(const char *device, hfs_volume *volume)
+          {
+              memset(volume, 0, sizeof(*volume));
+              volume->fd = open(device, O_RDONLY | O_CLOEXEC);
+              if (volume->fd < 0)
+                  return -1;
+              if (parse_mdb(volume) != 0) {
+                  close(volume->fd);
+                  volume->fd = -1;
+                  return -1;
+              }
+              return 0;
+          }
+
+          static void hfs_close_volume(hfs_volume *volume)
+          {
+              free(volume->overflow);
+              volume->overflow = NULL;
+              volume->overflow_count = 0U;
+              volume->overflow_capacity = 0U;
+              if (volume->fd >= 0) {
+                  close(volume->fd);
+                  volume->fd = -1;
+              }
+          }
+
+          static int allocation_bitmap_read(const hfs_volume *volume,
+                                            uint8_t **bitmap_out, size_t *length_out)
+          {
+              size_t length = ((size_t)volume->total_allocation_blocks + 7U) / 8U;
+              uint8_t *bitmap;
+              uint64_t offset;
+
+              if (!length)
+                  return -1;
+              bitmap = (uint8_t *)malloc(length);
+              if (!bitmap)
+                  return -1;
+              offset = (uint64_t)volume->bitmap_start_block * HFS_LOGICAL_BLOCK_SIZE;
+              if (read_exact(volume->fd, offset, bitmap, length) != 0) {
+                  free(bitmap);
+                  return -1;
+              }
+              *bitmap_out = bitmap;
+              *length_out = length;
+              return 0;
+          }
+
+          static int allocation_block_used(const uint8_t *bitmap, uint16_t block)
+          {
+              uint8_t mask = (uint8_t)(0x80U >> (block & 7U));
+              return (bitmap[block >> 3U] & mask) != 0U;
+          }
+
+          static uint64_t fragmented_in_range(const uint8_t *fragmented,
+                                              uint64_t start, uint64_t end)
+          {
+              uint64_t count = 0U;
+              uint64_t block;
+              for (block = start; block < end; ++block)
+                  if (fragmented[block] != 0U)
+                      ++count;
+              return count;
+          }
+
+          static int identify_json(const char *device)
+          {
+              hfs_volume volume;
+              if (hfs_open_volume(device, &volume) != 0) {
+                  fprintf(stderr, "hfs-analyser: invalid or unsupported classic HFS MDB\n");
+                  return 1;
+              }
+              printf("{\"filesystem\":\"hfs\",\"block_size\":%" PRIu32
+                     ",\"total_blocks\":%u}\n",
+                     volume.allocation_block_size,
+                     (unsigned int)volume.total_allocation_blocks);
+              hfs_close_volume(&volume);
+              return 0;
+          }
+
+          static int parse_cells(const char *text, uint64_t *cells)
+          {
+              unsigned long long value;
+              char *end = NULL;
+              if (!text || !*text)
+                  return -1;
+              errno = 0;
+              value = strtoull(text, &end, 10);
+              if (errno || end == text || *end != '\0' || value == 0ULL)
+                  return -1;
+              *cells = (uint64_t)value;
+              return 0;
+          }
+
+          static int map_json(const char *device, uint64_t requested_cells)
+          {
+              hfs_volume volume;
+              hfs_scan_result result;
+              uint8_t *bitmap = NULL;
+              size_t bitmap_length = 0U;
+              uint8_t *fragmented = NULL;
+              uint64_t total_units;
+              uint64_t cell_count;
+              uint64_t free_total = 0U;
+              uint64_t used_total = 0U;
+              int deep_ok = 0;
+              size_t i;
+              int rc = 1;
+
+              memset(&result, 0, sizeof(result));
+              if (hfs_open_volume(device, &volume) != 0) {
+                  fprintf(stderr, "hfs-analyser: invalid or unsupported classic HFS MDB\n");
+                  return 1;
+              }
+              if (allocation_bitmap_read(&volume, &bitmap, &bitmap_length) != 0) {
+                  fprintf(stderr, "hfs-analyser: cannot read HFS allocation bitmap\n");
+                  goto done;
+              }
+              (void)bitmap_length;
+
+              total_units = volume.total_allocation_blocks;
+              cell_count = requested_cells < total_units ? requested_cells : total_units;
+              if (!cell_count)
+                  cell_count = 1U;
+
+              if (scan_extents_overflow(&volume) == 0 &&
+                  scan_catalog(&volume, &result) == 0) {
+                  deep_ok = 1;
+              } else {
+                  free(result.fragmented_extents);
+                  memset(&result, 0, sizeof(result));
+                  result.files = volume.header_files;
+                  result.directories = volume.header_directories;
+              }
+
+              fragmented = (uint8_t *)calloc((size_t)total_units, 1U);
+              if (!fragmented) {
+                  fprintf(stderr, "hfs-analyser: out of memory\n");
+                  goto done;
+              }
+              if (deep_ok) {
+                  for (i = 0U; i < result.fragmented_extent_count; ++i) {
+                      uint64_t start = result.fragmented_extents[i].start;
+                      uint64_t end = start + result.fragmented_extents[i].count;
+                      uint64_t block;
+                      if (end > total_units)
+                          end = total_units;
+                      for (block = start; block < end; ++block)
+                          fragmented[block] = 1U;
+                  }
+              }
+
+              printf("{\"schema\":1,\"backend\":\"read-only-domain\","
+                     "\"filesystem\":\"hfs\",\"map_accuracy\":\"exact\","
+                     "\"unit_size\":%" PRIu32 ",\"total_units\":%" PRIu64
+                     ",\"cell_count\":%" PRIu64 ",\"cells\":[",
+                     volume.allocation_block_size, total_units, cell_count);
+
+              for (uint64_t cell = 0U; cell < cell_count; ++cell) {
+                  uint64_t start = (cell * total_units) / cell_count;
+                  uint64_t end = ((cell + 1U) * total_units) / cell_count;
+                  uint64_t used = 0U;
+                  uint64_t block;
+                  uint64_t free_count;
+                  uint64_t frag_count;
+                  for (block = start; block < end; ++block)
+                      if (allocation_block_used(bitmap, (uint16_t)block))
+                          ++used;
+                  free_count = (end - start) - used;
+                  frag_count = fragmented_in_range(fragmented, start, end);
+                  free_total += free_count;
+                  used_total += used;
+                  if (cell)
+                      putchar(',');
+                  printf("{\"start\":%" PRIu64 ",\"end\":%" PRIu64
+                         ",\"free\":%" PRIu64 ",\"used\":%" PRIu64
+                         ",\"unknown\":0,\"bad\":0,\"fragmented\":%" PRIu64
+                         ",\"directory\":0}",
+                         start, end - 1U, free_count, used, frag_count);
+              }
+
+              printf("],\"total_bytes\":%" PRIu64 ",\"free_bytes\":%" PRIu64
+                     ",\"used_bytes\":%" PRIu64 ",\"unknown_bytes\":0,"
+                     "\"regular_files\":%" PRIu32 ",\"directories\":%" PRIu32
+                     ",\"fragmented_files\":%" PRIu32
+                     ",\"fragmented_directories\":0,\"details\":{"
+                     "\"header_free_blocks\":%u,\"file_count\":%" PRIu32
+                     ",\"folder_count\":%" PRIu32
+                     ",\"fragmentation_available\":%s}}\n",
+                     total_units * (uint64_t)volume.allocation_block_size,
+                     free_total * (uint64_t)volume.allocation_block_size,
+                     used_total * (uint64_t)volume.allocation_block_size,
+                     result.files, result.directories, result.fragmented_files,
+                     (unsigned int)volume.header_free_blocks,
+                     volume.header_files, volume.header_directories,
+                     deep_ok ? "true" : "false");
+              rc = 0;
+
+          done:
+              free(fragmented);
+              free(bitmap);
+              free(result.fragmented_extents);
+              hfs_close_volume(&volume);
+              return rc;
+          }
+
+          int main(int argc, char **argv)
+          {
+              if (argc == 3 && strcmp(argv[1], "scan-json") == 0)
+                  return scan_json(argv[2]);
+              if (argc == 3 && strcmp(argv[1], "identify") == 0)
+                  return identify_json(argv[2]);
+              if (argc == 5 && strcmp(argv[1], "map") == 0 &&
+                  strcmp(argv[3], "--cells") == 0) {
+                  uint64_t cells = 0U;
+                  if (parse_cells(argv[4], &cells) != 0) {
+                      fprintf(stderr, "hfs-analyser: invalid cell count\n");
+                      return 2;
+                  }
+                  return map_json(argv[2], cells);
+              }
+              fprintf(stderr,
+                      "usage: hfs-analyser identify DEVICE | scan-json DEVICE | "
+                      "map DEVICE --cells COUNT\n");
+              return 2;
+          }
+          '''
+          if s.count(old_main) != 1:
+              raise SystemExit(f'HFS main anchor count {s.count(old_main)}')
+          s = s.replace(old_main, new_main, 1)
+          p.write_text(s)
+          PY
+          git diff --check -- gui/filesystems/hfs/native/analyser.c
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config libext2fs-dev libsqlite3-dev libssl-dev
+      - name: Build exact project with warnings as errors
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON -DBUILD_TESTING=ON
+          cmake --build build -j2
+          test -x build/hfs_analyser
+      - name: Exercise exact MSB-first HFS allocation map
+        run: |
+          img=build/hfs-map.img
+          truncate -s 16384 "$img"
+          printf '\x42\x44' | dd of="$img" bs=1 seek=1024 conv=notrunc status=none
+          printf '\x00\x03' | dd of="$img" bs=1 seek=$((1024+14)) conv=notrunc status=none
+          printf '\x00\x10' | dd of="$img" bs=1 seek=$((1024+18)) conv=notrunc status=none
+          printf '\x00\x00\x02\x00' | dd of="$img" bs=1 seek=$((1024+20)) conv=notrunc status=none
+          printf '\x00\x04' | dd of="$img" bs=1 seek=$((1024+28)) conv=notrunc status=none
+          printf '\x00\x0b' | dd of="$img" bs=1 seek=$((1024+34)) conv=notrunc status=none
+          printf '\x00\x00\x00\x02' | dd of="$img" bs=1 seek=$((1024+84)) conv=notrunc status=none
+          printf '\x00\x00\x00\x01' | dd of="$img" bs=1 seek=$((1024+88)) conv=notrunc status=none
+          printf '\xb1\x01' | dd of="$img" bs=1 seek=$((3*512)) conv=notrunc status=none
+          build/hfs_analyser identify "$img" | grep -q '^{"filesystem":"hfs","block_size":512,"total_blocks":16}$'
+          output=$(build/hfs_analyser map "$img" --cells 4)
+          printf '%s\n' "$output" | grep -q '"filesystem":"hfs","map_accuracy":"exact","unit_size":512,"total_units":16,"cell_count":4'
+          printf '%s\n' "$output" | grep -q '"start":0,"end":3,"free":1,"used":3,"unknown":0'
+          printf '%s\n' "$output" | grep -q '"start":4,"end":7,"free":3,"used":1,"unknown":0'
+          printf '%s\n' "$output" | grep -q '"start":8,"end":11,"free":4,"used":0,"unknown":0'
+          printf '%s\n' "$output" | grep -q '"start":12,"end":15,"free":3,"used":1,"unknown":0'
+          printf '%s\n' "$output" | grep -q '"total_bytes":8192,"free_bytes":5632,"used_bytes":2560,"unknown_bytes":0'
+          printf '%s\n' "$output" | grep -q '"header_free_blocks":11'
+          printf '\x00\x00' | dd of="$img" bs=1 seek=1024 conv=notrunc status=none
+          if build/hfs_analyser identify "$img"; then
+            echo 'corrupted HFS signature was accepted' >&2
+            exit 1
+          fi
+      - name: Commit only the tested analyser change
+        run: |
+          test -z "$(git status --porcelain --untracked-files=no | grep -v '^ M gui/filesystems/hfs/native/analyser.c$' || true)"
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -- gui/filesystems/hfs/native/analyser.c
+          git diff --cached --check
+          git commit -m 'Move Classic HFS allocation mapping into native C'
+          git push origin HEAD:c-first-hfs-109
