@@ -43,13 +43,6 @@ jobs:
               raise SystemExit('legacy media harness test line missing')
           runner.write_text(text.replace(legacy_test, '', 1))
 
-          workflow = Path('.github/workflows/c-first-easy.yml')
-          text = workflow.read_text()
-          accidental = '              image.seek if False else None\n'
-          if accidental in text:
-              text = text.replace(accidental, '', 1)
-          workflow.write_text(text)
-
           readme = Path('README.md')
           text = readme.read_text()
           start = text.find('## Physical-media field-test harness\n')
