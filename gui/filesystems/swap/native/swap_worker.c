@@ -166,23 +166,26 @@ static void print_map_json(const LdSwapSummary *summary,
     const bool active = current && runtime->active;
     const char *accuracy = current && !active ? "exact" : "summary";
     const uint64_t bad_bytes = (uint64_t)summary->bad_page_count * summary->page_size;
+    const uint64_t reserved_bytes =
+        current ? (uint64_t)summary->page_size + bad_bytes : 0U;
     uint64_t free_bytes = 0U;
     uint64_t used_bytes = 0U;
     uint64_t unknown_bytes = summary->filesystem_bytes;
     if (current && !active) {
         free_bytes = summary->usable_pages * summary->page_size;
-        unknown_bytes = (uint64_t)summary->page_size + bad_bytes;
+        unknown_bytes = 0U;
     } else if (active) {
         free_bytes = runtime->total_bytes - runtime->used_bytes;
         used_bytes = runtime->used_bytes;
+        unknown_bytes = summary->usable_pages * summary->page_size;
     }
 
     (void)printf("{\"schema\":1,\"backend\":\"read-only-domain\","
                  "\"filesystem\":\"swap\",\"map_accuracy\":\"%s\","
                  "\"unit_size\":%u,\"total_units\":%llu,\"cell_count\":%llu,"
                  "\"total_bytes\":%llu,\"free_bytes\":%llu,\"used_bytes\":%llu,"
-                 "\"unknown_bytes\":%llu,\"filesystem_bytes\":%llu,"
-                 "\"outside_bytes\":%llu,\"cells\":[",
+                 "\"unknown_bytes\":%llu,\"reserved_bytes\":%llu,"
+                 "\"filesystem_bytes\":%llu,\"outside_bytes\":%llu,\"cells\":[",
                  accuracy, (unsigned int)summary->page_size,
                  (unsigned long long)total_units,
                  (unsigned long long)cell_count,
@@ -190,6 +193,7 @@ static void print_map_json(const LdSwapSummary *summary,
                  (unsigned long long)free_bytes,
                  (unsigned long long)used_bytes,
                  (unsigned long long)unknown_bytes,
+                 (unsigned long long)reserved_bytes,
                  (unsigned long long)summary->filesystem_bytes,
                  (unsigned long long)summary->outside_bytes);
 
@@ -205,12 +209,14 @@ static void print_map_json(const LdSwapSummary *summary,
             outside = cell_overlap(start, end, summary->filesystem_pages, total_units);
             bad = bad_pages_in_cell(summary, start, end);
             const uint64_t header = start == 0U ? 1U : 0U;
+            const uint64_t metadata = bad + header;
             const uint64_t inside = length - outside;
+            bad = metadata;
             if (active) {
-                unknown = inside - bad;
+                unknown = inside - metadata;
             } else {
-                free = inside - bad - header;
-                unknown = header;
+                free = inside - metadata;
+                unknown = 0U;
             }
         } else {
             outside = cell_overlap(start, end, summary->filesystem_pages, total_units);
