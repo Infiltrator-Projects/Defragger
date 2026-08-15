@@ -12,12 +12,14 @@ target_include_directories(linux-defragger-test-media-core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/test_media"
     "${LD_GENERATED_DIR}")
 target_include_directories(linux-defragger-test-media-core PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/affs/native")
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/affs/native"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/ufs/native")
 target_compile_options(linux-defragger-test-media-core PRIVATE ${LD_WARNING_FLAGS})
 target_compile_definitions(linux-defragger-test-media-core PRIVATE
     _FILE_OFFSET_BITS=64 _GNU_SOURCE)
 target_link_libraries(linux-defragger-test-media-core PUBLIC OpenSSL::Crypto)
-target_link_libraries(linux-defragger-test-media-core PRIVATE linux-defragger-affs-native)
+target_link_libraries(linux-defragger-test-media-core PRIVATE
+    linux-defragger-affs-native linux-defragger-ufs-native)
 
 add_executable(linux-defragger-test-media
     test_media/test_media_main.c
