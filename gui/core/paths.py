@@ -68,6 +68,11 @@ PROGRAMS: dict[str, ProgramPath] = {
         "/usr/lib/linux-defragger/filesystems/swap/linux-defragger-swap-worker",
         "../../build/linux-defragger-swap-worker"
     ),
+    "ufs-native": ProgramPath(
+        "ufs-native", "LINUX_DEFRAGGER_UFS_WORKER",
+        "/usr/lib/linux-defragger/filesystems/ufs/linux-defragger-ufs-worker",
+        "../../build/linux-defragger-ufs-worker"
+    ),
     "mapper": ProgramPath(
         "mapper", "LINUX_DEFRAGGER_MAPPER", "/usr/lib/linux-defragger/allocation_mapper.py", "../allocation_mapper.py"
     ),
