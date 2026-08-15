@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "test_media.h"
+#include "affs_native.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -14,6 +15,21 @@
         return 1; \
     } \
 } while (0)
+
+static int production_parser_accepts(const char *path, uint8_t dostype, int expect_ffs) {
+    AffsVolume volume;
+    char *error = NULL;
+    int result = 1;
+    if (affs_scan(path, false, &volume, &error) == 0) {
+        if (volume.dostype == dostype && (volume.ffs ? 1 : 0) == expect_ffs &&
+            volume.bitmap_blocks.n > 25U && volume.bitmap_ext_blocks.n > 0U) {
+            result = 0;
+        }
+        affs_close(&volume);
+    }
+    free(error);
+    return result;
+}
 
 static int test_amiga_formatters(void) {
     char path[] = "/tmp/linux-defragger-amiga-media.XXXXXX";
@@ -30,13 +46,15 @@ static int test_amiga_formatters(void) {
     }
     if (ldtm_format_amiga_volume(path, 0U, "LD_OFS") != 0 ||
         ldtm_validate_amiga_volume(path, 0U) != 0 ||
-        ldtm_validate_amiga_volume(path, 1U) == 0) {
+        ldtm_validate_amiga_volume(path, 1U) == 0 ||
+        production_parser_accepts(path, 0U, 0) != 0) {
         (void)unlink(path);
         return 1;
     }
     if (ldtm_format_amiga_volume(path, 1U, "LD_FFS") != 0 ||
         ldtm_validate_amiga_volume(path, 1U) != 0 ||
-        ldtm_validate_amiga_volume(path, 0U) == 0) {
+        ldtm_validate_amiga_volume(path, 0U) == 0 ||
+        production_parser_accepts(path, 1U, 1) != 0) {
         (void)unlink(path);
         return 1;
     }
