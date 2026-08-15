@@ -260,6 +260,32 @@ def test_version_and_registry_are_dynamic() -> None:
     assert len(launcher_lines) < 20
 
 
+def test_test_media_companion_is_all_c() -> None:
+    source_dir = ROOT / "test_media"
+    assert source_dir.is_dir()
+    required = {
+        "test_media.h",
+        "test_media_core.c",
+        "test_media_worker.c",
+        "test_media_main.c",
+        "test_media_gui.c",
+    }
+    assert required.issubset({path.name for path in source_dir.iterdir() if path.is_file()})
+    assert not list(source_dir.glob("*.py"))
+    assert not (ROOT / "tools" / "linux-defragger-media-harness.py").exists()
+    assert not (ROOT / "tools" / "linux-defragger-testdata.py").exists()
+    assert not (ROOT / "tests" / "test_media_harness.py").exists()
+
+    cmake = _cmake_source()
+    assert "add_executable(linux-defragger-test-media" in cmake
+    assert "install(TARGETS linux-defragger-test-media RUNTIME DESTINATION bin)" in cmake
+    assert "linux-defragger-media-harness" not in cmake
+    assert "linux-defragger-testdata" not in cmake
+
+    desktop = (ROOT / "packaging" / "io.github.linuxdefragger.TestMedia.desktop").read_text()
+    assert "Exec=linux-defragger-test-media" in desktop
+
+
 def main() -> None:
     test_top_level_cmake_owns_c_only_project_declaration()
     test_plugin_discovery_and_native_worker_contracts()
@@ -268,6 +294,7 @@ def main() -> None:
     test_build_and_path_registry_install_native_workers()
     test_infiltratr_common_integration()
     test_core_remains_filesystem_neutral()
+    test_test_media_companion_is_all_c()
     test_version_and_registry_are_dynamic()
     print("current C-first single-plugin architecture tests passed")
 

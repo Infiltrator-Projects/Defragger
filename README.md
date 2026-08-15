@@ -40,21 +40,17 @@ The production architecture test rejects known external filesystem mutation/repa
 
 The source repository contains **no vendored third-party source tree**. Required libraries are supplied by the host distribution at build/runtime rather than copied into Linux Defragger. The project itself is licensed `GPL-3.0-or-later` and first-party source files carry SPDX identifiers.
 
-## Physical-media field-test harness
+## Linux Defragger Test Media
 
-The installed `linux-defragger-media-harness` utility can destructively prepare a dedicated removable test disk with GPT slots for every filesystem backend. Where the host has a genuine creator and writable mount path, it formats the partition and uses `linux-defragger-testdata` to leave deterministic fragmented data behind. Normal populated filesystems retain about 200 MiB of target-file payload; FAT12 uses a deliberately smaller profile; Swap contains no files; unsupported creators such as APFS are reported as skipped rather than faked.
+The package includes **Linux Defragger Test Media**, a separate all-C GTK application for building and verifying sacrificial filesystem test disks. It is not a window inside Linux Defragger and it does not use the Python GUI or the former Python field-test harness. Launch **Linux Defragger Test Media** from the desktop application menu; the executable is `linux-defragger-test-media`.
 
-The harness rejects partitions instead of whole disks, refuses the system/boot disk, rejects undersized targets, and requires an explicit override for a disk not reported as removable/USB/MMC. `prepare` also requires typing the exact `DESTROY /dev/...` token after displaying the device model, serial, size, mount state and full partition plan.
+The GUI lists physical disks with model, serial, size and transport, marks the system/boot disk as protected, and only enables destructive preparation for a sufficiently large removable, USB or MMC field-media target. Before changing a disk it shows the exact selected device in a destructive confirmation dialog, and the privileged C worker repeats the whole-disk, system-disk, read-only, size and transport checks after privilege elevation.
 
-```bash
-sudo linux-defragger-media-harness plan /dev/mmcblk0
-sudo linux-defragger-media-harness prepare /dev/mmcblk0
-# Test Analyse / Defragment in the GUI while the test partitions are unmounted.
-sudo linux-defragger-media-harness audit /dev/mmcblk0 --phase after
-sudo linux-defragger-media-harness verify /dev/mmcblk0
-```
+The test layout contains dedicated FAT12, FAT16, FAT32, exFAT, NTFS, ext2, ext3, ext4, XFS, Btrfs, AFFS, classic HFS, HFS+, Minix, UFS, ZFS, APFS and Swap slots. Filesystems with a genuine local creator are formatted and populated; missing creators are shown as unavailable, and APFS remains a real reserved partition rather than receiving a fake signature. Normal populated filesystems receive about 200 MiB of deterministic fragmented target data. FAT12 deliberately uses a smaller 4 MiB target and a scaled directory-fragmentation profile so the 64 MiB FAT12 test volume remains valid.
 
-`prepare` stores a host-side JSON record under `/var/tmp/linux-defragger-media-harness/`, including each generated SHA-256 manifest and the pre-test Linux Defragger allocation map. `audit --phase after` records a second map after field testing, while `verify` mounts/imports only the filesystems that were successfully populated and checks the retained file sizes, SHA-256 digests and directory-entry count. If the host kernel cannot mount a filesystem, the harness records that limitation rather than treating it as filesystem corruption.
+Fragmentation generation, SHA-256 manifest creation, state recording and post-defrag verification are implemented in C. The GUI shows live per-filesystem status and process output while the worker operates. **Verify After Defrag** mounts/imports only previously populated test filesystems read-only where the host supports doing so and verifies retained file sizes, SHA-256 hashes and directory-entry counts. Host-side state is stored under `/var/tmp/linux-defragger-test-media/`.
+
+Formatting and mounting utilities such as `mkfs.fat`, `mkfs.xfs`, `hformat` and `zpool` are allowed here because this companion exists solely to manufacture hostile test media. Linux Defragger's production analyser and writer engines remain subject to the no-mount/no-external-filesystem-mutation architecture rule.
 
 ## Build
 
