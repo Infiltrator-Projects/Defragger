@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Wire CMake 111 architecture guard
+
+on:
+  push:
+    branches: [c-first-cmake-clean-111]
+    paths: [.github/workflows/cmake-111-guard.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c-first-cmake-clean-111
+      - name: Wire guard into script entrypoint
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/test_architecture.py')
+          text = path.read_text()
+          old = 'def main() -> None:\n    test_plugin_discovery_and_native_worker_contracts()\n'
+          new = 'def main() -> None:\n    test_top_level_cmake_owns_c_only_project_declaration()\n    test_plugin_discovery_and_native_worker_contracts()\n'
+          if old not in text:
+              raise SystemExit('unexpected architecture main() layout')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          git diff --check -- tests/test_architecture.py
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -- tests/test_architecture.py
+          git diff --cached --check
+          git commit -m 'Enforce top-level CMake ownership guard'
+          git push origin HEAD:c-first-cmake-clean-111
