@@ -43,7 +43,7 @@ jobs:
           test -f "linux-defragger_${VERSION}_amd64.deb"
           test -f "linux-defragger-${VERSION}-local-folder.run"
           ./tests/test_local_installer_end_to_end.sh \
-            "linux-defragger-${VERSION}-local-folder.run"
+            "./linux-defragger-${VERSION}-local-folder.run"
           sha256sum \
             "linux-defragger_${VERSION}_amd64.deb" \
             "linux-defragger-${VERSION}-local-folder.run" > RELEASE_SHA256SUMS.txt
