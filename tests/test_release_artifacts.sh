@@ -69,6 +69,19 @@ if grep -Fq "printf 'Version: %s\\n' \"\$VERSION\"" \
     exit 1
 fi
 "$ROOT/tests/test_deb_package_versions.sh"
+
+if command -v makefs >/dev/null 2>&1; then
+    UFS_BUILD="$WORK/ufs-build"
+    cmake -S "$ROOT" -B "$UFS_BUILD" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLD_ENABLE_WERROR=ON \
+        -DBUILD_TESTING=OFF >/dev/null
+    cmake --build "$UFS_BUILD" --target linux-defragger-ufs-worker -j2 >/dev/null
+    /bin/sh "$ROOT/tests/test_ufs_makefs.sh" "$UFS_BUILD/linux-defragger-ufs-worker"
+else
+    printf '%s\n' 'makefs unavailable; UFS2 release integration test skipped.'
+fi
+
 "$ROOT/tests/test_local_installer_end_to_end.sh" "$RUN"
 
 printf '%s\n' 'Three-file release packaging tests passed.'
