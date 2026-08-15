@@ -39,6 +39,16 @@ def _cmake_source() -> str:
     return "\n".join(path.read_text() for path in paths if path.is_file())
 
 
+def test_top_level_cmake_owns_c_only_project_declaration() -> None:
+    root_cmake = (ROOT / "CMakeLists.txt").read_text()
+    project_fragment = (ROOT / "cmake" / "project.cmake").read_text()
+    assert root_cmake.count("cmake_minimum_required(VERSION 3.16)") == 1
+    assert root_cmake.count("project(linux_defragger VERSION 1.8.0 LANGUAGES C)") == 1
+    assert root_cmake.index("cmake_minimum_required(VERSION 3.16)") < root_cmake.index("project(linux_defragger VERSION 1.8.0 LANGUAGES C)")
+    assert "cmake_minimum_required(" not in project_fragment
+    assert "project(" not in project_fragment
+
+
 def test_plugin_discovery_and_native_worker_contracts() -> None:
     names = discover_plugin_names()
     registry = Registry()
