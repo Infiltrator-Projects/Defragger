@@ -17,6 +17,7 @@ if str(GUI) not in sys.path:
 
 from ui.backend_catalog import BackendCatalog
 from ui.devices import Volume, discover_volumes
+from ui.volume_coordinator import VolumeCoordinator
 from ui.volume_store import VolumeStore
 
 
@@ -130,6 +131,32 @@ def test_rebuilt_same_path_does_not_reuse_cached_map() -> None:
     assert store.cached_map() is None
 
 
+def test_selection_revalidates_rebuilt_path_without_manual_refresh() -> None:
+    original = _volume()
+    rebuilt = _volume(
+        filesystem_uuid="BEEF-1170",
+        partition_uuid="11701170-2222-3333-4444-555555555555",
+    )
+    state = {"volume": original}
+
+    def discover(_catalog: BackendCatalog) -> list[Volume]:
+        return [state["volume"]]
+
+    coordinator = VolumeCoordinator(_catalog(), discover=discover)
+    assert coordinator.refresh() == 0
+    coordinator.store.select(0)
+    coordinator.remember_map({"filesystem": "FAT12", "marker": "old"})
+    assert coordinator.cached_map() is not None
+
+    # No explicit refresh call here: selecting the old in-memory path must
+    # rediscover it, see the new identities, discard the old map and analyse.
+    state["volume"] = rebuilt
+    selection = coordinator.select(0)
+    assert selection.volume is not None
+    assert selection.volume.filesystem_uuid == "BEEF-1170"
+    assert selection.cached_map is None
+
+
 def test_uuidless_devices_use_refresh_ephemeral_cache_identity() -> None:
     store = VolumeStore()
     first = _volume(filesystem_uuid="", partition_uuid="")
@@ -177,6 +204,7 @@ def main() -> None:
     test_lsblk_metadata_refines_generic_vfat()
     test_unknown_generic_fat_is_not_labeled_fat32()
     test_rebuilt_same_path_does_not_reuse_cached_map()
+    test_selection_revalidates_rebuilt_path_without_manual_refresh()
     test_uuidless_devices_use_refresh_ephemeral_cache_identity()
     test_replaced_image_at_same_path_does_not_reuse_cached_map()
     test_invalidate_removes_every_identity_for_one_path()
