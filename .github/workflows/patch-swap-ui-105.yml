@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: One-shot Swap active presentation patch
+
+on:
+  push:
+    branches: [c-first-swap-ui-105]
+    paths: [.github/workflows/patch-swap-ui-105.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: c-first-swap-ui-105
+
+      - name: Patch active Swap presentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          presenter = Path('gui/ui/map_presenter.py')
+          text = presenter.read_text()
+          old = '''    if is_swap:\n        files_title = "Usage"\n        used_pages = int(details.get("used_pages", 0))\n        files_value = f"{human_bytes(used_bytes)} used · {used_pages:,} pages"\n        fragmentation_value = "Not applicable"\n'''
+          new = '''    if is_swap:\n        files_title = "Usage"\n        swap_page_size = int(details.get("page_size") or data.get("unit_size") or 512)\n        if swap_page_size <= 0:\n            raise AllocationMapError("swap page size must be positive")\n        used_pages = (\n            (used_bytes + swap_page_size - 1) // swap_page_size\n            if used_bytes\n            else 0\n        )\n        page_word = "page" if used_pages == 1 else "pages"\n        files_value = f"{human_bytes(used_bytes)} used · {used_pages:,} {page_word}"\n        fragmentation_value = "Not applicable"\n'''
+          if old not in text:
+              raise SystemExit('Swap usage presentation block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''    if is_swap and bool(details.get("active")):\n        caption = "Physical occupied swap-slot locations are not exposed by the Linux kernel"\n'''
+          new = '''    if is_swap and bool(details.get("active")):\n        caption = (\n            f"Active swap · {human_bytes(used_bytes)} used of "\n            f"{human_bytes(filesystem_bytes)} · aggregate usage only; "\n            "physical slot locations unavailable"\n        )\n'''
+          if old not in text:
+              raise SystemExit('Swap active caption block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''    if is_swap:\n        state = "active" if bool(details.get("active")) else "inactive"\n        status = (\n            f"SWAP {state} · {human_bytes(used_bytes)} used · "\n            f"{human_bytes(free_bytes)} free · physical slot locations unavailable"\n        )\n'''
+          new = '''    if is_swap and bool(details.get("active")):\n        status = (\n            f"SWAP active · {human_bytes(used_bytes)} used of "\n            f"{human_bytes(filesystem_bytes)} · {used_pages:,} {page_word} · "\n            "aggregate usage only; physical slot locations unavailable"\n        )\n    elif is_swap:\n        status = (\n            f"SWAP inactive · {human_bytes(free_bytes)} usable free · "\n            "exact page map"\n        )\n'''
+          if old not in text:
+              raise SystemExit('Swap status block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''    if has_fragmentation:\n        analysis_log = (\n            f"Analysis complete: {_required_int(data, 'fragmented_files')} fragmented files, "\n            f"{_required_int(data, 'fragmented_directories')} fragmented directories."\n        )\n    else:\n'''
+          new = '''    if is_swap and bool(details.get("active")):\n        analysis_log = (\n            f"Analysis complete: active SWAP uses {human_bytes(used_bytes)} "\n            f"across {used_pages:,} {page_word}. Aggregate usage is known; "\n            "physical occupied slot locations are unavailable."\n        )\n    elif is_swap:\n        analysis_log = (\n            "Analysis complete: inactive SWAP has no occupied pages; "\n            "the header, bad pages, free pages and outside tail are mapped exactly."\n        )\n    elif has_fragmentation:\n        analysis_log = (\n            f"Analysis complete: {_required_int(data, 'fragmented_files')} fragmented files, "\n            f"{_required_int(data, 'fragmented_directories')} fragmented directories."\n        )\n    else:\n'''
+          if old not in text:
+              raise SystemExit('Analysis log block not found')
+          presenter.write_text(text.replace(old, new, 1))
+
+          tests = Path('tests/test_gui_models.py')
+          text = tests.read_text()
+          old = '''        details={"active": True, "used_pages": 2},\n    )\n    swap_view = present_allocation_map(swap, 0)\n    assert swap_view.files_title == "Usage"\n    assert swap_view.fragmentation_value == "Not applicable"\n    assert "not exposed by the Linux kernel" in swap_view.caption\n'''
+          new = '''        details={"active": True, "page_size": 4096},\n    )\n    swap_view = present_allocation_map(swap, 0)\n    assert swap_view.files_title == "Usage"\n    assert swap_view.files_value == "8.0 KB used · 2 pages"\n    assert swap_view.fragmentation_value == "Not applicable"\n    assert "aggregate usage only" in swap_view.caption\n    assert "2 pages" in swap_view.status\n    assert "physical occupied slot locations are unavailable" in swap_view.analysis_log\n\n    swap["used_bytes"] = 4096\n    swap["free_bytes"] = 7 * 4096\n    one_page = present_allocation_map(swap, 0)\n    assert one_page.files_value == "4.0 KB used · 1 page"\n'''
+          if old not in text:
+              raise SystemExit('Swap GUI regression block not found')
+          tests.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Run focused GUI presentation regression
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONPATH: gui
+        run: python3 tests/test_gui_models.py
+
+      - name: Commit tested presentation fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -- gui/ui/map_presenter.py tests/test_gui_models.py
+          git diff --cached --check
+          git commit -m 'Fix active Swap page count and presentation'
+          git push origin HEAD:c-first-swap-ui-105
