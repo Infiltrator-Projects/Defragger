@@ -173,8 +173,10 @@ int main(void) {
     CHECK(pfs3->creator == LDTM_CREATOR_MANUAL);
     CHECK(strstr(sfs->note, "SFS/SFS2") != NULL);
     CHECK(strstr(pfs3->note, "PFS3") != NULL);
-    CHECK(strcmp(ldtm_creator_program(ufs), "mkfs.ufs") == 0);
-    CHECK(ufs->package_hint != NULL && ufs->package_hint[0] == '\0');
+    CHECK(strcmp(ldtm_creator_program(ufs), "makefs") == 0);
+    CHECK(ufs->package_hint != NULL && strcmp(ufs->package_hint, "makefs") == 0);
+    CHECK(strstr(ufs->note, "UFS2") != NULL);
+    CHECK(strstr(ufs->note, "fragmentation is not asserted") != NULL);
     CHECK(zfs->package_hint != NULL && strcmp(zfs->package_hint, "zfsutils-linux") == 0);
     CHECK(apfs->creator == LDTM_CREATOR_MANUAL);
     CHECK(ldtm_creator_program(apfs) == NULL);
@@ -192,6 +194,7 @@ int main(void) {
     CHECK(strstr(script, "name=\"LD_FFS\"") != NULL);
     CHECK(strstr(script, "name=\"LD_SFS\"") != NULL);
     CHECK(strstr(script, "name=\"LD_PFS3\"") != NULL);
+    CHECK(strstr(script, "name=\"LD_UFS\"") != NULL);
     CHECK(strstr(script, "name=\"LD_ZFS\"") != NULL);
     CHECK(strstr(script, "type=swap, name=\"LD_SWAP\"") != NULL);
     cursor = script;
