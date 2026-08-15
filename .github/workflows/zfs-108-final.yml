@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: ZFS 108 final production gate
+
+on:
+  push:
+    branches: [c-first-zfs-108]
+    paths: [.github/workflows/zfs-108-final.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config python3 libext2fs-dev libsqlite3-dev libssl-dev
+      - name: Build exact branch with warnings as errors
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON -DBUILD_TESTING=ON
+          cmake --build build -j2
+      - name: Prove native ZFS production ownership
+        env:
+          PYTHONPATH: ${{ github.workspace }}/gui
+          PYTHONDONTWRITEBYTECODE: '1'
+          LINUX_DEFRAGGER_ZFS_WORKER: ${{ github.workspace }}/build/linux-defragger-zfs-worker
+        run: |
+          ctest --test-dir build --output-on-failure -R linux-defragger-zfs-native
+          python3 tests/test_architecture.py
+          DESTDIR="$PWD/stage" cmake --install build
+          test -x stage/usr/local/lib/linux-defragger/filesystems/zfs/linux-defragger-zfs-worker
+          for forbidden in 'Reader' '_UBER_MAGIC_LE' '_UBER_MAGIC_BE' '_WINDOW_SIZE' 'aggregate_ranges' 'data.find'; do
+            ! grep -Fq "$forbidden" gui/filesystems/zfs/plugin.py
+          done
+          truncate -s $((10*1024*1024)) build/zfs-adapter.img
+          printf '\x00\x00\x00\x00\x00\xba\xb1\x0c' | dd of=build/zfs-adapter.img bs=1 seek=$((10*1024*1024-8192)) conv=notrunc status=none
+          python3 - <<'PY'
+          from filesystems.zfs.plugin import ZfsBackend
+          p = 'build/zfs-adapter.img'
+          backend = ZfsBackend()
+          assert backend.probe(p)
+          result = backend.map(p, 7)
+          assert result['schema'] == 1
+          assert result['filesystem'] == 'zfs'
+          assert result['map_accuracy'] == 'summary'
+          assert result['unit_size'] == 512
+          assert result['total_units'] == 20480
+          assert result['cell_count'] == 7
+          assert result['unknown_bytes'] == 10 * 1024 * 1024
+          assert result['details']['byte_order'] == 'big'
+          assert result['details']['uberblock_magic_offset'] == 10 * 1024 * 1024 - 8192
+          with open(p, 'r+b') as image:
+              image.seek(10 * 1024 * 1024 - 8192)
+              image.write(b'NOZFS!!!')
+          assert not backend.probe(p)
+          PY
