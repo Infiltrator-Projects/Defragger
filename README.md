@@ -22,8 +22,8 @@ The authoritative current software version is the root [`VERSION`](VERSION) file
 | Btrfs | Exact read-only raw analysis | Not implemented | Not implemented | No |
 | APFS | Summary read-only analysis, native C | Not implemented | Not implemented | No |
 | Minix | Summary read-only analysis, native C | Not implemented | Not implemented | No |
-| UFS | Summary read-only analysis | Not implemented | Not implemented | No |
-| ZFS / OpenZFS member | Summary read-only analysis | Not implemented | Not implemented | No |
+| UFS | Summary read-only analysis, native C | Not implemented | Not implemented | No |
+| ZFS / OpenZFS member | Summary read-only analysis, native C | Not implemented | Not implemented | No |
 | Linux swap | Exact inactive / aggregate active read-only analysis, native C | Not applicable | Not applicable | No |
 
 Unsupported on-disk layouts fail closed rather than being guessed. The exact writers perform a final read-only rescan before reporting success.
