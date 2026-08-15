@@ -442,6 +442,8 @@ install(DIRECTORY gui/core gui/engine gui/ui gui/backends gui/filesystems
 install(PROGRAMS packaging/linux-defragger DESTINATION bin)
 install(PROGRAMS tools/linux-defragger-testdata.py
         DESTINATION bin RENAME linux-defragger-testdata)
+install(PROGRAMS tools/linux-defragger-media-harness.py
+        DESTINATION bin RENAME linux-defragger-media-harness)
 install(FILES packaging/io.github.linuxdefragger.desktop
         DESTINATION share/applications)
 install(FILES packaging/io.github.linuxdefragger.svg

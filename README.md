@@ -40,6 +40,22 @@ The production architecture test rejects known external filesystem mutation/repa
 
 The source repository contains **no vendored third-party source tree**. Required libraries are supplied by the host distribution at build/runtime rather than copied into Linux Defragger. The project itself is licensed `GPL-3.0-or-later` and first-party source files carry SPDX identifiers.
 
+## Physical-media field-test harness
+
+The installed `linux-defragger-media-harness` utility can destructively prepare a dedicated removable test disk with GPT slots for every filesystem backend. Where the host has a genuine creator and writable mount path, it formats the partition and uses `linux-defragger-testdata` to leave deterministic fragmented data behind. Normal populated filesystems retain about 200 MiB of target-file payload; FAT12 uses a deliberately smaller profile; Swap contains no files; unsupported creators such as APFS are reported as skipped rather than faked.
+
+The harness rejects partitions instead of whole disks, refuses the system/boot disk, rejects undersized targets, and requires an explicit override for a disk not reported as removable/USB/MMC. `prepare` also requires typing the exact `DESTROY /dev/...` token after displaying the device model, serial, size, mount state and full partition plan.
+
+```bash
+sudo linux-defragger-media-harness plan /dev/mmcblk0
+sudo linux-defragger-media-harness prepare /dev/mmcblk0
+# Test Analyse / Defragment in the GUI while the test partitions are unmounted.
+sudo linux-defragger-media-harness audit /dev/mmcblk0 --phase after
+sudo linux-defragger-media-harness verify /dev/mmcblk0
+```
+
+`prepare` stores a host-side JSON record under `/var/tmp/linux-defragger-media-harness/`, including each generated SHA-256 manifest and the pre-test Linux Defragger allocation map. `audit --phase after` records a second map after field testing, while `verify` mounts/imports only the filesystems that were successfully populated and checks the retained file sizes, SHA-256 digests and directory-entry count. If the host kernel cannot mount a filesystem, the harness records that limitation rather than treating it as filesystem corruption.
+
 ## Build
 
 A normal development build is:
