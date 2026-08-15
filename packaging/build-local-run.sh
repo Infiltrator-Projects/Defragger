@@ -89,6 +89,18 @@ sed \
     -e "s/@NATIVE_PACKAGE_VERSION@/$NATIVE_PACKAGE_VERSION/g" \
     -e "s/@PAYLOAD_SHA256@/$PAYLOAD_SHA256/g" \
     "$TEMPLATE" >"$OUTPUT"
+
+# The binary payload must begin on the line after the marker. Repair a
+# missing final newline defensively, then verify that the marker is the
+# generated header's final line before appending any binary data.
+if [ -n "$(tail -c 1 "$OUTPUT" 2>/dev/null || true)" ]; then
+    printf '\n' >>"$OUTPUT"
+fi
+[ "$(tail -n 1 "$OUTPUT")" = '__LINUX_DEFRAGGER_PAYLOAD_BELOW__' ] || {
+    printf '%s\n' 'Generated installer payload marker is missing or malformed.' >&2
+    exit 1
+}
+
 dd if="$PAYLOAD" of="$OUTPUT" oflag=append conv=notrunc status=none
 chmod 0755 "$OUTPUT"
 
