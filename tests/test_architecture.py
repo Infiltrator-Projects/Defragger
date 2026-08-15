@@ -261,6 +261,7 @@ def test_version_and_registry_are_dynamic() -> None:
 
 
 def main() -> None:
+    test_top_level_cmake_owns_c_only_project_declaration()
     test_plugin_discovery_and_native_worker_contracts()
     test_dispatch_is_filesystem_neutral()
     test_single_filesystem_hierarchy_and_c_first_writers()
