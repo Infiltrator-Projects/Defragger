@@ -32,8 +32,8 @@ static const LdtmFilesystemSpec LDTM_SPECS[LDTM_SPEC_COUNT] = {
     {"hfs", "LD_HFS", 1024U, 200U, LDTM_CREATOR_HFS, "hfsutils", ""},
     {"hfsplus", "LD_HFSPLUS", 2048U, 200U, LDTM_CREATOR_HFSPLUS, "hfsprogs", ""},
     {"minix", "LD_MINIX", 1024U, 200U, LDTM_CREATOR_MINIX, "util-linux", ""},
-    {"ufs", "LD_UFS", 2048U, 200U, LDTM_CREATOR_UFS, "",
-     "Created only when mkfs.ufs is installed."},
+    {"ufs", "LD_UFS", 2048U, 200U, LDTM_CREATOR_UFS, "makefs",
+     "Creates a genuine UFS2/FFS image with makefs; exact fragmentation is not asserted yet."},
     {"zfs", "LD_ZFS", 4096U, 200U, LDTM_CREATOR_ZFS, "zfsutils-linux",
      "Uses an isolated one-partition pool and exports it after population."},
     {"apfs", "LD_APFS", 4096U, 200U, LDTM_CREATOR_MANUAL, "",
@@ -141,7 +141,7 @@ const char *ldtm_creator_program(const LdtmFilesystemSpec *spec) {
         case LDTM_CREATOR_HFS: return "hformat";
         case LDTM_CREATOR_HFSPLUS: return "mkfs.hfsplus";
         case LDTM_CREATOR_MINIX: return "mkfs.minix";
-        case LDTM_CREATOR_UFS: return "mkfs.ufs";
+        case LDTM_CREATOR_UFS: return "makefs";
         case LDTM_CREATOR_ZFS: return "zpool";
         case LDTM_CREATOR_SWAP: return "mkswap";
         case LDTM_CREATOR_MANUAL: return NULL;
@@ -187,11 +187,11 @@ int ldtm_spec_creator_available(const LdtmFilesystemSpec *spec,
     const char *program;
     if (detail == NULL || detail_capacity == 0U || spec == NULL) return 0;
     if (spec->creator == LDTM_CREATOR_AFFS && strcmp(spec->key, "ofs") == 0) {
-        (void)snprintf(detail, detail_capacity, "Built-in C creator: Amiga DOS\\0 OFS");
+        (void)snprintf(detail, detail_capacity, "Built-in raw C creator + payload engine: Amiga DOS\\0 OFS");
         return 1;
     }
     if (spec->creator == LDTM_CREATOR_AFFS && strcmp(spec->key, "ffs") == 0) {
-        (void)snprintf(detail, detail_capacity, "Built-in C creator: Amiga DOS\\1 FFS");
+        (void)snprintf(detail, detail_capacity, "Built-in raw C creator + payload engine: Amiga DOS\\1 FFS");
         return 1;
     }
     if (spec->creator == LDTM_CREATOR_MANUAL) {
