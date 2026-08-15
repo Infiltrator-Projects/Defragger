@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Test Media 113 package gate
+
+on:
+  push:
+    branches: [c-first-test-media-gui-113]
+    paths:
+      - .github/workflows/test-media-113-package.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install package build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config python3 python3-gi python3-cairo \
+            gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux \
+            libext2fs-dev libsqlite3-dev libssl-dev
+      - name: Build and inspect Debian package
+        run: |
+          set -euo pipefail
+          export LD_BUILD_TESTING=OFF
+          export BUILD_DIR="$PWD/build-package-gate"
+          export OUTPUT_PATH=/tmp/linux-defragger-test-media-gate.deb
+          ./packaging/build-deb.sh
+          dpkg-deb -c "$OUTPUT_PATH" > /tmp/package-contents.txt
+          grep -Fq './usr/bin/linux-defragger-test-media' /tmp/package-contents.txt
+          grep -Fq './usr/share/applications/io.github.linuxdefragger.TestMedia.desktop' /tmp/package-contents.txt
+          if grep -Eq 'usr/bin/linux-defragger-(media-harness|testdata)' /tmp/package-contents.txt; then
+            echo 'Legacy Python Test Media executable is still packaged.' >&2
+            exit 1
+          fi
+          depends=$(dpkg-deb -f "$OUTPUT_PATH" Depends)
+          printf '%s\n' "$depends" | grep -Fq 'libgtk-3-0t64'
+          rm -rf /tmp/test-media-stage
+          mkdir -p /tmp/test-media-stage
+          dpkg-deb -x "$OUTPUT_PATH" /tmp/test-media-stage
+          test -x /tmp/test-media-stage/usr/bin/linux-defragger-test-media
+          test "$(/tmp/test-media-stage/usr/bin/linux-defragger-test-media --version)" = \
+            "Linux Defragger Test Media $(tr -d '\r\n' < VERSION)"
+          grep -Fq 'Exec=linux-defragger-test-media' \
+            /tmp/test-media-stage/usr/share/applications/io.github.linuxdefragger.TestMedia.desktop
