@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Apply CMake 111 structural fix
+
+on:
+  push:
+    branches: [c-first-cmake-clean-111]
+    paths: [.github/workflows/cmake-111-apply.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c-first-cmake-clean-111
+      - name: Apply tested structural change
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('CMakeLists.txt')
+          text = root.read_text()
+          anchor = 'cmake_minimum_required(VERSION 3.16)\n'
+          project_line = 'project(linux_defragger VERSION 1.8.0 LANGUAGES C)\n'
+          if project_line not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit('unexpected root CMake layout')
+              text = text.replace(anchor, anchor + project_line, 1)
+          root.write_text(text)
+
+          fragment = Path('cmake/project.cmake')
+          text = fragment.read_text()
+          old = '# SPDX-License-Identifier: GPL-3.0-or-later\ncmake_minimum_required(VERSION 3.16)\nproject(linux_defragger VERSION 1.8.0 LANGUAGES C)\n\n'
+          if not text.startswith(old):
+              raise SystemExit('unexpected cmake/project.cmake header')
+          fragment.write_text('# SPDX-License-Identifier: GPL-3.0-or-later\n\n' + text[len(old):])
+
+          test = Path('tests/test_architecture.py')
+          text = test.read_text()
+          marker = '\ndef test_plugin_discovery_and_native_worker_contracts() -> None:\n'
+          addition = '''\ndef test_top_level_cmake_owns_c_only_project_declaration() -> None:\n    root_cmake = (ROOT / "CMakeLists.txt").read_text()\n    project_fragment = (ROOT / "cmake" / "project.cmake").read_text()\n    assert root_cmake.count("cmake_minimum_required(VERSION 3.16)") == 1\n    assert root_cmake.count("project(linux_defragger VERSION 1.8.0 LANGUAGES C)") == 1\n    assert root_cmake.index("cmake_minimum_required(VERSION 3.16)") < root_cmake.index("project(linux_defragger VERSION 1.8.0 LANGUAGES C)")\n    assert "cmake_minimum_required(" not in project_fragment\n    assert "project(" not in project_fragment\n\n'''
+          if 'def test_top_level_cmake_owns_c_only_project_declaration()' not in text:
+              if text.count(marker) != 1:
+                  raise SystemExit('unexpected architecture test layout')
+              text = text.replace(marker, addition + marker, 1)
+          test.write_text(text)
+
+          Path('VERSION').write_text('1.8.0-111\n')
+          Path('gui/version.py').write_text('# SPDX-License-Identifier: GPL-3.0-or-later\nVERSION = "1.8.0-111"\n')
+          PY
+          git diff --check -- CMakeLists.txt cmake/project.cmake tests/test_architecture.py VERSION gui/version.py
+          python3 tests/test_architecture.py
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -- CMakeLists.txt cmake/project.cmake tests/test_architecture.py VERSION gui/version.py
+          git diff --cached --check
+          git commit -m 'Release Linux Defragger 1.8.0-111'
+          git push origin HEAD:c-first-cmake-clean-111
