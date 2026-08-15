@@ -173,9 +173,14 @@ jobs:
           assert inactive['filesystem_bytes'] == 12 * 4096
           assert inactive['outside_bytes'] == 4 * 4096
           assert inactive['free_bytes'] == 9 * 4096
-          assert inactive['unknown_bytes'] == 3 * 4096
+          assert inactive['used_bytes'] == 0
+          assert inactive['unknown_bytes'] == 0
+          assert inactive['reserved_bytes'] == 3 * 4096
           assert inactive['details']['uuid'] == '01020304-0506-0708-090a-0b0c0d0e0f10'
           assert inactive['details']['label'] == 'Native Swap'
+          assert [cell['bad'] for cell in inactive['cells']] == [2, 1, 0, 0]
+          assert [cell['free'] for cell in inactive['cells']] == [2, 3, 4, 0]
+          assert [cell['unknown'] for cell in inactive['cells']] == [0, 0, 0, 0]
           assert [cell['outside'] for cell in inactive['cells']] == [0, 0, 0, 4]
 
           proc_swaps.write_text(
@@ -186,8 +191,12 @@ jobs:
           assert active['map_accuracy'] == 'summary'
           assert active['used_bytes'] == 12 * 1024
           assert active['free_bytes'] == 24 * 1024
+          assert active['unknown_bytes'] == 9 * 4096
+          assert active['reserved_bytes'] == 3 * 4096
           assert active['details']['active'] is True
           assert active['details']['usage_is_aggregate'] is True
+          assert [cell['bad'] for cell in active['cells']] == [2, 1, 0, 0]
+          assert [cell['unknown'] for cell in active['cells']] == [2, 3, 4, 0]
           assert all(cell['used'] == 0 for cell in active['cells'])
           assert active['cells'][-1]['outside'] == 4
           PY
