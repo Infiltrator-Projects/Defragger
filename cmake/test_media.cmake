@@ -70,4 +70,8 @@ if(BUILD_TESTING)
     target_link_libraries(linux-defragger-test-media-test PRIVATE
         linux-defragger-test-media-core linux-defragger-affs-native OpenSSL::Crypto)
     add_test(NAME linux-defragger-test-media-core COMMAND linux-defragger-test-media-test)
+    add_test(NAME linux-defragger-test-media-install
+        COMMAND "${CMAKE_COMMAND}"
+            -DLD_BINARY_DIR=${CMAKE_BINARY_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_test_media_install.cmake")
 endif()
