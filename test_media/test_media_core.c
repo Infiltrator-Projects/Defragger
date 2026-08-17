@@ -116,9 +116,13 @@ int ldtm_build_sfdisk_script(char *buffer, size_t capacity) {
 }
 
 int ldtm_transport_is_field_media(int removable, const char *transport) {
-    if (removable != 0) return 1;
-    if (transport == NULL) return 0;
-    return strcmp(transport, "usb") == 0 || strcmp(transport, "mmc") == 0;
+    /* Historical name retained for the internal Test Media API. Eligibility is
+       no longer restricted by transport: fixed secondary SATA/SAS/NVMe/virtio
+       and virtual disks are valid targets. Whole-disk, system/boot-disk,
+       read-only and capacity checks remain authoritative safeguards. */
+    (void)removable;
+    (void)transport;
+    return 1;
 }
 
 const char *ldtm_creator_program(const LdtmFilesystemSpec *spec) {
