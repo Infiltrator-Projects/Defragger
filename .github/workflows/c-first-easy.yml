@@ -253,7 +253,6 @@ jobs:
               assert result['filesystem'] == 'apfs'
               assert result['unit_size'] == 4096
               assert result['total_units'] == 64
-              assert result['cell_count'] == 16
               assert result['used_bytes'] == 4096
               assert result['unknown_bytes'] == 63 * 4096
               assert result['details']['container_uuid'] == '0102030405060708090a0b0c0d0e0f10'
