@@ -39,11 +39,15 @@ def mutate(worker: Path, image: Path, operation: str, journal: Path) -> str:
         arguments.extend(("--growth-percent", "10"))
     completed = subprocess.run(
         arguments,
-        check=True,
+        check=False,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
+    if completed.returncode != 0:
+        raise AssertionError(
+            f"{operation} failed with rc={completed.returncode}\noutput:\n{completed.stdout}"
+        )
     assert f'@@RESULT {{"operation":"{operation}","status":"completed"' in completed.stdout
     assert "@@LIVE_RESET " in completed.stdout
     assert not journal.exists()
@@ -65,14 +69,14 @@ def test_exfat(work: Path) -> None:
     assert before["fragmented_files"] > 0 and before["fragmented_directories"] > 0
     serial = before["serial"]
     output = mutate(worker, image, "defrag", work / "exfat-defrag.journal")
-    assert "@@LIVE_RANGES " in output, output
-    assert "verified allocated/metadata ranges instead of rewriting the full" in output, output
+    assert "exFAT unified workspace layout:" in output, output
+    assert "internally verified native-C exFAT working image" not in output, output
     packed = run_json(worker, image)
     assert packed["serial"] == serial
     assert_clean(packed, growth=False)
     output = mutate(worker, image, "growth-defrag", work / "exfat-growth.journal")
-    assert "@@LIVE_RANGES " in output, output
-    assert "verified allocated/metadata ranges instead of rewriting the full" in output, output
+    assert "exFAT unified workspace layout:" in output, output
+    assert "internally verified native-C exFAT working image" not in output, output
     grown = run_json(worker, image)
     assert grown["serial"] == serial
     assert_clean(grown, growth=True)
@@ -85,11 +89,15 @@ def test_ntfs(work: Path) -> None:
     before = run_json(worker, image)
     assert before["fragmented_files"] > 0
     serial = before["serial"]
-    mutate(worker, image, "defrag", work / "ntfs-defrag.journal")
+    output = mutate(worker, image, "defrag", work / "ntfs-defrag.journal")
+    assert "NTFS unified workspace layout:" in output, output
+    assert "internally verified raw NTFS working image" not in output, output
     packed = run_json(worker, image)
     assert packed["serial"] == serial
     assert_clean(packed, growth=False)
-    mutate(worker, image, "growth-defrag", work / "ntfs-growth.journal")
+    output = mutate(worker, image, "growth-defrag", work / "ntfs-growth.journal")
+    assert "NTFS direct metadata layout:" in output, output
+    assert "internally verified raw NTFS working image" not in output, output
     grown = run_json(worker, image)
     assert grown["serial"] == serial
     assert_clean(grown, growth=True)
@@ -121,6 +129,7 @@ def test_ntfs_preserves_safe_unsupported_user_stream(work: Path) -> None:
         stderr=subprocess.STDOUT,
     )
     assert "Preserving 1 unsupported-but-safe NTFS user stream" in completed.stdout, completed.stdout
+    assert "NTFS unified workspace layout:" in completed.stdout, completed.stdout
     after_fixed = image.read_bytes()[start:start + length]
     assert after_fixed == before_fixed
     assert_clean(run_json(worker, image), growth=False)

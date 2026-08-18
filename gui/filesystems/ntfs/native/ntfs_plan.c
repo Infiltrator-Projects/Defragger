@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 typedef struct {
@@ -334,10 +335,242 @@ int ntfs_permute_stage(const char *stage,sqlite3 *db,uint32_t cluster_size,uint6
     if(placed!=move_count||fsync(fd)!=0){ntfs_set_error(error,"NTFS cluster permutation did not complete durably");goto fail;}sqlite3_finalize(term);sqlite3_finalize(pred);sqlite3_finalize(mark);sqlite3_finalize(unplaced);close(fd);return 0;
 fail:sqlite3_finalize(term);sqlite3_finalize(pred);sqlite3_finalize(mark);sqlite3_finalize(unplaced);close(fd);return -1;}
 
-int ntfs_apply_stage_metadata(const char *stage,sqlite3 *db,char **error){NtfsVolume volume;NtfsLayout layout;if(ntfs_open_volume(stage,true,&volume,error)!=0)return -1;if(ntfs_read_layout(&volume,false,&layout,error)!=0){ntfs_close_volume(&volume);return -1;}sqlite3_stmt *streams=NULL;if(sqlite3_prepare_v2(db,"SELECT record,attr,clusters,target FROM streams ORDER BY record,attr",-1,&streams,NULL)!=SQLITE_OK){sql_error(db,error,"reading NTFS stream metadata plan");goto fail;}int state;while((state=sqlite3_step(streams))==SQLITE_ROW){uint64_t record=(uint64_t)sqlite3_column_int64(streams,0);uint32_t attr_off=(uint32_t)sqlite3_column_int(streams,1);uint64_t clusters=(uint64_t)sqlite3_column_int64(streams,2),target=(uint64_t)sqlite3_column_int64(streams,3);uint8_t *raw=NULL,*fixed=NULL;if(ntfs_read_record(&volume,&layout.mft_runs,record,&raw,&fixed,error)!=0)goto fail_stream;NtfsAttributeVec attrs={0};if(ntfs_parse_attributes(fixed,volume.record_size,&attrs,error)!=0){free(raw);free(fixed);goto fail_stream;}NtfsAttribute *wanted=NULL;for(size_t i=0;i<attrs.count;++i)if(attrs.items[i].offset==attr_off){wanted=&attrs.items[i];break;}if(!wanted||!wanted->nonresident||wanted->run_offset>=wanted->length){ntfs_set_error(error,"NTFS planned attribute moved or changed before metadata commit");ntfs_attributes_free(&attrs);free(raw);free(fixed);goto fail_stream;}size_t capacity=wanted->length-wanted->run_offset;uint8_t *mapping=fixed+wanted->offset+wanted->run_offset;memset(mapping,0,capacity);size_t used=0;if(ntfs_encode_single_run(target,clusters,mapping,capacity,&used,error)!=0){ntfs_attributes_free(&attrs);free(raw);free(fixed);goto fail_stream;}(void)used;ntfs_put_u64(fixed,wanted->offset+24U,wanted->lowest_vcn+clusters-1U);ntfs_put_u64(fixed,wanted->offset+40U,clusters*volume.cluster_size);if(ntfs_prepare_fixups(fixed,volume.record_size,volume.bytes_per_sector,raw,error)!=0||ntfs_write_record(&volume,&layout.mft_runs,record,raw,error)!=0){ntfs_attributes_free(&attrs);free(raw);free(fixed);goto fail_stream;}ntfs_attributes_free(&attrs);free(raw);free(fixed);continue;fail_stream:sqlite3_finalize(streams);goto fail;}
+int ntfs_apply_stage_metadata(const char *stage,sqlite3 *db,bool allow_dirty,char **error){NtfsVolume volume;NtfsLayout layout;if(ntfs_open_volume(stage,true,&volume,error)!=0)return -1;if(ntfs_read_layout(&volume,allow_dirty,&layout,error)!=0){ntfs_close_volume(&volume);return -1;}sqlite3_stmt *streams=NULL;if(sqlite3_prepare_v2(db,"SELECT record,attr,clusters,target FROM streams ORDER BY record,attr",-1,&streams,NULL)!=SQLITE_OK){sql_error(db,error,"reading NTFS stream metadata plan");goto fail;}int state;while((state=sqlite3_step(streams))==SQLITE_ROW){uint64_t record=(uint64_t)sqlite3_column_int64(streams,0);uint32_t attr_off=(uint32_t)sqlite3_column_int(streams,1);uint64_t clusters=(uint64_t)sqlite3_column_int64(streams,2),target=(uint64_t)sqlite3_column_int64(streams,3);uint8_t *raw=NULL,*fixed=NULL;if(ntfs_read_record(&volume,&layout.mft_runs,record,&raw,&fixed,error)!=0)goto fail_stream;NtfsAttributeVec attrs={0};if(ntfs_parse_attributes(fixed,volume.record_size,&attrs,error)!=0){free(raw);free(fixed);goto fail_stream;}NtfsAttribute *wanted=NULL;for(size_t i=0;i<attrs.count;++i)if(attrs.items[i].offset==attr_off){wanted=&attrs.items[i];break;}if(!wanted||!wanted->nonresident||wanted->run_offset>=wanted->length){ntfs_set_error(error,"NTFS planned attribute moved or changed before metadata commit");ntfs_attributes_free(&attrs);free(raw);free(fixed);goto fail_stream;}size_t capacity=wanted->length-wanted->run_offset;uint8_t *mapping=fixed+wanted->offset+wanted->run_offset;memset(mapping,0,capacity);size_t used=0;if(ntfs_encode_single_run(target,clusters,mapping,capacity,&used,error)!=0){ntfs_attributes_free(&attrs);free(raw);free(fixed);goto fail_stream;}(void)used;ntfs_put_u64(fixed,wanted->offset+24U,wanted->lowest_vcn+clusters-1U);ntfs_put_u64(fixed,wanted->offset+40U,clusters*volume.cluster_size);if(ntfs_prepare_fixups(fixed,volume.record_size,volume.bytes_per_sector,raw,error)!=0||ntfs_write_record(&volume,&layout.mft_runs,record,raw,error)!=0){ntfs_attributes_free(&attrs);free(raw);free(fixed);goto fail_stream;}ntfs_attributes_free(&attrs);free(raw);free(fixed);continue;fail_stream:sqlite3_finalize(streams);goto fail;}
     if(state!=SQLITE_DONE){sql_error(db,error,"reading NTFS stream metadata plan");sqlite3_finalize(streams);goto fail;}sqlite3_finalize(streams);
     sqlite3_stmt *meta=NULL;if(sqlite3_prepare_v2(db,"SELECT value FROM metadata WHERE key='bitmap'",-1,&meta,NULL)!=SQLITE_OK||sqlite3_step(meta)!=SQLITE_ROW){sqlite3_finalize(meta);sql_error(db,error,"reading NTFS final bitmap");goto fail;}const void *blob=sqlite3_column_blob(meta,0);int bytes=sqlite3_column_bytes(meta,0);if(blob==NULL||bytes<0||(size_t)bytes!=layout.bitmap_bytes){sqlite3_finalize(meta);ntfs_set_error(error,"NTFS final bitmap has the wrong size");goto fail;}memcpy(layout.bitmap,blob,layout.bitmap_bytes);sqlite3_finalize(meta);if(ntfs_write_bitmap(&volume,&layout,error)!=0||fsync(volume.fd)!=0){if(error&&*error==NULL)ntfs_set_error(error,"syncing NTFS stage metadata failed");goto fail;}ntfs_layout_free(&layout);ntfs_close_volume(&volume);return 0;
 fail:ntfs_layout_free(&layout);ntfs_close_volume(&volume);return -1;}
+
+
+
+static int workspace_digest(const uint8_t *data, size_t length,
+                            uint8_t digest[SHA256_DIGEST_LENGTH], char **error) {
+    unsigned int digest_length = 0;
+    if (EVP_Digest(data, length, digest, &digest_length, EVP_sha256(), NULL) != 1 ||
+        digest_length != SHA256_DIGEST_LENGTH) {
+        ntfs_set_error(error, "computing NTFS workspace cluster digest failed");
+        return -1;
+    }
+    return 0;
+}
+
+int ntfs_prepare_workspace_map(sqlite3 *db, uint64_t workspace_start,
+                               uint64_t workspace_clusters, char **error) {
+    if (workspace_clusters == 0 ||
+        workspace_start > UINT64_MAX - workspace_clusters) {
+        ntfs_set_error(error, "NTFS terminal workspace geometry is invalid");
+        return -1;
+    }
+    if (sql_exec(db,
+                 "CREATE TABLE IF NOT EXISTS workspace("
+                 "old INTEGER PRIMARY KEY,target INTEGER NOT NULL UNIQUE,"
+                 "slot INTEGER NOT NULL UNIQUE,sha BLOB);"
+                 "BEGIN IMMEDIATE;DELETE FROM workspace",
+                 error) != 0) return -1;
+    sqlite3_stmt *select = NULL, *insert = NULL;
+    if (sqlite3_prepare_v2(db,
+            "SELECT old,target FROM blocks WHERE old<>target ORDER BY old", -1,
+            &select, NULL) != SQLITE_OK ||
+        sqlite3_prepare_v2(db,
+            "INSERT INTO workspace(old,target,slot,sha) VALUES (?,?,?,NULL)", -1,
+            &insert, NULL) != SQLITE_OK) {
+        sql_error(db, error, "preparing NTFS terminal workspace map");
+        goto fail;
+    }
+    uint64_t index = 0;
+    while (sqlite3_step(select) == SQLITE_ROW) {
+        if (index >= workspace_clusters) {
+            ntfs_set_error(error, "NTFS terminal workspace is smaller than the relocation set");
+            goto fail;
+        }
+        uint64_t old_cluster = (uint64_t)sqlite3_column_int64(select, 0);
+        uint64_t target_cluster = (uint64_t)sqlite3_column_int64(select, 1);
+        uint64_t slot = workspace_start + index;
+        sqlite3_reset(insert);
+        sqlite3_clear_bindings(insert);
+        sqlite3_bind_int64(insert, 1, (sqlite3_int64)old_cluster);
+        sqlite3_bind_int64(insert, 2, (sqlite3_int64)target_cluster);
+        sqlite3_bind_int64(insert, 3, (sqlite3_int64)slot);
+        if (sqlite3_step(insert) != SQLITE_DONE) {
+            sql_error(db, error, "recording NTFS terminal workspace map");
+            goto fail;
+        }
+        index++;
+    }
+    if (index != workspace_clusters) {
+        ntfs_set_error(error,
+                       "NTFS terminal workspace map contains %llu clusters; expected %llu",
+                       (unsigned long long)index,
+                       (unsigned long long)workspace_clusters);
+        goto fail;
+    }
+    sqlite3_finalize(select);
+    sqlite3_finalize(insert);
+    if (sql_exec(db, "COMMIT;PRAGMA wal_checkpoint(FULL)", error) != 0) return -1;
+    return 0;
+fail:
+    sqlite3_finalize(select);
+    sqlite3_finalize(insert);
+    (void)sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    return -1;
+}
+
+static int workspace_copy_rows(const char *device, sqlite3 *db, uint32_t cluster_size,
+                               const char *query, bool stop_aware,
+                               bool record_digest, char **error) {
+    int fd = open(device, O_RDWR | O_CLOEXEC);
+    if (fd < 0) {
+        ntfs_set_error(error, "cannot open NTFS source for terminal-workspace I/O: %s",
+                       strerror(errno));
+        return -1;
+    }
+    if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        ntfs_set_error(error, "cannot lock NTFS source for terminal-workspace I/O: %s",
+                       strerror(errno));
+        close(fd);
+        return -1;
+    }
+    sqlite3_stmt *rows = NULL, *update = NULL;
+    if (sqlite3_prepare_v2(db, query, -1, &rows, NULL) != SQLITE_OK) {
+        close(fd);
+        return sql_error(db, error, "reading NTFS terminal workspace map");
+    }
+    if (record_digest) {
+        if (sql_exec(db, "BEGIN IMMEDIATE", error) != 0) {
+            sqlite3_finalize(rows); close(fd); return -1;
+        }
+        if (sqlite3_prepare_v2(db, "UPDATE workspace SET sha=? WHERE old=?", -1,
+                              &update, NULL) != SQLITE_OK) {
+            sql_error(db, error, "preparing NTFS workspace digest update");
+            (void)sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+            sqlite3_finalize(rows); close(fd); return -1;
+        }
+    }
+    uint8_t *buffer = ld_xmalloc(cluster_size);
+    uint64_t copied = 0;
+    int result = 0;
+    while (sqlite3_step(rows) == SQLITE_ROW) {
+        if (stop_aware && ld_stop_requested()) { result = -2; break; }
+        uint64_t source_cluster = (uint64_t)sqlite3_column_int64(rows, 0);
+        uint64_t target_cluster = (uint64_t)sqlite3_column_int64(rows, 1);
+        uint64_t source_offset = source_cluster * (uint64_t)cluster_size;
+        uint64_t target_offset = target_cluster * (uint64_t)cluster_size;
+        ssize_t got = ld_pread_full(fd, buffer, cluster_size, source_offset);
+        if (got < 0 || (size_t)got != cluster_size) {
+            ntfs_set_error(error, "short read during NTFS terminal-workspace relocation");
+            result = -1; break;
+        }
+        if (record_digest) {
+            uint8_t digest[SHA256_DIGEST_LENGTH];
+            if (workspace_digest(buffer, cluster_size, digest, error) != 0) {
+                result = -1; break;
+            }
+            sqlite3_reset(update);
+            sqlite3_clear_bindings(update);
+            sqlite3_bind_blob(update, 1, digest, SHA256_DIGEST_LENGTH, SQLITE_TRANSIENT);
+            sqlite3_bind_int64(update, 2, (sqlite3_int64)source_cluster);
+            if (sqlite3_step(update) != SQLITE_DONE) {
+                sql_error(db, error, "recording NTFS workspace cluster digest");
+                result = -1; break;
+            }
+        }
+        ssize_t wrote = ld_pwrite_full(fd, buffer, cluster_size, target_offset);
+        if (wrote < 0 || (size_t)wrote != cluster_size) {
+            ntfs_set_error(error, "short write during NTFS terminal-workspace relocation");
+            result = -1; break;
+        }
+        copied++;
+    }
+    if (result == 0 && fsync(fd) != 0) {
+        ntfs_set_error(error, "syncing NTFS terminal-workspace relocation failed: %s",
+                       strerror(errno));
+        result = -1;
+    }
+    if (record_digest) {
+        if (result == 0) {
+            if (sql_exec(db, "COMMIT;PRAGMA wal_checkpoint(FULL)", error) != 0) result = -1;
+        } else {
+            (void)sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+        }
+    }
+    sqlite3_finalize(update);
+    sqlite3_finalize(rows);
+    free(buffer);
+    close(fd);
+    (void)copied;
+    return result;
+}
+
+int ntfs_stage_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                         char **error) {
+    return workspace_copy_rows(device, db, cluster_size,
+                               "SELECT old,slot FROM workspace ORDER BY old",
+                               true, true, error);
+}
+
+int ntfs_place_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                         bool stop_aware, char **error) {
+    return workspace_copy_rows(device, db, cluster_size,
+                               "SELECT slot,target FROM workspace ORDER BY old",
+                               stop_aware, false, error);
+}
+
+int ntfs_restore_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                           char **error) {
+    return workspace_copy_rows(device, db, cluster_size,
+                               "SELECT slot,old FROM workspace ORDER BY old",
+                               false, false, error);
+}
+
+int ntfs_verify_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                          char **error) {
+    int fd = open(device, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        ntfs_set_error(error, "cannot open NTFS source to verify terminal workspace: %s",
+                       strerror(errno));
+        return -1;
+    }
+    sqlite3_stmt *rows = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT slot,sha FROM workspace ORDER BY old", -1,
+                          &rows, NULL) != SQLITE_OK) {
+        close(fd);
+        return sql_error(db, error, "reading NTFS workspace verification map");
+    }
+    uint8_t *buffer = ld_xmalloc(cluster_size);
+    uint64_t verified = 0;
+    int result = 0;
+    while (sqlite3_step(rows) == SQLITE_ROW) {
+        uint64_t slot = (uint64_t)sqlite3_column_int64(rows, 0);
+        const void *expected = sqlite3_column_blob(rows, 1);
+        int expected_bytes = sqlite3_column_bytes(rows, 1);
+        if (expected == NULL || expected_bytes != SHA256_DIGEST_LENGTH) {
+            ntfs_set_error(error, "NTFS terminal workspace is not fully checksummed");
+            result = -1; break;
+        }
+        ssize_t got = ld_pread_full(fd, buffer, cluster_size,
+                                    slot * (uint64_t)cluster_size);
+        uint8_t actual[SHA256_DIGEST_LENGTH];
+        if (got < 0 || (size_t)got != cluster_size ||
+            workspace_digest(buffer, cluster_size, actual, error) != 0) {
+            if (error != NULL && *error == NULL)
+                ntfs_set_error(error, "short read while verifying NTFS terminal workspace");
+            result = -1; break;
+        }
+        if (memcmp(actual, expected, SHA256_DIGEST_LENGTH) != 0) {
+            ntfs_set_error(error, "NTFS terminal workspace checksum mismatch at cluster %llu",
+                           (unsigned long long)slot);
+            result = -1; break;
+        }
+        verified++;
+    }
+    sqlite3_finalize(rows);
+    free(buffer);
+    close(fd);
+    if (result == 0 && verified == 0) {
+        ntfs_set_error(error, "NTFS terminal workspace verification found no staged clusters");
+        result = -1;
+    }
+    return result;
+}
 
 static NtfsStream *find_stream(NtfsCatalogue *catalogue,uint64_t record,uint32_t attr){for(size_t i=0;i<catalogue->count;++i)if(catalogue->items[i].record_number==record&&catalogue->items[i].attribute_offset==attr)return &catalogue->items[i];return NULL;}
 int ntfs_verify_stage(const char *stage, sqlite3 *db, bool growth,
