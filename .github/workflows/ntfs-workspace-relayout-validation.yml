@@ -48,11 +48,11 @@ jobs:
           if text.count(old) != 2:
               raise SystemExit(f'expected two legacy exFAT assertions, found {text.count(old)}')
           text = text.replace(old, new)
-          old_helper = '''        check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,\n    )\n    assert "@@RESULT " in completed.stdout, completed.stdout\n'''
-          new_helper = '''        check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,\n    )\n    if completed.returncode != 0:\n        raise AssertionError(\n            f"{operation} failed with rc={completed.returncode}\\n"\n            f"stdout:\\n{completed.stdout}\\nstderr:\\n{completed.stderr}"\n        )\n    assert "@@RESULT " in completed.stdout, completed.stdout\n'''
-          if text.count(old_helper) != 1:
-              raise SystemExit(f'expected one mutate helper anchor, found {text.count(old_helper)}')
-          path.write_text(text.replace(old_helper, new_helper, 1), encoding='utf-8')
+          old_run = '''        check=True,\n        text=True,\n        stdout=subprocess.PIPE,\n        stderr=subprocess.STDOUT,\n    )\n    assert f'@@RESULT {{"operation":"{operation}","status":"completed"' in completed.stdout\n'''
+          new_run = '''        check=False,\n        text=True,\n        stdout=subprocess.PIPE,\n        stderr=subprocess.STDOUT,\n    )\n    if completed.returncode != 0:\n        raise AssertionError(\n            f"{operation} failed with rc={completed.returncode}\\noutput:\\n{completed.stdout}"\n        )\n    assert f'@@RESULT {{"operation":"{operation}","status":"completed"' in completed.stdout\n'''
+          if text.count(old_run) != 1:
+              raise SystemExit(f'expected one mutation runner anchor, found {text.count(old_run)}')
+          path.write_text(text.replace(old_run, new_run, 1), encoding='utf-8')
           PY
           git diff --check
 
