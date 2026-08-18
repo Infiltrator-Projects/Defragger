@@ -16,7 +16,7 @@ if str(GUI) not in sys.path:
     sys.path.insert(0, str(GUI))
 
 from ui.backend_catalog import BackendCatalog
-from ui.devices import Volume, discover_volumes
+from ui.devices import Volume, discover_volumes, natural_device_sort_key
 from ui.volume_coordinator import VolumeCoordinator
 from ui.volume_store import VolumeStore
 
@@ -98,6 +98,35 @@ def test_lsblk_metadata_refines_generic_vfat() -> None:
     assert "— FAT12 —" in volume.display_name
     assert volume.filesystem_uuid == "ABCD-1234"
     assert volume.partition_uuid.startswith("11111111-")
+
+
+def test_block_devices_sort_by_numeric_partition_number() -> None:
+    paths = [
+        "/dev/mmcblk0p1",
+        "/dev/mmcblk0p10",
+        "/dev/mmcblk0p13",
+        "/dev/mmcblk0p2",
+        "/dev/mmcblk0p19",
+        "/dev/mmcblk0p3",
+        "/dev/nvme0n1p12",
+        "/dev/nvme0n1p3",
+        "/dev/nvme1n1p1",
+        "/dev/nvme1n1p10",
+        "/dev/nvme1n1p2",
+    ]
+    assert sorted(paths, key=natural_device_sort_key) == [
+        "/dev/mmcblk0p1",
+        "/dev/mmcblk0p2",
+        "/dev/mmcblk0p3",
+        "/dev/mmcblk0p10",
+        "/dev/mmcblk0p13",
+        "/dev/mmcblk0p19",
+        "/dev/nvme0n1p3",
+        "/dev/nvme0n1p12",
+        "/dev/nvme1n1p1",
+        "/dev/nvme1n1p2",
+        "/dev/nvme1n1p10",
+    ]
 
 
 def test_unknown_generic_fat_is_not_labeled_fat32() -> None:
@@ -202,13 +231,14 @@ def test_invalidate_removes_every_identity_for_one_path() -> None:
 
 def main() -> None:
     test_lsblk_metadata_refines_generic_vfat()
+    test_block_devices_sort_by_numeric_partition_number()
     test_unknown_generic_fat_is_not_labeled_fat32()
     test_rebuilt_same_path_does_not_reuse_cached_map()
     test_selection_revalidates_rebuilt_path_without_manual_refresh()
     test_uuidless_devices_use_refresh_ephemeral_cache_identity()
     test_replaced_image_at_same_path_does_not_reuse_cached_map()
     test_invalidate_removes_every_identity_for_one_path()
-    print("GUI volume identity and FAT discovery regression tests passed")
+    print("GUI volume identity, device ordering and FAT discovery regression tests passed")
 
 
 if __name__ == "__main__":
