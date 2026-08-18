@@ -108,9 +108,9 @@ if grep -q 'Growth Defrag layout staged one' "$WORK/fat16-dependencies.log"; the
     cat "$WORK/fat16-dependencies.log" >&2
     fail "FAT16 adaptive dependency test fell back to one-object staging"
 fi
-grep -q 'adaptive dependency blocker' "$WORK/fat16-dependencies.log" || {
+grep -q 'adaptive dependency batch' "$WORK/fat16-dependencies.log" || {
     cat "$WORK/fat16-dependencies.log" >&2
-    fail "FAT16 dependency blocker workload did not exercise adaptive staging"
+    fail "FAT16 dependency blocker workload did not exercise batched adaptive staging"
 }
 dependency_transactions=$(sed -n \
     's/^Growth Defrag layout I\/O:.* in \([0-9][0-9]*\) transaction.*$/\1/p' \
