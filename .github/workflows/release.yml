@@ -7,13 +7,18 @@ on:
     paths:
       - VERSION
       - .github/workflows/release.yml
+      - .github/workflows/quality-gate.yml
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  quality-gate:
+    uses: ./.github/workflows/quality-gate.yml
+
   release:
+    needs: quality-gate
     runs-on: ubuntu-24.04
     steps:
       - name: Check out exact release commit
