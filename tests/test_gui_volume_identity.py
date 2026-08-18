@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Regression tests for GUI filesystem identity and classic FAT discovery."""
+"""Regression tests for GUI filesystem identity and block-device discovery."""
 
 from __future__ import annotations
 
@@ -28,7 +28,14 @@ def _catalog() -> BackendCatalog:
                 {"id": "fat12", "aliases": [], "capabilities": 1, "operations": []},
                 {"id": "fat16", "aliases": [], "capabilities": 1, "operations": []},
                 {"id": "fat32", "aliases": [], "capabilities": 1, "operations": []},
-                {"id": "ext4", "aliases": [], "capabilities": 1, "operations": []},
+                {"id": "ext4", "aliases": ["ext2", "ext3"], "capabilities": 1, "operations": []},
+                {
+                    "id": "affs",
+                    "aliases": ["amiga", "ofs", "ffs", "dostype"],
+                    "capabilities": 1,
+                    "operations": [],
+                },
+                {"id": "hfsplus", "aliases": ["hfs+"], "capabilities": 1, "operations": []},
             ]
         }
     )
@@ -72,6 +79,7 @@ def test_lsblk_metadata_refines_generic_vfat() -> None:
                 "fstype": "vfat",
                 "fsver": "FAT12",
                 "label": "LD_FAT12",
+                "partlabel": "LD_FAT12",
                 "uuid": "ABCD-1234",
                 "partuuid": "11111111-2222-3333-4444-555555555555",
                 "size": 64 * 1024 * 1024,
@@ -86,6 +94,7 @@ def test_lsblk_metadata_refines_generic_vfat() -> None:
 
     def fake_run(args, **_kwargs):
         assert "FSVER" in args[-1]
+        assert "PARTLABEL" in args[-1]
         assert "UUID" in args[-1]
         assert "PARTUUID" in args[-1]
         return CompletedProcess(args, 0, stdout=json.dumps(payload), stderr="")
@@ -98,6 +107,67 @@ def test_lsblk_metadata_refines_generic_vfat() -> None:
     assert "— FAT12 —" in volume.display_name
     assert volume.filesystem_uuid == "ABCD-1234"
     assert volume.partition_uuid.startswith("11111111-")
+
+
+def test_amiga_discovery_does_not_depend_on_lsblk_fstype() -> None:
+    def node(path: str, *, fstype: str = "", partlabel: str = "", label: str = "") -> dict:
+        return {
+            "name": Path(path).name,
+            "path": path,
+            "type": "part",
+            "fstype": fstype,
+            "fsver": "",
+            "label": label,
+            "partlabel": partlabel,
+            "uuid": "",
+            "partuuid": f"part-{Path(path).name}",
+            "size": 1024 * 1024 * 1024,
+            "mountpoints": [None],
+            "rm": 0,
+            "ro": 0,
+            "model": "",
+            "tran": "mmc",
+        }
+
+    payload = {
+        "blockdevices": [
+            # libblkid commonly leaves these two blank.  Their Test Media GPT
+            # labels are a deterministic fallback when an unprivileged probe
+            # cannot open the physical block device.
+            node("/dev/mmcblk0p11", partlabel="LD_OFS"),
+            node("/dev/mmcblk0p12", partlabel="LD_FFS"),
+            # A normal Amiga partition with no Test Media label is recovered
+            # from the authoritative first-party native probe.
+            node("/dev/mmcblk0p20", partlabel="DH0"),
+            # Reserved Test Media slots must never surface stale filesystems.
+            node(
+                "/dev/mmcblk0p13",
+                fstype="hfsplus",
+                partlabel="LD_SFS",
+                label="LD_HFSPLUS",
+            ),
+        ]
+    }
+
+    def fake_run(args, **_kwargs):
+        return CompletedProcess(args, 0, stdout=json.dumps(payload), stderr="")
+
+    def fake_probe(path: str) -> str:
+        return "ffs" if path.endswith("p20") else ""
+
+    volumes = discover_volumes(_catalog(), run=fake_run, probe_unknown=fake_probe)
+    by_path = {volume.path: volume for volume in volumes}
+    assert set(by_path) == {
+        "/dev/mmcblk0p11",
+        "/dev/mmcblk0p12",
+        "/dev/mmcblk0p20",
+    }
+    assert by_path["/dev/mmcblk0p11"].normalized_fstype == "affs"
+    assert by_path["/dev/mmcblk0p11"].display_fstype == "ofs"
+    assert "— LD_OFS — OFS —" in by_path["/dev/mmcblk0p11"].display_name
+    assert by_path["/dev/mmcblk0p12"].normalized_fstype == "affs"
+    assert by_path["/dev/mmcblk0p12"].display_fstype == "ffs"
+    assert by_path["/dev/mmcblk0p20"].display_fstype == "ffs"
 
 
 def test_block_devices_sort_by_numeric_partition_number() -> None:
@@ -231,6 +301,7 @@ def test_invalidate_removes_every_identity_for_one_path() -> None:
 
 def main() -> None:
     test_lsblk_metadata_refines_generic_vfat()
+    test_amiga_discovery_does_not_depend_on_lsblk_fstype()
     test_block_devices_sort_by_numeric_partition_number()
     test_unknown_generic_fat_is_not_labeled_fat32()
     test_rebuilt_same_path_does_not_reuse_cached_map()
@@ -238,7 +309,7 @@ def main() -> None:
     test_uuidless_devices_use_refresh_ephemeral_cache_identity()
     test_replaced_image_at_same_path_does_not_reuse_cached_map()
     test_invalidate_removes_every_identity_for_one_path()
-    print("GUI volume identity, device ordering and FAT discovery regression tests passed")
+    print("GUI volume identity and raw-filesystem discovery regression tests passed")
 
 
 if __name__ == "__main__":

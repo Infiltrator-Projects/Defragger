@@ -8,15 +8,25 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Iterable
+
+from core.paths import resolve_program
 
 from .formatting import human_bytes
 from .backend_catalog import BackendCatalog
 
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
+UnknownFilesystemProbe = Callable[[str], str]
 _GENERIC_FAT_TYPES = frozenset({"vfat", "fat", "msdos"})
 _EXT_TYPES = frozenset({"ext2", "ext3", "ext4"})
+_AMIGA_TYPES = frozenset({"ofs", "ffs"})
+_TEST_MEDIA_RAW_PARTLABELS = {
+    "ld_ofs": "ofs",
+    "ld_ffs": "ffs",
+}
+_TEST_MEDIA_RESERVED_PARTLABELS = frozenset({"ld_sfs", "ld_pfs3", "ld_apfs"})
 _NATURAL_DEVICE_PARTS = re.compile(r"(\d+)")
 
 
@@ -68,6 +78,73 @@ def fat_variant(fstype: str, fs_version: str) -> str:
     return ""
 
 
+def first_party_unknown_filesystem_probe(path: str) -> str:
+    """Probe formats that the host discovery stack commonly leaves unnamed.
+
+    Device enumeration stays independent from Linux filesystem support.  The
+    native Amiga parser is consulted when lsblk/libblkid cannot classify a
+    device.  Permission failures are expected for some physical devices and
+    simply leave the result unknown; deterministic Test Media partition labels
+    provide a second, non-authoritative hint for those root-only devices.
+    """
+
+    if not path:
+        return ""
+    anchor = Path(__file__).resolve().parents[1] / "core"
+    try:
+        worker = resolve_program("affs-native", anchor=anchor)
+        completed = subprocess.run(
+            [worker, "identify", path],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=2.0,
+            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return ""
+    if completed.returncode != 0:
+        return ""
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(payload, dict) or payload.get("filesystem") != "affs":
+        return ""
+    variant = str(payload.get("variant") or "").strip().lower()
+    return variant if variant in _AMIGA_TYPES else "affs"
+
+
+def _resolved_discovery_fstype(
+    catalog: BackendCatalog,
+    node: dict[str, Any],
+    probe_unknown: UnknownFilesystemProbe,
+) -> str:
+    """Resolve one lsblk node without treating the host probe as authoritative."""
+
+    partlabel = str(node.get("partlabel") or "").strip().lower()
+    # These Test Media slots intentionally contain no filesystem.  Suppress a
+    # stale signature even before the next rebuilt disk has been sanitised.
+    if partlabel in _TEST_MEDIA_RESERVED_PARTLABELS:
+        return ""
+
+    raw = str(node.get("fstype") or "").strip().lower()
+    if raw and catalog.supports(raw):
+        return raw
+
+    path = str(node.get("path") or "")
+    probed = str(probe_unknown(path) or "").strip().lower()
+    if probed and catalog.supports(probed):
+        return probed
+
+    # Linux/libblkid does not reliably identify Amiga DOS\0/DOS\1.  Test Media
+    # owns these GPT partition names, so they are a safe discovery hint when
+    # the authoritative native probe cannot open a root-only block device.
+    hinted = _TEST_MEDIA_RAW_PARTLABELS.get(partlabel, "")
+    return hinted if hinted and catalog.supports(hinted) else ""
+
+
 @dataclass(slots=True)
 class Volume:
     catalog: BackendCatalog
@@ -115,6 +192,10 @@ class Volume:
         # Routing may therefore normalize ext2/ext3 to ext4, but the selector
         # must continue to show the filesystem that was actually discovered.
         if raw in _EXT_TYPES:
+            return raw
+        # OFS and FFS likewise share the AFFS backend while retaining their
+        # actual DOS\0/DOS\1 identity in user-facing text.
+        if raw in _AMIGA_TYPES:
             return raw
         return self.normalized_fstype
 
@@ -173,9 +254,10 @@ def discover_volumes(
     catalog: BackendCatalog,
     *,
     run: RunCommand = subprocess.run,
+    probe_unknown: UnknownFilesystemProbe = first_party_unknown_filesystem_probe,
 ) -> list[Volume]:
     columns = (
-        "NAME,PATH,TYPE,FSTYPE,FSVER,LABEL,UUID,PARTUUID,SIZE,"
+        "NAME,PATH,TYPE,FSTYPE,FSVER,LABEL,PARTLABEL,UUID,PARTUUID,SIZE,"
         "MOUNTPOINTS,RM,RO,MODEL,TRAN"
     )
     result = run(
@@ -189,16 +271,17 @@ def discover_volumes(
     data = json.loads(result.stdout)
     volumes: list[Volume] = []
     for node in flatten_lsblk(data.get("blockdevices", [])):
-        fstype = str(node.get("fstype") or "")
-        if not catalog.supports(fstype):
+        fstype = _resolved_discovery_fstype(catalog, node, probe_unknown)
+        if not fstype:
             continue
+        partlabel = str(node.get("partlabel") or "")
         volumes.append(
             Volume(
                 catalog=catalog,
                 path=str(node.get("path") or ""),
                 name=str(node.get("name") or ""),
                 fstype=fstype,
-                label=str(node.get("label") or ""),
+                label=str(node.get("label") or partlabel or ""),
                 size=int(node.get("size") or 0),
                 mountpoints=[
                     str(item)
