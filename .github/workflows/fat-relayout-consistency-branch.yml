@@ -71,7 +71,6 @@ jobs:
         run: bash ./tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
 
       - name: Commit validated refactor
-        if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
