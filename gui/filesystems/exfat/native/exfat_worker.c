@@ -213,7 +213,7 @@ static bool canonical_layout(const ExfatCatalogue *catalogue, const ExfatPlan *p
         const ExfatObject *object = &catalogue->objects.items[i];
         for (size_t j = 0; j < object->clusters.count; ++j)
             if (object->clusters.items[j] != object->target_start + (uint32_t)j) return false;
-        if (plan->growth && object->regular_file) {
+        if (plan->reserve_percent != 0U && object->regular_file) {
             uint32_t start = object->target_start + (uint32_t)object->clusters.count;
             for (uint32_t r = 0; r < object->reserve_clusters; ++r) if (exfat_allocated(catalogue, start + r)) return false;
         }
@@ -489,15 +489,36 @@ static int analyse_json(const char *device, char **error) {
 }
 
 static int build_and_commit(const char *device, const char *operation, const char *journal_path,
+                            size_t ram_bytes, size_t batch_clusters,
                             bool live_updates, char **error) {
     if (ld_path_is_mounted(device)) { exfat_set_error(error, "exFAT target is mounted; raw mutation requires an unmounted filesystem"); return 1; }
     if (access(journal_path, F_OK) == 0) { exfat_set_error(error, "an unfinished exFAT journal exists; run Recover first"); return 1; }
+    bool growth = strcmp(operation, "growth-defrag") == 0;
+    ExfatRelayoutStats relayout_stats;
+    int relayout = exfat_relayout_in_place(device, journal_path,
+                                           growth ? 10U : 0U,
+                                           ram_bytes, batch_clusters,
+                                           live_updates, &relayout_stats, error);
+    if (relayout == EXFAT_RELAYOUT_COMPLETED) {
+        emit_result(operation, "completed", "");
+        return 0;
+    }
+    if (relayout == EXFAT_RELAYOUT_NOT_NEEDED) {
+        emit_result(operation, "not-needed", "");
+        return 0;
+    }
+    if (relayout == EXFAT_RELAYOUT_STOPPED) {
+        emit_result(operation, "stopped", "");
+        return 130;
+    }
+    if (relayout == EXFAT_RELAYOUT_FAILED) return 1;
+    fprintf(stderr,
+            "exFAT terminal-workspace fast path is unavailable for this layout; using the verified shadow-image compatibility path.\n");
     char *real = canonical_path(device, error), *identity = NULL; uint64_t physical = 0;
     if (real == NULL || target_identity(device, &identity, &physical, error) != 0) { free(real); free(identity); return 1; }
     ExfatVolume source; ExfatCatalogue catalogue; ExfatPlan plan; ExfatJournal state; memset(&state, 0, sizeof(state));
     if (exfat_scan(device, false, &source, &catalogue, error) != 0) { free(real); free(identity); return 1; }
-    bool growth = strcmp(operation, "growth-defrag") == 0;
-    if (exfat_build_plan(&source, &catalogue, growth, &plan, error) != 0) { exfat_catalogue_free(&catalogue); exfat_close_volume(&source); free(real); free(identity); return 1; }
+    if (exfat_build_plan(&source, &catalogue, growth ? 10U : 0U, &plan, error) != 0) { exfat_catalogue_free(&catalogue); exfat_close_volume(&source); free(real); free(identity); return 1; }
     if (canonical_layout(&catalogue, &plan)) {
         puts(growth ? "Not needed; canonical exFAT layout with exact 10% growth reserves verified." : "Not needed; canonical packed exFAT layout verified.");
         emit_result(operation, "not-needed", ""); exfat_plan_free(&plan); exfat_catalogue_free(&catalogue); exfat_close_volume(&source); free(real); free(identity); return 0;
@@ -546,7 +567,41 @@ commit_fail:
     journal_free(&state); free(real); free(identity); return 1;
 }
 
-static int recover_transaction(const char *device, const char *journal_path, char **error) {
+
+static size_t parse_ram_bytes(const char *text) {
+    if (strcmp(text, "auto") == 0) return ld_default_ram_limit();
+    errno = 0;
+    char *end = NULL;
+    unsigned long long value = strtoull(text, &end, 10);
+    if (errno != 0 || end == text) return 0U;
+    uint64_t multiplier = 1U;
+    if (*end == '\0' || strcmp(end, "B") == 0 || strcmp(end, "b") == 0) multiplier = 1U;
+    else if (strcasecmp(end, "K") == 0 || strcasecmp(end, "KB") == 0) multiplier = UINT64_C(1024);
+    else if (strcasecmp(end, "M") == 0 || strcasecmp(end, "MB") == 0) multiplier = UINT64_C(1024) * 1024U;
+    else if (strcasecmp(end, "G") == 0 || strcasecmp(end, "GB") == 0) multiplier = UINT64_C(1024) * 1024U * 1024U;
+    else return 0U;
+    if ((uint64_t)value > UINT64_MAX / multiplier) return 0U;
+    uint64_t bytes = (uint64_t)value * multiplier;
+    if (bytes == 0U || bytes > SIZE_MAX) return 0U;
+    return (size_t)bytes;
+}
+
+static size_t parse_batch_clusters(const char *text) {
+    errno = 0;
+    char *end = NULL;
+    unsigned long long value = strtoull(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || value > SIZE_MAX) return 0U;
+    return (size_t)value;
+}
+
+static int recover_transaction(const char *device, const char *journal_path,
+                               size_t ram_bytes, size_t batch_clusters,
+                               bool live_updates, char **error) {
+    bool handled = false;
+    int modern = exfat_relayout_recover(device, journal_path, ram_bytes,
+                                        batch_clusters, live_updates,
+                                        &handled, error);
+    if (handled) return modern;
     ExfatJournal state; if (journal_load(journal_path, &state, error) != 0) return 1;
     int result = 1; char *real = canonical_path(device, error), *identity = NULL; uint64_t size = 0;
     if (real == NULL || target_identity(device, &identity, &size, error) != 0) goto done;
@@ -584,6 +639,8 @@ int main(int argc, char **argv) {
     }
     if (strcmp(operation, "defrag") != 0 && strcmp(operation, "growth-defrag") != 0 && strcmp(operation, "recover") != 0) { usage(stderr); return 2; }
     const char *confirm = NULL, *journal = NULL; bool write = false, live_updates = false; int growth_percent = 10;
+    size_t ram_bytes = ld_default_ram_limit();
+    size_t batch_clusters = 0U;
     for (int i = 3; i < argc; ++i) {
         if (strcmp(argv[i], "--write") == 0) write = true;
         else if (strcmp(argv[i], "--live-updates") == 0) live_updates = true;
@@ -591,18 +648,20 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[i], "--journal") == 0 && i + 1 < argc) journal = argv[++i];
         else if (strcmp(argv[i], "--growth-percent") == 0 && i + 1 < argc) growth_percent = atoi(argv[++i]);
         else if (strcmp(argv[i], "--live-map-cells") == 0 && i + 1 < argc) { live_updates = atoi(argv[++i]) > 0; }
-        else if ((strcmp(argv[i], "--workers") == 0 || strcmp(argv[i], "--ram-buffer") == 0 || strcmp(argv[i], "--batch-clusters") == 0) && i + 1 < argc) { i++; }
+        else if (strcmp(argv[i], "--ram-buffer") == 0 && i + 1 < argc) { ram_bytes = parse_ram_bytes(argv[++i]); if (ram_bytes == 0U) { fprintf(stderr, "%s: invalid RAM buffer size\n", PROGRAM_NAME); return 2; } }
+        else if (strcmp(argv[i], "--batch-clusters") == 0 && i + 1 < argc) { batch_clusters = parse_batch_clusters(argv[++i]); if (batch_clusters == 0U) { fprintf(stderr, "%s: invalid batch cluster count\n", PROGRAM_NAME); return 2; } }
+        else if (strcmp(argv[i], "--workers") == 0 && i + 1 < argc) { i++; }
         else { fprintf(stderr, "%s: unknown or incomplete option: %s\n", PROGRAM_NAME, argv[i]); return 2; }
     }
     if (!write || confirm == NULL || journal == NULL || strcmp(confirm, device) != 0) {
         fprintf(stderr, "%s: raw exFAT mutation requires --write --confirm DEVICE --journal PATH\n", PROGRAM_NAME); return 2;
     }
     if (strcmp(operation, "growth-defrag") == 0 && growth_percent != 10) {
-        fprintf(stderr, "%s: Growth Defrag requires exactly 10%%%%\n", PROGRAM_NAME); return 2;
+        fprintf(stderr, "%s: Growth Defrag requires exactly 10%%\n", PROGRAM_NAME); return 2;
     }
     ld_stop_install_handlers(); char *error = NULL; int result = strcmp(operation, "recover") == 0
-        ? recover_transaction(device, journal, &error)
-        : build_and_commit(device, operation, journal, live_updates, &error);
+        ? recover_transaction(device, journal, ram_bytes, batch_clusters, live_updates, &error)
+        : build_and_commit(device, operation, journal, ram_bytes, batch_clusters, live_updates, &error);
     if (result != 0 && result != 130) {
         const char *message = error == NULL ? "native exFAT operation failed" : error; fprintf(stderr, "%s\n", message); emit_result(operation, "failed", message);
     }

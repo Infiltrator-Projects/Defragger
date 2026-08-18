@@ -320,7 +320,8 @@ target_link_libraries(linux-defragger-ntfs-worker PRIVATE
 
 add_library(linux-defragger-exfat-native STATIC
     gui/filesystems/exfat/native/exfat_common.c
-    gui/filesystems/exfat/native/exfat_plan.c)
+    gui/filesystems/exfat/native/exfat_plan.c
+    gui/filesystems/exfat/native/exfat_relayout.c)
 target_include_directories(linux-defragger-exfat-native PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/exfat/native"

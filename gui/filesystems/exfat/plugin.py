@@ -6,7 +6,7 @@
 """exFAT plugin facade.
 
 All exFAT on-disk parsing, allocation planning, directory-entry rewriting,
-raw staging, verification, commit and recovery live in ``native/`` C sources
+canonical dependency-aware relayout, verification, journalling and recovery live in ``native/`` C sources
 owned by this plugin. Python only adapts the native worker's JSON to the
 stable GUI/backend map contract.
 """

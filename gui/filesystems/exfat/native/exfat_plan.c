@@ -89,9 +89,9 @@ static void bitmap_set(uint8_t *bitmap, uint32_t cluster, bool allocated) {
 }
 
 int exfat_build_plan(ExfatVolume *volume, ExfatCatalogue *catalogue,
-                     bool growth, ExfatPlan *plan, char **error) {
+                     unsigned reserve_percent, ExfatPlan *plan, char **error) {
     memset(plan, 0, sizeof(*plan));
-    plan->growth = growth;
+    plan->reserve_percent = reserve_percent;
     plan->bitmap_length = catalogue->bitmap_length;
     plan->expected_bitmap = calloc(plan->bitmap_length, 1U);
     if (plan->expected_bitmap == NULL) {
@@ -106,8 +106,8 @@ int exfat_build_plan(ExfatVolume *volume, ExfatCatalogue *catalogue,
     for (size_t i = 0; i < catalogue->objects.count; ++i) {
         ExfatObject *object = order[i];
         object->target_start = (uint32_t)cursor;
-        object->reserve_clusters = growth && object->regular_file
-            ? (uint32_t)(((uint64_t)object->clusters.count * 10U + 99U) / 100U)
+        object->reserve_clusters = reserve_percent != 0U && object->regular_file
+            ? (uint32_t)(((uint64_t)object->clusters.count * reserve_percent + 99U) / 100U)
             : 0U;
         uint64_t end = cursor + object->clusters.count;
         uint64_t after_reserve = end + object->reserve_clusters;
@@ -440,7 +440,7 @@ int exfat_verify_stage(const char *path, ExfatCatalogue *source_catalogue,
                 exfat_set_error(error, "payload verification failed for %s", planned->path); goto done;
             }
         }
-        if (plan->growth && planned->regular_file) {
+        if (plan->reserve_percent != 0U && planned->regular_file) {
             uint32_t start = planned->target_start + (uint32_t)planned->clusters.count;
             for (uint32_t r = 0; r < planned->reserve_clusters; ++r) {
                 if (exfat_allocated(&current, start + r)) {

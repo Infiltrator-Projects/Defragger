@@ -83,7 +83,7 @@ typedef struct {
     uint8_t *expected_bitmap;
     size_t bitmap_length;
     uint32_t final_cluster;
-    bool growth;
+    unsigned reserve_percent;
 } ExfatPlan;
 
 void exfat_set_error(char **error, const char *format, ...);
@@ -110,7 +110,7 @@ void exfat_catalogue_free(ExfatCatalogue *catalogue);
 bool exfat_allocated(const ExfatCatalogue *catalogue, uint32_t cluster);
 size_t exfat_fragments(const ExfatClusterVec *clusters);
 
-int exfat_build_plan(ExfatVolume *volume, ExfatCatalogue *catalogue, bool growth, ExfatPlan *plan, char **error);
+int exfat_build_plan(ExfatVolume *volume, ExfatCatalogue *catalogue, unsigned reserve_percent, ExfatPlan *plan, char **error);
 void exfat_plan_free(ExfatPlan *plan);
 int exfat_build_stage(const char *source_path, const char *stage_path, ExfatVolume *source,
                       ExfatCatalogue *catalogue, const ExfatPlan *plan,
@@ -118,5 +118,30 @@ int exfat_build_stage(const char *source_path, const char *stage_path, ExfatVolu
 int exfat_verify_stage(const char *path, ExfatCatalogue *source_catalogue,
                        const ExfatPlan *plan, bool allow_dirty, char **error);
 int exfat_set_stage_boot_dirty(const char *stage_path, bool dirty, uint8_t **boot, size_t *length, char **error);
+
+
+typedef enum {
+    EXFAT_RELAYOUT_FAILED = -1,
+    EXFAT_RELAYOUT_FALLBACK = 0,
+    EXFAT_RELAYOUT_COMPLETED = 1,
+    EXFAT_RELAYOUT_NOT_NEEDED = 2,
+    EXFAT_RELAYOUT_STOPPED = 3,
+} ExfatRelayoutResult;
+
+typedef struct {
+    size_t workspace_clusters;
+    size_t staged_clusters;
+    size_t placed_clusters;
+    size_t objects_repositioned;
+    bool completed;
+} ExfatRelayoutStats;
+
+int exfat_relayout_in_place(const char *device, const char *journal_path,
+                            unsigned reserve_percent, size_t ram_bytes,
+                            size_t batch_clusters, bool live_updates,
+                            ExfatRelayoutStats *stats, char **error);
+int exfat_relayout_recover(const char *device, const char *journal_path,
+                           size_t ram_bytes, size_t batch_clusters,
+                           bool live_updates, bool *handled, char **error);
 
 #endif
