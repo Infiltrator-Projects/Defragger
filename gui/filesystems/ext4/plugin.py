@@ -6,7 +6,7 @@
 """EXT2/3/4 plugin facade.
 
 All filesystem parsing, planning, relocation and verification live in the
-plugin-owned ``native/`` C engine.  Python only adapts its stable JSON output to
+plugin-owned ``native/`` C engine. Python only adapts its stable JSON output to
 the GUI map contract.
 """
 
@@ -67,6 +67,28 @@ class ExtBackend(FilesystemBackend):
         )
 
     @staticmethod
+    def _run_metadata_native(path: str) -> subprocess.CompletedProcess[str]:
+        override = os.environ.get("LINUX_DEFRAGGER_EXT_METADATA_WORKER")
+        if override:
+            worker = Path(override)
+        else:
+            anchor = Path(__file__).resolve().parents[2] / "core"
+            primary = Path(resolve_program("ext-native", anchor=anchor))
+            worker = primary.with_name("linux-defragger-ext-metadata-worker")
+        if not worker.is_file() or not os.access(worker, os.X_OK):
+            raise FileNotFoundError(
+                f"could not locate native EXT metadata classifier: {worker}"
+            )
+        return subprocess.run(
+            [str(worker), "analyse-json", path],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "LC_ALL": "C", "LANG": "C"},
+        )
+
+    @staticmethod
     def _json_result(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
         try:
             result = json.loads(completed.stdout)
@@ -78,6 +100,24 @@ class ExtBackend(FilesystemBackend):
         if not isinstance(result, dict):
             raise BackendError("native EXT worker returned a non-object result")
         return result
+
+    @staticmethod
+    def _range_list(payload: dict[str, Any], name: str, total_blocks: int) -> list[tuple[int, int]]:
+        raw = payload.get(name, [])
+        if not isinstance(raw, list):
+            raise BackendError(f"native EXT analyser returned invalid {name}")
+        ranges: list[tuple[int, int]] = []
+        for item in raw:
+            if not isinstance(item, list) or len(item) != 2:
+                raise BackendError(f"native EXT analyser returned invalid {name}")
+            try:
+                start, end = int(item[0]), int(item[1])
+            except (TypeError, ValueError) as exc:
+                raise BackendError(f"native EXT analyser returned invalid {name}") from exc
+            if start < 0 or end <= start or end > total_blocks:
+                raise BackendError(f"native EXT analyser returned out-of-range {name}")
+            ranges.append((start, end))
+        return ranges
 
     def probe(self, path: str) -> bool:
         try:
@@ -101,15 +141,30 @@ class ExtBackend(FilesystemBackend):
         try:
             block_size = int(payload["block_size"])
             total_blocks = int(payload["total_blocks"])
-            free_ranges = [
-                (int(item[0]), int(item[1]))
-                for item in payload["free_ranges"]
-                if isinstance(item, list) and len(item) == 2
-            ]
         except (KeyError, TypeError, ValueError) as exc:
             raise BackendError("native EXT analyser returned incomplete geometry") from exc
         if block_size <= 0 or total_blocks <= 0:
             raise BackendError("native EXT analyser returned invalid geometry")
+        free_ranges = self._range_list(payload, "free_ranges", total_blocks)
+
+        try:
+            metadata_completed = self._run_metadata_native(path)
+        except (FileNotFoundError, OSError) as exc:
+            raise BackendError(str(exc)) from exc
+        if metadata_completed.returncode != 0:
+            detail = metadata_completed.stderr.strip() or metadata_completed.stdout.strip()
+            raise BackendError(detail or "native EXT metadata classifier failed")
+        metadata_payload = self._json_result(metadata_completed)
+        try:
+            metadata_block_size = int(metadata_payload["block_size"])
+            metadata_total_blocks = int(metadata_payload["total_blocks"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise BackendError("native EXT metadata classifier returned incomplete geometry") from exc
+        if metadata_block_size != block_size or metadata_total_blocks != total_blocks:
+            raise BackendError("native EXT metadata classifier returned mismatched geometry")
+        metadata_ranges = self._range_list(
+            metadata_payload, "metadata_ranges", total_blocks
+        )
 
         used_ranges = complement_ranges(total_blocks, free_ranges)
         states = [(start, end, 0) for start, end in free_ranges]
@@ -124,23 +179,27 @@ class ExtBackend(FilesystemBackend):
             {
                 "fragmentation_available": True,
                 "fragmentation_basis": "native C EXT inode allocation scanner",
+                "metadata_basis": "native C EXT block-group and reserved-inode classifier",
                 "inodes_scanned": int(payload.get("inodes_scanned", 0)),
                 "malformed_inodes": int(payload.get("malformed_inodes", 0)),
                 "growth_10_satisfied": bool(payload.get("growth_10_satisfied", False)),
             },
         )
-        fragmented_ranges = [
-            (int(item[0]), int(item[1]))
-            for item in payload.get("fragmented_ranges", [])
-            if isinstance(item, list) and len(item) == 2
-        ]
-        directory_ranges = [
-            (int(item[0]), int(item[1]))
-            for item in payload.get("directory_ranges", [])
-            if isinstance(item, list) and len(item) == 2
-        ]
-        fragmented_blocks = overlay_ranges(result["cells"], fragmented_ranges, "fragmented")
-        directory_blocks = overlay_ranges(result["cells"], directory_ranges, "directory")
+        fragmented_ranges = self._range_list(
+            payload, "fragmented_ranges", total_blocks
+        )
+        directory_ranges = self._range_list(
+            payload, "directory_ranges", total_blocks
+        )
+        fragmented_blocks = overlay_ranges(
+            result["cells"], fragmented_ranges, "fragmented"
+        )
+        directory_blocks = overlay_ranges(
+            result["cells"], directory_ranges, "directory"
+        )
+        metadata_blocks = overlay_ranges(
+            result["cells"], metadata_ranges, "bad"
+        )
         result.update(
             {
                 "regular_files": int(payload.get("regular_files", 0)),
@@ -158,6 +217,7 @@ class ExtBackend(FilesystemBackend):
             {
                 "fragmented_blocks_mapped": fragmented_blocks,
                 "directory_blocks_mapped": directory_blocks,
+                "metadata_blocks_mapped": metadata_blocks,
             }
         )
         return result
