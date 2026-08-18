@@ -32,13 +32,20 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import textwrap
 
           workflow = Path('.github/workflows/fat16-adaptive-patch.yml').read_text(encoding='utf-8')
           marker = "          python3 - <<'PY'\n"
           start = workflow.index(marker) + len(marker)
           end = workflow.index("\n          PY\n", start)
-          code = textwrap.dedent(workflow[start:end])
+          lines = workflow[start:end].splitlines()
+          if not lines:
+              raise SystemExit('embedded patch script is empty')
+          indent = len(lines[0]) - len(lines[0].lstrip(' '))
+          prefix = ' ' * indent
+          code = '\n'.join(
+              line[indent:] if prefix and line.startswith(prefix) else line
+              for line in lines
+          )
           exec(compile(code, 'fat16-adaptive-patch', 'exec'))
           PY
 
