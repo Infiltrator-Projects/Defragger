@@ -140,7 +140,7 @@ class OperationCoordinator:
             else:
                 self.view.append_log("\nRefreshing the allocation map…")
             self.view.append_log(
-                f"Analysing {volume.normalized_fstype.upper()} volume "
+                f"Analysing {volume.display_fstype.upper()} volume "
                 f"{volume.path}…"
             )
             if volume.mounted:
