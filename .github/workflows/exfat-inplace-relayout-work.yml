@@ -36,9 +36,11 @@ jobs:
         run: |
           set -euo pipefail
           cp tests/apply_exfat_inplace_relayout_patch.py /tmp/apply-exfat-relayout.py
+          cp tests/apply_exfat_inplace_relayout_fixups.py /tmp/apply-exfat-relayout-fixups.py
           git fetch origin main c-first-exfat-relayout-125
           git checkout -B generated origin/main
           python3 /tmp/apply-exfat-relayout.py
+          python3 /tmp/apply-exfat-relayout-fixups.py
 
       - name: Configure and compile exFAT worker with warnings as errors
         shell: bash
