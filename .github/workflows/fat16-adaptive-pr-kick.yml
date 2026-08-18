@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: FAT16 adaptive PR validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config python3 python3-gi python3-cairo \
+            gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Apply scheduler patch embedded in push workflow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/fat16-adaptive-patch.yml').read_text(encoding='utf-8')
+          marker = "          python3 - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          code = textwrap.dedent(workflow[start:end])
+          exec(compile(code, 'fat16-adaptive-patch', 'exec'))
+          PY
+
+      - name: Build with warnings as errors
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build -j2
+
+      - name: Run FAT relayout regressions
+        run: ./tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
+
+      - name: Commit validated scheduler
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- gui/filesystems/fat/native/writer.c; then
+            echo 'writer.c already contains the adaptive scheduler'
+            exit 0
+          fi
+          git add gui/filesystems/fat/native/writer.c
+          git commit -m "Batch mixed FAT dependency blockers [adaptive-patched]"
+          git push origin HEAD:${{ github.head_ref }}
