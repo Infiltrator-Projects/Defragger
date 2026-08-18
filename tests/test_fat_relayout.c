@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "fat_growth.h"
+#include "fat_relayout.h"
 
 #define CHECK(condition)                                                     \
     do {                                                                     \
@@ -28,8 +28,8 @@ static uint32_t next_random(void) {
 }
 
 static void check_random_plans(Fat32 *filesystem) {
-    GrowthObject items[8] = {0};
-    GrowthObjectList objects = {.v = items, .cap = 8};
+    FatRelayoutObject items[8] = {0};
+    FatRelayoutObjectList objects = {.v = items, .cap = 8};
     for (size_t iteration = 0; iteration < 5000; iteration++) {
         memset(filesystem->fat, 0,
                filesystem->fat_entry_count * sizeof(*filesystem->fat));
@@ -48,7 +48,7 @@ static void check_random_plans(Fat32 *filesystem) {
 
         size_t reserve_total = 0;
         uint32_t layout_end = 0;
-        if (!plan_growth_layout(
+        if (!fat_relayout_plan_layout(
                 filesystem, &objects, 10, 90,
                 &reserve_total, &layout_end)) {
             continue;
@@ -57,7 +57,7 @@ static void check_random_plans(Fat32 *filesystem) {
         size_t expected_reserve = 0;
         uint32_t cursor = 2;
         for (size_t index = 0; index < objects.len; index++) {
-            GrowthObject *item = &items[index];
+            FatRelayoutObject *item = &items[index];
             CHECK(item->target >= cursor);
             for (size_t offset = 0; offset < item->clusters; offset++) {
                 CHECK(item->target + offset < 90);
@@ -93,7 +93,7 @@ int main(void) {
     );
     CHECK(filesystem.fat != NULL);
 
-    GrowthObject items[] = {
+    FatRelayoutObject items[] = {
         {
             .is_root = true,
             .is_dir = true,
@@ -107,14 +107,14 @@ int main(void) {
             .clusters = 10,
         },
     };
-    GrowthObjectList objects = {
+    FatRelayoutObjectList objects = {
         .v = items,
         .len = sizeof(items) / sizeof(items[0]),
         .cap = sizeof(items) / sizeof(items[0]),
     };
     size_t reserve = 0;
     uint32_t final_cluster = 0;
-    CHECK(plan_growth_layout(
+    CHECK(fat_relayout_plan_layout(
         &filesystem,
         &objects,
         10,
@@ -130,7 +130,7 @@ int main(void) {
     CHECK(final_cluster == 15);
 
     filesystem.fat[2] = FAT32_BAD;
-    CHECK(plan_growth_layout(
+    CHECK(fat_relayout_plan_layout(
         &filesystem,
         &objects,
         10,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-/* FAT canonical growth-layout model and pure planner. */
+/* Shared FAT12/FAT16/FAT32 canonical relayout model and pure planner. */
 
 #include <stdint.h>
 #include <stdio.h>
@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "ld_runtime.h"
-#include "fat_growth.h"
+#include "fat_relayout.h"
 
 static uint32_t chain_min_cluster(const U32Vec *chain) {
     uint32_t minimum = UINT32_MAX;
@@ -17,7 +17,7 @@ static uint32_t chain_min_cluster(const U32Vec *chain) {
     return minimum;
 }
 
-static void growth_object_list_push(GrowthObjectList *list, GrowthObject object) {
+static void relayout_object_list_push(FatRelayoutObjectList *list, FatRelayoutObject object) {
     if (list->len == list->cap) {
         size_t new_cap = list->cap == 0 ? 128 : list->cap * 2;
         list->v = ld_xrealloc(list->v, new_cap * sizeof(*list->v));
@@ -26,15 +26,15 @@ static void growth_object_list_push(GrowthObjectList *list, GrowthObject object)
     list->v[list->len++] = object;
 }
 
-void growth_object_list_free(GrowthObjectList *list) {
+void fat_relayout_object_list_free(FatRelayoutObjectList *list) {
     for (size_t i = 0; i < list->len; i++) free(list->v[i].path);
     free(list->v);
     memset(list, 0, sizeof(*list));
 }
 
-static int compare_growth_objects_asc(const void *a, const void *b) {
-    const GrowthObject *oa = a;
-    const GrowthObject *ob = b;
+static int compare_relayout_objects_asc(const void *a, const void *b) {
+    const FatRelayoutObject *oa = a;
+    const FatRelayoutObject *ob = b;
     if (oa->physical_first != ob->physical_first) {
         return oa->physical_first < ob->physical_first ? -1 : 1;
     }
@@ -43,12 +43,12 @@ static int compare_growth_objects_asc(const void *a, const void *b) {
     return strcmp(oa->path, ob->path);
 }
 
-GrowthObjectList build_growth_objects(Fat32 *fs, const FileList *files,
+FatRelayoutObjectList fat_relayout_build_objects(Fat32 *fs, const FileList *files,
                                                size_t *largest_out,
                                                uint64_t *regular_clusters_out,
                                                size_t *regular_files_out,
                                                size_t *directories_out) {
-    GrowthObjectList objects = {0};
+    FatRelayoutObjectList objects = {0};
     size_t largest = 0;
     uint64_t regular_clusters = 0;
     size_t regular_files = 0;
@@ -56,7 +56,7 @@ GrowthObjectList build_growth_objects(Fat32 *fs, const FileList *files,
 
     U32Vec root = filesystem_root_chain(fs);
     if (root.len != 0) {
-        growth_object_list_push(&objects, (GrowthObject){
+        relayout_object_list_push(&objects, (FatRelayoutObject){
             .is_root = true,
             .is_dir = true,
             .path = ld_xstrdup("<root directory>"),
@@ -71,7 +71,7 @@ GrowthObjectList build_growth_objects(Fat32 *fs, const FileList *files,
     for (size_t i = 0; i < files->len; i++) {
         const FileRecord *file = &files->v[i];
         if (file->chain.len == 0) continue;
-        growth_object_list_push(&objects, (GrowthObject){
+        relayout_object_list_push(&objects, (FatRelayoutObject){
             .is_root = false,
             .is_dir = file->is_dir,
             .path = ld_xstrdup(file->path),
@@ -85,7 +85,7 @@ GrowthObjectList build_growth_objects(Fat32 *fs, const FileList *files,
             regular_clusters += file->chain.len;
         }
     }
-    qsort(objects.v, objects.len, sizeof(objects.v[0]), compare_growth_objects_asc);
+    qsort(objects.v, objects.len, sizeof(objects.v[0]), compare_relayout_objects_asc);
     *largest_out = largest;
     *regular_clusters_out = regular_clusters;
     *regular_files_out = regular_files;
@@ -93,11 +93,11 @@ GrowthObjectList build_growth_objects(Fat32 *fs, const FileList *files,
     return objects;
 }
 
-static bool growth_cluster_is_barrier(const Fat32 *fs, uint32_t cluster) {
+static bool relayout_cluster_is_barrier(const Fat32 *fs, uint32_t cluster) {
     return fat_value(fs, cluster) == fat_bad_value(fs);
 }
 
-static bool growth_find_usable_run(const Fat32 *fs, uint32_t cursor, size_t length,
+static bool relayout_find_usable_run(const Fat32 *fs, uint32_t cursor, size_t length,
                                    uint32_t limit_exclusive, uint32_t *start_out) {
     if (length == 0 || cursor < 2) return false;
     uint32_t start = cursor;
@@ -107,7 +107,7 @@ static bool growth_find_usable_run(const Fat32 *fs, uint32_t cursor, size_t leng
         bool clear = true;
         for (size_t i = 0; i < length; i++) {
             uint32_t cluster = start + (uint32_t)i;
-            if (growth_cluster_is_barrier(fs, cluster)) {
+            if (relayout_cluster_is_barrier(fs, cluster)) {
                 if (cluster == UINT32_MAX) return false;
                 start = cluster + 1;
                 clear = false;
@@ -122,13 +122,13 @@ static bool growth_find_usable_run(const Fat32 *fs, uint32_t cursor, size_t leng
     return false;
 }
 
-static bool growth_advance_reserve(const Fat32 *fs, uint32_t cursor, size_t reserve,
+static bool relayout_advance_reserve(const Fat32 *fs, uint32_t cursor, size_t reserve,
                                    uint32_t limit_exclusive, uint32_t *cursor_out) {
     size_t remaining = reserve;
     uint32_t c = cursor;
     while (remaining != 0) {
         if (c >= limit_exclusive) return false;
-        if (!growth_cluster_is_barrier(fs, c)) remaining--;
+        if (!relayout_cluster_is_barrier(fs, c)) remaining--;
         if (c == UINT32_MAX) return false;
         c++;
     }
@@ -136,15 +136,15 @@ static bool growth_advance_reserve(const Fat32 *fs, uint32_t cursor, size_t rese
     return c <= limit_exclusive;
 }
 
-bool plan_growth_layout(Fat32 *fs, GrowthObjectList *objects,
+bool fat_relayout_plan_layout(Fat32 *fs, FatRelayoutObjectList *objects,
                                unsigned percent, uint32_t workspace_start,
                                size_t *reserve_total_out, uint32_t *layout_end_out) {
     uint32_t cursor = 2;
     size_t reserve_total = 0;
     for (size_t i = 0; i < objects->len; i++) {
-        GrowthObject *object = &objects->v[i];
+        FatRelayoutObject *object = &objects->v[i];
         uint32_t target = 0;
-        if (!growth_find_usable_run(fs, cursor, object->clusters,
+        if (!relayout_find_usable_run(fs, cursor, object->clusters,
                                     workspace_start, &target)) {
             return false;
         }
@@ -159,7 +159,7 @@ bool plan_growth_layout(Fat32 *fs, GrowthObjectList *objects,
             object->reserve_after = reserve;
             if (reserve > SIZE_MAX - reserve_total) return false;
             reserve_total += reserve;
-            if (!growth_advance_reserve(fs, cursor, reserve,
+            if (!relayout_advance_reserve(fs, cursor, reserve,
                                         workspace_start, &cursor)) {
                 return false;
             }
@@ -178,18 +178,19 @@ bool chain_is_exact_run(const U32Vec *chain, uint32_t start) {
     return true;
 }
 
-/* Growth Defrag is intended to be idempotent.  The preflight is deliberately
+/* Canonical FAT relayout is idempotent for both zero-gap Defragment and
+   reserve-bearing Growth Defrag.  The preflight is deliberately
    read-only and records the first reason an existing layout cannot be accepted.
    It is run before any journal is created or any FAT/data write is attempted. */
-GrowthPreflight growth_layout_preflight(Fat32 *fs, const FileList *files,
+FatRelayoutPreflight fat_relayout_preflight(Fat32 *fs, const FileList *files,
                                                 unsigned percent) {
-    GrowthPreflight result = {0};
+    FatRelayoutPreflight result = {0};
 
     U32Vec root = filesystem_root_chain(fs);
     if (root.len != 0) {
         result.directories++;
         if (!chain_is_exact_run(&root, root.v[0])) {
-            result.issue = GROWTH_PREFLIGHT_ROOT_FRAGMENTED;
+            result.issue = FAT_RELAYOUT_PREFLIGHT_ROOT_FRAGMENTED;
             result.problem_path = ld_xstrdup("<root directory>");
             u32vec_free(&root);
             return result;
@@ -201,7 +202,7 @@ GrowthPreflight growth_layout_preflight(Fat32 *fs, const FileList *files,
         const FileRecord *file = &files->v[i];
         if (file->chain.len == 0) continue;
         if (!chain_is_exact_run(&file->chain, file->chain.v[0])) {
-            result.issue = GROWTH_PREFLIGHT_OBJECT_FRAGMENTED;
+            result.issue = FAT_RELAYOUT_PREFLIGHT_OBJECT_FRAGMENTED;
             result.problem_path = ld_xstrdup(file->path);
             return result;
         }
@@ -214,7 +215,7 @@ GrowthPreflight growth_layout_preflight(Fat32 *fs, const FileList *files,
         uint64_t scaled = (uint64_t)file->chain.len * percent;
         size_t reserve = (size_t)((scaled + 99) / 100);
         if (reserve > SIZE_MAX - result.reserve_clusters) {
-            result.issue = GROWTH_PREFLIGHT_RESERVE_SHORT;
+            result.issue = FAT_RELAYOUT_PREFLIGHT_RESERVE_SHORT;
             result.problem_path = ld_xstrdup(file->path);
             result.required_reserve = reserve;
             return result;
@@ -236,7 +237,7 @@ GrowthPreflight growth_layout_preflight(Fat32 *fs, const FileList *files,
             cursor64++;
         }
         if (available < reserve) {
-            result.issue = GROWTH_PREFLIGHT_RESERVE_SHORT;
+            result.issue = FAT_RELAYOUT_PREFLIGHT_RESERVE_SHORT;
             result.problem_path = ld_xstrdup(file->path);
             result.required_reserve = reserve;
             result.available_reserve = available;
@@ -244,29 +245,29 @@ GrowthPreflight growth_layout_preflight(Fat32 *fs, const FileList *files,
         }
     }
 
-    result.issue = result.regular_files == 0 ? GROWTH_PREFLIGHT_NO_FILES : GROWTH_PREFLIGHT_OK;
+    result.issue = result.regular_files == 0 ? FAT_RELAYOUT_PREFLIGHT_NO_FILES : FAT_RELAYOUT_PREFLIGHT_OK;
     return result;
 }
 
-void growth_preflight_free(GrowthPreflight *preflight) {
+void fat_relayout_preflight_free(FatRelayoutPreflight *preflight) {
     free(preflight->problem_path);
     preflight->problem_path = NULL;
 }
 
 /* A second, independent idempotence check recognises the exact canonical
-   physical layout produced by Growth Defrag.  It compares every object's live
+   physical layout produced by the shared FAT relayout planner.  It compares every object's live
    first cluster with a fresh read-only plan generated from the current physical
    order.  scan_files() has already rejected lost or unreferenced FAT chains, so
    matching canonical targets also proves that the planned inter-file gaps are
    genuinely unallocated. */
-bool growth_layout_matches_canonical(Fat32 *fs, GrowthObjectList *objects,
+bool fat_relayout_matches_canonical(Fat32 *fs, FatRelayoutObjectList *objects,
                                             unsigned percent,
                                             size_t *reserve_clusters_out) {
     if (fs->max_cluster == UINT32_MAX) return false;
     uint32_t limit_exclusive = fs->max_cluster + 1;
     size_t reserve_total = 0;
     uint32_t layout_end = 0;
-    if (!plan_growth_layout(fs, objects, percent, limit_exclusive,
+    if (!fat_relayout_plan_layout(fs, objects, percent, limit_exclusive,
                             &reserve_total, &layout_end)) {
         return false;
     }
@@ -278,24 +279,24 @@ bool growth_layout_matches_canonical(Fat32 *fs, GrowthObjectList *objects,
     return objects->len != 0;
 }
 
-void print_growth_preflight_failure(const GrowthPreflight *preflight,
+void fat_relayout_print_preflight_failure(const FatRelayoutPreflight *preflight,
                                            unsigned percent,
                                            const char *layout_name) {
     switch (preflight->issue) {
-        case GROWTH_PREFLIGHT_NO_FILES:
+        case FAT_RELAYOUT_PREFLIGHT_NO_FILES:
             fprintf(stderr,
                     "%s preflight result: no allocated regular files were found.\n", layout_name);
             break;
-        case GROWTH_PREFLIGHT_ROOT_FRAGMENTED:
+        case FAT_RELAYOUT_PREFLIGHT_ROOT_FRAGMENTED:
             fprintf(stderr,
                     "%s preflight result: the FAT root directory is fragmented.\n", layout_name);
             break;
-        case GROWTH_PREFLIGHT_OBJECT_FRAGMENTED:
+        case FAT_RELAYOUT_PREFLIGHT_OBJECT_FRAGMENTED:
             fprintf(stderr,
                     "%s preflight result: %s is fragmented.\n",
                     layout_name, preflight->problem_path == NULL ? "an allocated object" : preflight->problem_path);
             break;
-        case GROWTH_PREFLIGHT_RESERVE_SHORT:
+        case FAT_RELAYOUT_PREFLIGHT_RESERVE_SHORT:
             fprintf(stderr,
                     "%s preflight result: %s has %zu usable free cluster%s immediately "
                     "after it; %zu %s required for a %u%% reserve.\n",
@@ -307,7 +308,7 @@ void print_growth_preflight_failure(const GrowthPreflight *preflight,
                     preflight->required_reserve == 1 ? "is" : "are",
                     percent);
             break;
-        case GROWTH_PREFLIGHT_OK:
+        case FAT_RELAYOUT_PREFLIGHT_OK:
             break;
     }
     fprintf(stderr,

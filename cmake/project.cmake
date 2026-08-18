@@ -150,7 +150,7 @@ add_executable(linux-defragger-fat-worker
     gui/filesystems/fat/native/writer.c
     gui/filesystems/fat/native/fat_analysis.c
     gui/filesystems/fat/native/fat_directory.c
-    gui/filesystems/fat/native/fat_growth.c
+    gui/filesystems/fat/native/fat_relayout.c
     gui/filesystems/fat/native/fat_io.c
     gui/filesystems/fat/native/fat_journal.c
     gui/filesystems/fat/native/fat_relocation.c
@@ -572,23 +572,23 @@ if(BUILD_TESTING)
         linux-defragger-core)
     add_test(NAME linux-defragger-fat-journal
         COMMAND linux-defragger-fat-journal-test)
-    add_executable(linux-defragger-fat-growth-test
-        tests/test_fat_growth.c
+    add_executable(linux-defragger-fat-relayout-model-test
+        tests/test_fat_relayout.c
         gui/filesystems/fat/native/fat_directory.c
-        gui/filesystems/fat/native/fat_growth.c
+        gui/filesystems/fat/native/fat_relayout.c
         gui/filesystems/fat/native/fat_volume.c)
-    target_include_directories(linux-defragger-fat-growth-test PRIVATE
+    target_include_directories(linux-defragger-fat-relayout-model-test PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
         "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/fat/native"
         "${LD_GENERATED_DIR}")
-    target_compile_options(linux-defragger-fat-growth-test PRIVATE
+    target_compile_options(linux-defragger-fat-relayout-model-test PRIVATE
         ${LD_WARNING_FLAGS})
-    target_compile_definitions(linux-defragger-fat-growth-test PRIVATE
+    target_compile_definitions(linux-defragger-fat-relayout-model-test PRIVATE
         _FILE_OFFSET_BITS=64 _GNU_SOURCE)
-    target_link_libraries(linux-defragger-fat-growth-test PRIVATE
+    target_link_libraries(linux-defragger-fat-relayout-model-test PRIVATE
         linux-defragger-core)
-    add_test(NAME linux-defragger-fat-growth
-        COMMAND linux-defragger-fat-growth-test)
+    add_test(NAME linux-defragger-fat-relayout-model
+        COMMAND linux-defragger-fat-relayout-model-test)
     add_test(NAME linux-defragger-tests
              COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.sh
                      $<TARGET_FILE:linux-defragger-fat-worker>)

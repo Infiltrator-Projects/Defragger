@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef LINUX_DEFRAGGER_FAT_GROWTH_H
-#define LINUX_DEFRAGGER_FAT_GROWTH_H
+#ifndef LINUX_DEFRAGGER_FAT_RELAYOUT_H
+#define LINUX_DEFRAGGER_FAT_RELAYOUT_H
+
+/* This public model is deliberately FAT-width neutral.  FAT12, FAT16 and
+   FAT32 geometry stays in Fat32/FatGeometry; relayout policy is only the
+   requested post-file reserve percentage. */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -17,13 +21,13 @@ typedef struct {
     uint32_t physical_first;
     uint32_t target;
     size_t reserve_after;
-} GrowthObject;
+} FatRelayoutObject;
 
 typedef struct {
-    GrowthObject *v;
+    FatRelayoutObject *v;
     size_t len;
     size_t cap;
-} GrowthObjectList;
+} FatRelayoutObjectList;
 
 typedef struct {
     size_t objects_moved;
@@ -41,28 +45,28 @@ typedef struct {
     bool canonical_layout_verified;
     size_t checked_files;
     size_t checked_directories;
-} GrowthStats;
+} FatRelayoutStats;
 
 typedef enum {
-    GROWTH_PREFLIGHT_OK = 0,
-    GROWTH_PREFLIGHT_NO_FILES,
-    GROWTH_PREFLIGHT_ROOT_FRAGMENTED,
-    GROWTH_PREFLIGHT_OBJECT_FRAGMENTED,
-    GROWTH_PREFLIGHT_RESERVE_SHORT,
-} GrowthPreflightIssue;
+    FAT_RELAYOUT_PREFLIGHT_OK = 0,
+    FAT_RELAYOUT_PREFLIGHT_NO_FILES,
+    FAT_RELAYOUT_PREFLIGHT_ROOT_FRAGMENTED,
+    FAT_RELAYOUT_PREFLIGHT_OBJECT_FRAGMENTED,
+    FAT_RELAYOUT_PREFLIGHT_RESERVE_SHORT,
+} FatRelayoutPreflightIssue;
 
 typedef struct {
-    GrowthPreflightIssue issue;
+    FatRelayoutPreflightIssue issue;
     size_t regular_files;
     size_t directories;
     size_t reserve_clusters;
     size_t required_reserve;
     size_t available_reserve;
     char *problem_path;
-} GrowthPreflight;
+} FatRelayoutPreflight;
 
-void growth_object_list_free(GrowthObjectList *list);
-GrowthObjectList build_growth_objects(
+void fat_relayout_object_list_free(FatRelayoutObjectList *list);
+FatRelayoutObjectList fat_relayout_build_objects(
     Fat32 *filesystem,
     const FileList *files,
     size_t *largest_out,
@@ -70,29 +74,29 @@ GrowthObjectList build_growth_objects(
     size_t *regular_files_out,
     size_t *directories_out
 );
-bool plan_growth_layout(
+bool fat_relayout_plan_layout(
     Fat32 *filesystem,
-    GrowthObjectList *objects,
+    FatRelayoutObjectList *objects,
     unsigned percent,
     uint32_t workspace_start,
     size_t *reserve_total_out,
     uint32_t *layout_end_out
 );
 bool chain_is_exact_run(const U32Vec *chain, uint32_t start);
-GrowthPreflight growth_layout_preflight(
+FatRelayoutPreflight fat_relayout_preflight(
     Fat32 *filesystem,
     const FileList *files,
     unsigned percent
 );
-void growth_preflight_free(GrowthPreflight *preflight);
-bool growth_layout_matches_canonical(
+void fat_relayout_preflight_free(FatRelayoutPreflight *preflight);
+bool fat_relayout_matches_canonical(
     Fat32 *filesystem,
-    GrowthObjectList *objects,
+    FatRelayoutObjectList *objects,
     unsigned percent,
     size_t *reserve_clusters_out
 );
-void print_growth_preflight_failure(
-    const GrowthPreflight *preflight,
+void fat_relayout_print_preflight_failure(
+    const FatRelayoutPreflight *preflight,
     unsigned percent,
     const char *layout_name
 );

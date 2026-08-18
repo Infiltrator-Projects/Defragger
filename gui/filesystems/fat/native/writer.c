@@ -31,7 +31,7 @@
 #include "version.h"
 #include "fat_analysis.h"
 #include "fat_directory.h"
-#include "fat_growth.h"
+#include "fat_relayout.h"
 #include "fat_io.h"
 #include "fat_journal.h"
 #include "fat_relocation.h"
@@ -108,7 +108,7 @@ static size_t terminal_workspace_capacity(const Fat32 *fs) {
     return capacity;
 }
 
-static size_t growth_object_cluster_total(const GrowthObjectList *objects) {
+static size_t relayout_object_cluster_total(const FatRelayoutObjectList *objects) {
     size_t total = 0;
     for (size_t i = 0; i < objects->len; i++) {
         if (objects->v[i].clusters > SIZE_MAX - total) {
@@ -221,7 +221,7 @@ static bool cluster_range_is_free(const Fat32 *fs, uint32_t start, size_t length
     return true;
 }
 
-static const U32Vec *find_growth_object_chain(Fat32 *fs, const GrowthObject *object,
+static const U32Vec *find_relayout_object_chain(Fat32 *fs, const FatRelayoutObject *object,
                                               FileList *files, U32Vec *root_chain,
                                               const FileRecord **file_out) {
     *file_out = NULL;
@@ -248,7 +248,7 @@ static uint32_t current_chain_min_cluster(const U32Vec *chain) {
     return minimum;
 }
 
-static void growth_move_chain(Fat32 *fs, const DirRefList *dir_refs,
+static void relayout_move_chain(Fat32 *fs, const DirRefList *dir_refs,
                               const U32Vec *chain, uint32_t destination,
                               const char *journal_path, bool emit_map) {
     RelocationMove *moves = ld_xmalloc(chain->len * sizeof(*moves));
@@ -265,7 +265,7 @@ static void growth_move_chain(Fat32 *fs, const DirRefList *dir_refs,
     if (emit_map) fat_analysis_emit_live_map_update(fs);
 }
 
-static size_t automatic_growth_batch_clusters(const Fat32 *fs) {
+static size_t automatic_relayout_batch_clusters(const Fat32 *fs) {
     size_t by_ram = g_io.ram_limit / (size_t)fs->cluster_size;
     size_t four_gb = (size_t)(UINT64_C(4) * 1024 * 1024 * 1024 / fs->cluster_size);
     if (by_ram > four_gb) by_ram = four_gb;
@@ -273,7 +273,7 @@ static size_t automatic_growth_batch_clusters(const Fat32 *fs) {
     return by_ram;
 }
 
-static bool growth_batch_can_add(const Fat32 *fs, const U32Vec *chain,
+static bool relayout_batch_can_add(const Fat32 *fs, const U32Vec *chain,
                                  uint32_t destination,
                                  const uint8_t *source_seen,
                                  const uint8_t *destination_seen) {
@@ -298,13 +298,13 @@ typedef struct {
 static bool execute_forward_compaction(
     Fat32 *fs,
     const char *journal_path,
-    GrowthObjectList *objects,
+    FatRelayoutObjectList *objects,
     uint32_t workspace_start,
     size_t workspace_clusters,
     size_t object_batch_limit,
     size_t cluster_batch_limit,
     const char *layout_name,
-    GrowthStats *stats
+    FatRelayoutStats *stats
 ) {
     size_t next = 0;
     size_t remaining = objects->len;
@@ -322,10 +322,10 @@ static bool execute_forward_compaction(
         FileList current_files = scan_files(fs, &current_refs);
 
         while (next < objects->len) {
-            GrowthObject *object = &objects->v[next];
+            FatRelayoutObject *object = &objects->v[next];
             const FileRecord *current_file = NULL;
             U32Vec local_root = {0};
-            const U32Vec *chain = find_growth_object_chain(
+            const U32Vec *chain = find_relayout_object_chain(
                 fs, object, &current_files, &local_root, &current_file);
             (void)current_file;
             if (chain->len != object->clusters) {
@@ -360,10 +360,10 @@ static bool execute_forward_compaction(
         size_t candidate = next;
         while (candidate < objects->len &&
                batch_objects < object_batch_limit) {
-            GrowthObject *object = &objects->v[candidate];
+            FatRelayoutObject *object = &objects->v[candidate];
             const FileRecord *current_file = NULL;
             U32Vec local_root = {0};
-            const U32Vec *chain = find_growth_object_chain(
+            const U32Vec *chain = find_relayout_object_chain(
                 fs, object, &current_files, &local_root, &current_file);
             (void)current_file;
             if (chain->len != object->clusters) {
@@ -435,7 +435,7 @@ static bool execute_forward_compaction(
         for (size_t item_index = 0;
              item_index < batch_objects && targets_release_with_batch;
              item_index++) {
-            const GrowthObject *object =
+            const FatRelayoutObject *object =
                 &objects->v[items[item_index].object_index];
             uint64_t target_end64 =
                 (uint64_t)object->target + object->clusters - 1;
@@ -492,10 +492,10 @@ static bool execute_forward_compaction(
             stage_move_count * sizeof(*place_moves));
         size_t place_move_count = 0;
         for (size_t item_index = 0; item_index < batch_objects; item_index++) {
-            GrowthObject *object = &objects->v[items[item_index].object_index];
+            FatRelayoutObject *object = &objects->v[items[item_index].object_index];
             const FileRecord *current_file = NULL;
             U32Vec local_root = {0};
-            const U32Vec *chain = find_growth_object_chain(
+            const U32Vec *chain = find_relayout_object_chain(
                 fs, object, &current_files, &local_root, &current_file);
             (void)current_file;
             if (!chain_is_exact_run(chain, items[item_index].staged_at) ||
@@ -554,12 +554,12 @@ static bool execute_forward_compaction(
 static bool execute_full_workspace_layout(
     Fat32 *fs,
     const char *journal_path,
-    GrowthObjectList *objects,
+    FatRelayoutObjectList *objects,
     uint32_t workspace_start,
     size_t workspace_clusters,
     size_t cluster_batch_limit,
     const char *layout_name,
-    GrowthStats *stats
+    FatRelayoutStats *stats
 ) {
     DirRefList current_refs = {0};
     FileList current_files = scan_files(fs, &current_refs);
@@ -569,10 +569,10 @@ static bool execute_full_workspace_layout(
     size_t moving_directories = 0;
 
     for (size_t index = 0; index < objects->len; index++) {
-        GrowthObject *object = &objects->v[index];
+        FatRelayoutObject *object = &objects->v[index];
         const FileRecord *current_file = NULL;
         U32Vec local_root = {0};
-        const U32Vec *chain = find_growth_object_chain(
+        const U32Vec *chain = find_relayout_object_chain(
             fs, object, &current_files, &local_root, &current_file);
         (void)current_file;
         if (chain->len != object->clusters) {
@@ -622,10 +622,10 @@ static bool execute_full_workspace_layout(
     uint32_t staged_cursor = workspace_start;
 
     for (size_t index = 0; index < objects->len; index++) {
-        GrowthObject *object = &objects->v[index];
+        FatRelayoutObject *object = &objects->v[index];
         const FileRecord *current_file = NULL;
         U32Vec local_root = {0};
-        const U32Vec *chain = find_growth_object_chain(
+        const U32Vec *chain = find_relayout_object_chain(
             fs, object, &current_files, &local_root, &current_file);
         (void)current_file;
         if (chain_is_exact_run(chain, object->target)) {
@@ -676,10 +676,10 @@ static bool execute_full_workspace_layout(
         moving_clusters * sizeof(*place_moves));
     size_t place_count = 0;
     for (size_t item_index = 0; item_index < item_count; item_index++) {
-        GrowthObject *object = &objects->v[items[item_index].object_index];
+        FatRelayoutObject *object = &objects->v[items[item_index].object_index];
         const FileRecord *current_file = NULL;
         U32Vec local_root = {0};
-        const U32Vec *chain = find_growth_object_chain(
+        const U32Vec *chain = find_relayout_object_chain(
             fs, object, &current_files, &local_root, &current_file);
         (void)current_file;
         if (!chain_is_exact_run(chain, items[item_index].staged_at)) {
@@ -820,7 +820,7 @@ static void adaptive_blocker_candidates_free(AdaptiveBlockerCandidate *candidate
 }
 
 static bool adaptive_stop_between_transactions(const char *layout_name,
-                                                GrowthStats *stats) {
+                                                FatRelayoutStats *stats) {
     stats->interrupted = true;
     fprintf(stderr,
             "%s stopped safely during adaptive dependency layout at a complete "
@@ -831,7 +831,7 @@ static bool adaptive_stop_between_transactions(const char *layout_name,
 
 /* Large RAM buffers should increase throughput, but they must not make Stop wait
    behind an arbitrarily large journal transaction.  Sixty-four MiB is a byte
-   budget, not an object-count cap: tiny FAT16 files still batch by the thousand,
+   budget, not an object-count cap: tiny FAT objects still batch by the thousand,
    while a single larger object remains allowed when it is the dependency that
    must be moved. */
 static size_t adaptive_transaction_cluster_limit(const Fat32 *fs,
@@ -848,12 +848,12 @@ static size_t adaptive_transaction_cluster_limit(const Fat32 *fs,
 static bool execute_adaptive_dependency_layout(
     Fat32 *fs,
     const char *journal_path,
-    GrowthObjectList *objects,
+    FatRelayoutObjectList *objects,
     uint32_t workspace_start,
     size_t workspace_clusters,
     size_t cluster_batch_limit,
     const char *layout_name,
-    GrowthStats *stats
+    FatRelayoutStats *stats
 ) {
     size_t transaction_cluster_limit = adaptive_transaction_cluster_limit(
         fs, cluster_batch_limit);
@@ -886,10 +886,10 @@ static bool execute_adaptive_dependency_layout(
                 dirreflist_free(&current_refs);
                 return adaptive_stop_between_transactions(layout_name, stats);
             }
-            GrowthObject *object = &objects->v[index];
+            FatRelayoutObject *object = &objects->v[index];
             const FileRecord *current_file = NULL;
             U32Vec local_root = {0};
-            const U32Vec *chain = find_growth_object_chain(
+            const U32Vec *chain = find_relayout_object_chain(
                 fs, object, &current_files, &local_root, &current_file);
             (void)current_file;
             if (chain->len != object->clusters) {
@@ -950,10 +950,10 @@ static bool execute_adaptive_dependency_layout(
             }
             size_t index = cursor - 1;
             if (!nonexact[index]) continue;
-            GrowthObject *object = &objects->v[index];
+            FatRelayoutObject *object = &objects->v[index];
             const FileRecord *current_file = NULL;
             U32Vec local_root = {0};
-            const U32Vec *chain = find_growth_object_chain(
+            const U32Vec *chain = find_relayout_object_chain(
                 fs, object, &current_files, &local_root, &current_file);
             (void)current_file;
             if (chain->len != object->clusters) {
@@ -979,7 +979,7 @@ static bool execute_adaptive_dependency_layout(
                 u32vec_free(&local_root);
                 continue;
             }
-            if (!growth_batch_can_add(fs, chain, object->target,
+            if (!relayout_batch_can_add(fs, chain, object->target,
                                       source_seen, destination_seen)) {
                 u32vec_free(&local_root);
                 continue;
@@ -1098,10 +1098,10 @@ static bool execute_adaptive_dependency_layout(
                 return adaptive_stop_between_transactions(layout_name, stats);
             }
             if (!nonexact[index] || staged[index]) continue;
-            GrowthObject *object = &objects->v[index];
+            FatRelayoutObject *object = &objects->v[index];
             const FileRecord *current_file = NULL;
             U32Vec local_root = {0};
-            const U32Vec *chain = find_growth_object_chain(
+            const U32Vec *chain = find_relayout_object_chain(
                 fs, object, &current_files, &local_root, &current_file);
             (void)current_file;
             if (chain->len != object->clusters) {
@@ -1302,10 +1302,10 @@ static bool execute_adaptive_dependency_layout(
     }
 }
 
-static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
+static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                                        unsigned requested_percent,
                                        size_t batch_clusters) {
-    GrowthStats stats = {0};
+    FatRelayoutStats stats = {0};
     const char *layout_name = requested_percent == 0 ? "Defragment" : "Growth Defrag";
     if (requested_percent > 25) {
         ld_die("growth reserve percentage must be between 0 and 25");
@@ -1315,7 +1315,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
     FileList initial_files = scan_files(fs, &initial_refs);
     size_t initial_largest = 0, regular_files = 0, directories = 0;
     uint64_t regular_clusters = 0;
-    GrowthObjectList initial_objects = build_growth_objects(
+    FatRelayoutObjectList initial_objects = fat_relayout_build_objects(
         fs, &initial_files, &initial_largest, &regular_clusters,
         &regular_files, &directories);
     uint64_t free_before = count_free_clusters(fs);
@@ -1327,13 +1327,13 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
             regular_files, regular_files == 1 ? "" : "s",
             directories, directories == 1 ? "y" : "ies",
             requested_percent == 0 ? " and canonical zero-gap packing" :
-                                     " with a 10% post-file reserve");
-    GrowthPreflight preflight = growth_layout_preflight(
+                                     " with the requested post-file reserve");
+    FatRelayoutPreflight preflight = fat_relayout_preflight(
         fs, &initial_files, requested_percent);
     size_t existing_reserve = preflight.reserve_clusters;
     bool canonical_verified = false;
-    if (regular_files != 0 && preflight.issue == GROWTH_PREFLIGHT_OK) {
-        canonical_verified = growth_layout_matches_canonical(
+    if (regular_files != 0 && preflight.issue == FAT_RELAYOUT_PREFLIGHT_OK) {
+        canonical_verified = fat_relayout_matches_canonical(
             fs, &initial_objects, requested_percent, &existing_reserve);
     }
     if (canonical_verified) {
@@ -1350,20 +1350,20 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                     layout_name);
         } else {
             fprintf(stderr,
-                    "%s preflight result: the existing FAT layout already satisfies a 10%% "
-                    "post-file reserve for %zu regular file%s; %zu director%s %s contiguous.\n",
-                    layout_name, regular_files, regular_files == 1 ? "" : "s",
+                    "%s preflight result: the existing FAT layout already satisfies the requested "
+                    "%u%% post-file reserve for %zu regular file%s; %zu director%s %s contiguous.\n",
+                    layout_name, requested_percent, regular_files, regular_files == 1 ? "" : "s",
                     directories, directories == 1 ? "y" : "ies",
                     directories == 1 ? "is" : "are");
         }
         fprintf(stderr, "No layout rewrite is required.\n");
-        growth_preflight_free(&preflight);
-        growth_object_list_free(&initial_objects);
+        fat_relayout_preflight_free(&preflight);
+        fat_relayout_object_list_free(&initial_objects);
         filelist_free(&initial_files);
         dirreflist_free(&initial_refs);
         return stats;
     }
-    if (preflight.issue == GROWTH_PREFLIGHT_OK) {
+    if (preflight.issue == FAT_RELAYOUT_PREFLIGHT_OK) {
         fprintf(stderr,
                 "%s preflight result: all objects are contiguous, but the physical layout is "
                 "not the canonical earliest packed layout.\n",
@@ -1372,19 +1372,19 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                 "%s preflight completed read-only; no filesystem writes have occurred yet.\n",
                 layout_name);
     } else {
-        print_growth_preflight_failure(&preflight, requested_percent, layout_name);
+        fat_relayout_print_preflight_failure(&preflight, requested_percent, layout_name);
     }
-    growth_preflight_free(&preflight);
+    fat_relayout_preflight_free(&preflight);
 
     if (initial_objects.len == 0 || regular_files == 0) {
-        growth_object_list_free(&initial_objects);
+        fat_relayout_object_list_free(&initial_objects);
         filelist_free(&initial_files);
         dirreflist_free(&initial_refs);
         fprintf(stderr, "%s: no allocated regular files require a layout rewrite\n", layout_name);
         return stats;
     }
     if (free_before <= initial_largest || regular_clusters == 0) {
-        growth_object_list_free(&initial_objects);
+        fat_relayout_object_list_free(&initial_objects);
         filelist_free(&initial_files);
         dirreflist_free(&initial_refs);
         ld_die("layout rewrite needs free space larger than the largest allocated object for safe staging");
@@ -1392,13 +1392,13 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
 
     uint64_t requested_reserve = 0;
     for (size_t i = 0; i < initial_objects.len; i++) {
-        const GrowthObject *object = &initial_objects.v[i];
+        const FatRelayoutObject *object = &initial_objects.v[i];
         if (object->is_dir) continue;
         uint64_t reserve = ((uint64_t)object->clusters * requested_percent + 99) / 100;
         requested_reserve += reserve;
     }
     if (requested_reserve > free_before - initial_largest) {
-        growth_object_list_free(&initial_objects);
+        fat_relayout_object_list_free(&initial_objects);
         filelist_free(&initial_files);
         dirreflist_free(&initial_refs);
         ld_die("layout rewrite does not have enough free clusters for the requested reserve plus a safe staging workspace");
@@ -1407,18 +1407,18 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
     size_t preliminary_reserve = 0;
     uint32_t preliminary_end = 1;
     if (fs->max_cluster == UINT32_MAX ||
-        !plan_growth_layout(fs, &initial_objects, requested_percent,
+        !fat_relayout_plan_layout(fs, &initial_objects, requested_percent,
                             fs->max_cluster + 1,
                             &preliminary_reserve, &preliminary_end)) {
-        growth_object_list_free(&initial_objects);
+        fat_relayout_object_list_free(&initial_objects);
         filelist_free(&initial_files);
         dirreflist_free(&initial_refs);
         ld_die("layout rewrite could not construct the canonical target layout");
     }
     (void)preliminary_reserve;
 
-    size_t total_object_clusters = growth_object_cluster_total(&initial_objects);
-    size_t ram_cluster_limit = automatic_growth_batch_clusters(fs);
+    size_t total_object_clusters = relayout_object_cluster_total(&initial_objects);
+    size_t ram_cluster_limit = automatic_relayout_batch_clusters(fs);
     size_t tail_slack = (size_t)(fs->max_cluster - preliminary_end);
     size_t terminal_capacity = terminal_workspace_capacity(fs);
     size_t workspace_clusters = total_object_clusters;
@@ -1427,7 +1427,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
     if (workspace_clusters > terminal_capacity) workspace_clusters = terminal_capacity;
     if (workspace_clusters < initial_largest) workspace_clusters = initial_largest;
     if (workspace_clusters > tail_slack || workspace_clusters > terminal_capacity) {
-        growth_object_list_free(&initial_objects);
+        fat_relayout_object_list_free(&initial_objects);
         filelist_free(&initial_files);
         dirreflist_free(&initial_refs);
         ld_die("layout rewrite cannot create a durable terminal workspace large enough for the largest object");
@@ -1470,7 +1470,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         if (requested_percent != 0) {
             fprintf(stderr, "No growth-space reserve was applied.\n");
         }
-        growth_object_list_free(&initial_objects);
+        fat_relayout_object_list_free(&initial_objects);
         return stats;
     }
     fprintf(stderr,
@@ -1480,19 +1480,19 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
             packing_stats.transactions,
             packing_stats.transactions == 1 ? "" : "s");
 
-    GrowthObjectList objects = initial_objects;
-    initial_objects = (GrowthObjectList){0};
+    FatRelayoutObjectList objects = initial_objects;
+    initial_objects = (FatRelayoutObjectList){0};
     uint64_t terminal = terminal_free_clusters(fs);
     if (terminal < workspace_clusters) {
-        growth_object_list_free(&objects);
+        fat_relayout_object_list_free(&objects);
         ld_die("layout rewrite could not create the requested terminal safety workspace");
     }
     unsigned applied_percent = requested_percent;
     size_t reserve_total = 0;
     uint32_t layout_end = 1;
-    if (!plan_growth_layout(fs, &objects, applied_percent, workspace_start,
+    if (!fat_relayout_plan_layout(fs, &objects, applied_percent, workspace_start,
                             &reserve_total, &layout_end)) {
-        growth_object_list_free(&objects);
+        fat_relayout_object_list_free(&objects);
         ld_die("layout rewrite could not fit the requested layout below the staging workspace");
     }
     stats.applied_percent = applied_percent;
@@ -1522,7 +1522,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
     if (completed_forward) {
         fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
         fat32_sync(fs);
-        growth_object_list_free(&objects);
+        fat_relayout_object_list_free(&objects);
         return stats;
     }
     fprintf(stderr,
@@ -1536,7 +1536,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
     if (completed_workspace) {
         fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
         fat32_sync(fs);
-        growth_object_list_free(&objects);
+        fat_relayout_object_list_free(&objects);
         return stats;
     }
     fprintf(stderr,
@@ -1550,7 +1550,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
     if (completed_adaptive) {
         fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
         fat32_sync(fs);
-        growth_object_list_free(&objects);
+        fat_relayout_object_list_free(&objects);
         return stats;
     }
     fprintf(stderr,
@@ -1581,10 +1581,10 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         uint8_t *destination_seen = ld_xcalloc((size_t)fs->max_cluster + 1, 1);
 
         while (reverse != 0 && batch_objects < object_batch_limit) {
-            GrowthObject *object = &objects.v[reverse - 1];
+            FatRelayoutObject *object = &objects.v[reverse - 1];
             const FileRecord *current_file = NULL;
             U32Vec local_root = {0};
-            const U32Vec *chain = find_growth_object_chain(
+            const U32Vec *chain = find_relayout_object_chain(
                 fs, object, &current_files, &local_root, &current_file);
             (void)current_file;
             if (chain->len != object->clusters) {
@@ -1595,7 +1595,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                 u32vec_free(&root_chain);
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
-                growth_object_list_free(&objects);
+                fat_relayout_object_list_free(&objects);
                 ld_die("layout object changed size during offline operation");
             }
             if (chain_is_exact_run(chain, object->target)) {
@@ -1616,7 +1616,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                 u32vec_free(&local_root);
                 break;
             }
-            if (!growth_batch_can_add(fs, chain, object->target,
+            if (!relayout_batch_can_add(fs, chain, object->target,
                                       source_seen, destination_seen)) {
                 u32vec_free(&local_root);
                 break;
@@ -1687,16 +1687,16 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         /* The next target is not currently free.  This final fallback stages one
            object at a time.  It is retained for very full filesystems whose
            dependency set cannot fit in the RAM-sized durable workspace. */
-        GrowthObject *object = &objects.v[reverse - 1];
+        FatRelayoutObject *object = &objects.v[reverse - 1];
         const FileRecord *current_file = NULL;
-        const U32Vec *chain = find_growth_object_chain(
+        const U32Vec *chain = find_relayout_object_chain(
             fs, object, &current_files, &root_chain, &current_file);
         (void)current_file;
         if (chain->len != object->clusters) {
             u32vec_free(&root_chain);
             filelist_free(&current_files);
             dirreflist_free(&current_refs);
-            growth_object_list_free(&objects);
+            fat_relayout_object_list_free(&objects);
             ld_die("layout object changed size during offline operation");
         }
         U32Vec original_chain = {0};
@@ -1706,13 +1706,13 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
             u32vec_free(&root_chain);
             filelist_free(&current_files);
             dirreflist_free(&current_refs);
-            growth_object_list_free(&objects);
+            fat_relayout_object_list_free(&objects);
             ld_die("layout staging workspace is unexpectedly occupied");
         }
         detail_log("layout-stage: %s %s (%zu clusters) -> workspace cluster %" PRIu32 "\n",
                    object->is_dir ? "DIR" : "FILE", object->path,
                    object->clusters, workspace_start);
-        growth_move_chain(fs, &current_refs, chain, workspace_start,
+        relayout_move_chain(fs, &current_refs, chain, workspace_start,
                           journal_path, false);
         stats.transactions++;
         stats.clusters_copied += object->clusters;
@@ -1724,15 +1724,15 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         current_files = scan_files(fs, &current_refs);
         root_chain = (U32Vec){0};
         current_file = NULL;
-        chain = find_growth_object_chain(
+        chain = find_relayout_object_chain(
             fs, object, &current_files, &root_chain, &current_file);
         if (!chain_is_exact_run(chain, workspace_start)) {
             u32vec_free(&original_chain);
             u32vec_free(&root_chain);
             filelist_free(&current_files);
             dirreflist_free(&current_refs);
-            growth_object_list_free(&objects);
-            ld_die("growth-defrag staged object did not reopen at the workspace");
+            fat_relayout_object_list_free(&objects);
+            ld_die("FAT relayout staged object did not reopen at the workspace");
         }
 
         bool target_blockers_evacuated = false;
@@ -1743,7 +1743,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                 u32vec_free(&root_chain);
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
-                growth_object_list_free(&objects);
+                fat_relayout_object_list_free(&objects);
                 ld_die("layout target range exceeds the filesystem");
             }
             uint32_t target_end = (uint32_t)target_end64;
@@ -1757,7 +1757,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                     u32vec_free(&root_chain);
                     filelist_free(&current_files);
                     dirreflist_free(&current_refs);
-                    growth_object_list_free(&objects);
+                    fat_relayout_object_list_free(&objects);
                     ld_die("layout staged source cluster was unexpectedly reused");
                 }
                 u32vec_push(&blocker_destinations, candidate);
@@ -1774,7 +1774,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                 u32vec_free(&root_chain);
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
-                growth_object_list_free(&objects);
+                fat_relayout_object_list_free(&objects);
                 ld_die("layout rewrite could not allocate safe source slots for target blockers");
             }
 
@@ -1814,14 +1814,14 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
             current_files = scan_files(fs, &current_refs);
             root_chain = (U32Vec){0};
             current_file = NULL;
-            chain = find_growth_object_chain(
+            chain = find_relayout_object_chain(
                 fs, object, &current_files, &root_chain, &current_file);
             if (!chain_is_exact_run(chain, workspace_start)) {
                 u32vec_free(&original_chain);
                 u32vec_free(&root_chain);
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
-                growth_object_list_free(&objects);
+                fat_relayout_object_list_free(&objects);
                 ld_die("layout staged object changed while clearing its target");
             }
             if (!cluster_range_is_free(fs, object->target, object->clusters)) {
@@ -1829,7 +1829,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                 u32vec_free(&root_chain);
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
-                growth_object_list_free(&objects);
+                fat_relayout_object_list_free(&objects);
                 ld_die("layout target range remained occupied after blocker evacuation");
             }
         }
@@ -1840,7 +1840,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
             object->is_dir ? "DIR" : "FILE", object->path,
             object->target, object->reserve_after,
             object->reserve_after == 1 ? "" : "s");
-        growth_move_chain(fs, &current_refs, chain, object->target,
+        relayout_move_chain(fs, &current_refs, chain, object->target,
                           journal_path, true);
         stats.transactions++;
         stats.clusters_copied += object->clusters;
@@ -1861,7 +1861,7 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
 
     fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
     fat32_sync(fs);
-    growth_object_list_free(&objects);
+    fat_relayout_object_list_free(&objects);
     return stats;
 }
 
@@ -2135,7 +2135,7 @@ int main(int argc, char **argv) {
         result_operation = "defrag";
         filelist_free(&files);
         dirreflist_free(&dir_refs);
-        GrowthStats packed = fat_relayout_volume(&fs, journal_path, 0, batch_clusters);
+        FatRelayoutStats packed = fat_relayout_volume(&fs, journal_path, 0, batch_clusters);
         if (packed.already_satisfied) {
             result_status = "not-needed";
             printf("Defragment status:        Not needed; canonical packed layout verified\n");
@@ -2171,7 +2171,7 @@ int main(int argc, char **argv) {
         result_operation = "growth-defrag";
         filelist_free(&files);
         dirreflist_free(&dir_refs);
-        GrowthStats growth = fat_relayout_volume(&fs, journal_path, growth_percent, batch_clusters);
+        FatRelayoutStats growth = fat_relayout_volume(&fs, journal_path, growth_percent, batch_clusters);
         if (growth.already_satisfied) {
             result_status = "not-needed";
             printf("Growth Defrag status:          Not needed; layout already satisfies %u%% reserve\n",
