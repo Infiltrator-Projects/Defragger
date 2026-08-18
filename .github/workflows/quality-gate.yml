@@ -56,8 +56,10 @@ jobs:
           python3 tests/test_spdx_licensing.py
           python3 tests/test_no_external_fs_tools.py
           python3 tests/test_architecture.py
+          python3 tests/test_btrfs_architecture.py
           python3 tests/test_analysis_plugins.py
           python3 tests/test_worker_entrypoints.py
+          python3 tests/test_release_gate.py
 
       - name: Validate release packaging contract
         run: ./tests/test_release_artifacts.sh
