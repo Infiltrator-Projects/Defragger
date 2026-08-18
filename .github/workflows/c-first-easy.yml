@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   build-and-test:
@@ -253,6 +255,7 @@ jobs:
               assert result['filesystem'] == 'apfs'
               assert result['unit_size'] == 4096
               assert result['total_units'] == 64
+              assert result['cell_count'] == 16
               assert result['used_bytes'] == 4096
               assert result['unknown_bytes'] == 63 * 4096
               assert result['details']['container_uuid'] == '0102030405060708090a0b0c0d0e0f10'
@@ -264,3 +267,24 @@ jobs:
               os.unlink(path)
           PY
           python3 tests/test_analysis_plugins.py
+
+      - name: Run focused FAT relayout regression suite
+        shell: bash
+        run: |
+          set -o pipefail
+          ./tests/run_tests.sh build/linux-defragger-fat-worker 2>&1 | tee fat-relayout-validation.log
+
+      - name: Report C-first result on PR 2
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          printf 'C-first FAT relayout validation: **%s** for `%s`.\n' "$JOB_STATUS" "$GITHUB_SHA" > /tmp/body.md
+          if [[ "$JOB_STATUS" != "success" && -f fat-relayout-validation.log ]]; then
+            printf '\nLast validation output:\n```text\n' >> /tmp/body.md
+            tail -n 60 fat-relayout-validation.log >> /tmp/body.md
+            printf '\n```\n' >> /tmp/body.md
+          fi
+          gh pr comment 2 --body-file /tmp/body.md
