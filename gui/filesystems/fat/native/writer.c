@@ -240,6 +240,14 @@ static const U32Vec *find_growth_object_chain(Fat32 *fs, const GrowthObject *obj
     return NULL;
 }
 
+static uint32_t current_chain_min_cluster(const U32Vec *chain) {
+    uint32_t minimum = UINT32_MAX;
+    for (size_t i = 0; i < chain->len; i++) {
+        if (chain->v[i] < minimum) minimum = chain->v[i];
+    }
+    return minimum;
+}
+
 static void growth_move_chain(Fat32 *fs, const DirRefList *dir_refs,
                               const U32Vec *chain, uint32_t destination,
                               const char *journal_path, bool emit_map) {
@@ -371,7 +379,7 @@ static bool execute_forward_compaction(
                 u32vec_free(&local_root);
                 break;
             }
-            if (object->target > object->physical_first) {
+            if (object->target > current_chain_min_cluster(chain)) {
                 u32vec_free(&local_root);
                 free(source_seen);
                 free(stage_moves);
@@ -467,6 +475,16 @@ static bool execute_forward_compaction(
         free(stage_moves);
         filelist_free(&current_files);
         dirreflist_free(&current_refs);
+
+        if (ld_stop_requested()) {
+            stats->interrupted = true;
+            fprintf(stderr,
+                    "%s stopped safely after durable workspace staging; final placement "
+                    "for this batch was not started.\n",
+                    layout_name);
+            free(items);
+            return true;
+        }
 
         current_refs = (DirRefList){0};
         current_files = scan_files(fs, &current_refs);
@@ -641,6 +659,16 @@ static bool execute_full_workspace_layout(
     free(stage_moves);
     filelist_free(&current_files);
     dirreflist_free(&current_refs);
+
+    if (ld_stop_requested()) {
+        stats->interrupted = true;
+        fprintf(stderr,
+                "%s stopped safely after durable unified workspace staging; final "
+                "placement was not started.\n",
+                layout_name);
+        free(items);
+        return true;
+    }
 
     current_refs = (DirRefList){0};
     current_files = scan_files(fs, &current_refs);
