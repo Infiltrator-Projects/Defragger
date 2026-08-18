@@ -50,5 +50,35 @@ for old in (
         raise SystemExit(f"cannot remove conflicting long-lived NTFS lock: {old[:70]!r}")
     text = text.replace(old, "", 1)
 
+# A Growth pass immediately after canonical Defrag may need no payload cluster
+# movement at all. That must not fall back to a filesystem-sized stage image:
+# the durable SQLite plan is sufficient to make the metadata update idempotent
+# and recoverable.
+zero_move_old = '''    if (state->move_clusters == 0) {\n        /* No payload movement is necessary. Let the mature fallback preserve\n           legacy behaviour for unusual metadata-only plans. */\n        result = 2;\n        goto fallback;\n    }\n'''
+zero_move_new = '''    if (state->move_clusters == 0) {\n        printf("Raw userspace native-C NTFS relayout engine %s\\n", LD_VERSION);\n        printf("NTFS direct metadata layout: %zu supported streams already have their canonical payload placement; no payload relocation is required.\\n",\n               placements.count);\n        fflush(stdout);\n        if (ld_stop_requested()) { result = 130; goto stopped_unchanged; }\n        if (check_unchanged_target(device, state, error) != 0) goto done;\n        if (journal_phase(journal_path, state, "direct-metadata", error) != 0) goto done;\n        if (mark_source_dirty(device, error) != 0) goto metadata_recover_required;\n        if (ntfs_apply_stage_metadata(device, db, true, error) != 0) goto metadata_recover_required;\n        if (journal_phase(journal_path, state, "direct-verifying-source", error) != 0)\n            goto metadata_recover_required;\n        if (ntfs_verify_stage(device, db, growth, true, error) != 0)\n            goto metadata_recover_required;\n        if (clear_source_dirty(device, error) != 0) goto metadata_recover_required;\n        if (live_updates) emit_committed_live_reset(device, error);\n        transaction_cleanup(journal_path, state);\n        puts("NTFS direct metadata layout: canonical metadata verified without payload relocation or a filesystem-sized working image.");\n        printf("NTFS %s completed with serial and full device capacity preserved.\\n",\n               growth ? "Growth Defrag" : "Defragment");\n        emit_result(operation, "completed", "");\n        result = 0;\n        goto done;\n    }\n'''
+if text.count(zero_move_old) != 1:
+    raise SystemExit("cannot replace zero-move NTFS fallback")
+text = text.replace(zero_move_old, zero_move_new, 1)
+
+recover_label = '''recover_required:\n    /* Durable workspace and plan are deliberately retained. Recovery can\n       replay placement and metadata from their checksummed copies. */\n    result = -1;\n\ndone:\n'''
+recover_label_new = '''metadata_recover_required:\n    /* No payload was moved. Keep the durable plan and journal so Recover can\n       idempotently finish the metadata transaction. */\n    result = -1;\n    goto done;\n\nrecover_required:\n    /* Durable workspace and plan are deliberately retained. Recovery can\n       replay placement and metadata from their checksummed copies. */\n    result = -1;\n\ndone:\n'''
+if text.count(recover_label) != 1:
+    raise SystemExit("cannot add metadata-only NTFS recovery label")
+text = text.replace(recover_label, recover_label_new, 1)
+
+recovery_anchor = "recovery_block = r'''\n    if (state.workspace_clusters != 0 && strncmp(state.phase, \"workspace-\", 10) == 0) {\n"
+metadata_recovery = '''recovery_block = r'''\n    if (strcmp(state.phase, "direct-metadata") == 0 ||\n        strcmp(state.phase, "direct-verifying-source") == 0) {\n        sqlite3 *metadata_db = NULL;\n        if (ntfs_open_plan_db(state.plan, &metadata_db, error) != 0) goto done;\n        bool growth = strcmp(state.operation, "growth-defrag") == 0;\n        puts("Recovering an NTFS metadata-only canonical relayout.");\n        fflush(stdout);\n        if (mark_source_dirty(device, error) != 0 ||\n            journal_phase(journal_path, &state, "direct-metadata", error) != 0 ||\n            ntfs_apply_stage_metadata(device, metadata_db, true, error) != 0 ||\n            journal_phase(journal_path, &state, "direct-verifying-source", error) != 0 ||\n            ntfs_verify_stage(device, metadata_db, growth, true, error) != 0 ||\n            clear_source_dirty(device, error) != 0) {\n            sqlite3_close(metadata_db);\n            goto done;\n        }\n        sqlite3_close(metadata_db);\n        transaction_cleanup(journal_path, &state);\n        puts("NTFS metadata-only recovery completed successfully.");\n        emit_result("recover", "completed", "");\n        result = 0;\n        goto done;\n    }\n\n    if (state.workspace_clusters != 0 && strncmp(state.phase, "workspace-", 10) == 0) {\n'''
+if text.count(recovery_anchor) != 1:
+    raise SystemExit("cannot add NTFS metadata-only recovery block")
+text = text.replace(recovery_anchor, metadata_recovery, 1)
+
+# The Growth regression after a canonical Defrag is intentionally a zero-payload
+# metadata path, while the first Defrag must exercise the durable workspace.
+growth_test_old = '''    "    output = mutate(worker, image, \\\"growth-defrag\\\", work / \\\"ntfs-growth.journal\\\")\\n"\n    "    assert \\\"NTFS unified workspace layout:\\\" in output, output\\n"\n    "    assert \\\"internally verified raw NTFS working image\\\" not in output, output\\n"\n'''
+growth_test_new = '''    "    output = mutate(worker, image, \\\"growth-defrag\\\", work / \\\"ntfs-growth.journal\\\")\\n"\n    "    assert \\\"NTFS direct metadata layout:\\\" in output, output\\n"\n    "    assert \\\"internally verified raw NTFS working image\\\" not in output, output\\n"\n'''
+if text.count(growth_test_old) != 1:
+    raise SystemExit("cannot adjust NTFS metadata-only Growth regression")
+text = text.replace(growth_test_old, growth_test_new, 1)
+
 path.write_text(text, encoding="utf-8")
-print("Adjusted NTFS patch generator to current main and per-write locking")
+print("Adjusted NTFS patch generator to current main, per-write locking and direct metadata-only relayout")
