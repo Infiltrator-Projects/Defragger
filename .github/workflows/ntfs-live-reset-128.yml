@@ -1,0 +1,169 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Validate NTFS live reset protocol
+
+on:
+  push:
+    branches:
+      - c-first-ntfs-live-reset-128
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-test-publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out work branch
+        uses: actions/checkout@v4
+        with:
+          ref: c-first-ntfs-live-reset-128
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply protocol fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          worker = Path('gui/filesystems/ntfs/native/ntfs_worker.c')
+          text = worker.read_text(encoding='utf-8')
+          old = '''static void emit_live_reset(const NtfsVolume *volume, const NtfsLayout *layout) {
+    printf("@@LIVE_RESET {\\\"filesystem\\\":\\\"ntfs\\\",\\\"block_size\\\":%u,\\\"total_blocks\\\":%" PRIu64 ",\\\"free_ranges\\\":",
+           volume->cluster_size, volume->total_clusters);
+    emit_bitmap_ranges(layout, volume->total_clusters, true);
+    fputs("}\\n", stdout); fflush(stdout);
+}
+'''
+          new = '''static void emit_live_used_byte_ranges(const NtfsVolume *volume,
+                                       const NtfsLayout *layout) {
+    bool active = false;
+    bool first = true;
+    uint64_t start = 0;
+    putchar('[');
+    for (uint64_t cluster = 0; cluster < volume->total_clusters; ++cluster) {
+        bool used = ntfs_bitmap_bit(layout, cluster) != 0;
+        if (used && !active) {
+            active = true;
+            start = cluster;
+        } else if (!used && active) {
+            uint64_t start_byte = start * (uint64_t)volume->cluster_size;
+            uint64_t length_byte = (cluster - start) * (uint64_t)volume->cluster_size;
+            if (!first) putchar(',');
+            printf("[%" PRIu64 ",%" PRIu64 "]", start_byte, length_byte);
+            first = false;
+            active = false;
+        }
+    }
+    if (active) {
+        uint64_t start_byte = start * (uint64_t)volume->cluster_size;
+        uint64_t length_byte = (volume->total_clusters - start) *
+                               (uint64_t)volume->cluster_size;
+        if (!first) putchar(',');
+        printf("[%" PRIu64 ",%" PRIu64 "]", start_byte, length_byte);
+    }
+    putchar(']');
+}
+
+static void emit_live_reset(const NtfsVolume *volume, const NtfsLayout *layout) {
+    printf("@@LIVE_RESET {\\\"filesystem\\\":\\\"ntfs\\\",\\\"unit_size\\\":%u,\\\"filesystem_units\\\":%" PRIu64 ",\\\"used_ranges\\\":",
+           volume->cluster_size, volume->total_clusters);
+    emit_live_used_byte_ranges(volume, layout);
+    fputs("}\\n", stdout);
+    fflush(stdout);
+}
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'NTFS live reset anchor count is {text.count(old)}, expected 1')
+          worker.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          tests = Path('tests/test_native_top3.py')
+          text = tests.read_text(encoding='utf-8')
+          anchor = '''def assert_clean(payload: dict, *, growth: bool) -> None:
+    assert payload["fragmented_files"] == 0, payload
+    assert payload["fragmented_directories"] == 0, payload
+    if growth:
+        assert payload["growth_10_satisfied"] is True, payload
+'''
+          replacement = '''def assert_clean(payload: dict, *, growth: bool) -> None:
+    assert payload["fragmented_files"] == 0, payload
+    assert payload["fragmented_directories"] == 0, payload
+    if growth:
+        assert payload["growth_10_satisfied"] is True, payload
+
+
+def assert_ntfs_live_reset(output: str) -> None:
+    lines = [line for line in output.splitlines() if line.startswith("@@LIVE_RESET ")]
+    assert lines, output
+    payload = json.loads(lines[-1].removeprefix("@@LIVE_RESET "))
+    assert payload["filesystem"] == "ntfs", payload
+    assert int(payload["unit_size"]) > 0, payload
+    assert int(payload["filesystem_units"]) > 0, payload
+    assert isinstance(payload["used_ranges"], list), payload
+    assert "block_size" not in payload, payload
+    assert "total_blocks" not in payload, payload
+    assert "free_ranges" not in payload, payload
+'''
+          if text.count(anchor) != 1:
+              raise SystemExit('assert_clean anchor not unique')
+          text = text.replace(anchor, replacement, 1)
+          old_defrag = '''    output = mutate(worker, image, "defrag", work / "ntfs-defrag.journal")
+    assert "NTFS unified workspace layout:" in output, output
+'''
+          new_defrag = '''    output = mutate(worker, image, "defrag", work / "ntfs-defrag.journal")
+    assert_ntfs_live_reset(output)
+    assert "NTFS unified workspace layout:" in output, output
+'''
+          if text.count(old_defrag) != 1:
+              raise SystemExit('NTFS defrag anchor not unique')
+          text = text.replace(old_defrag, new_defrag, 1)
+          old_growth = '''    output = mutate(worker, image, "growth-defrag", work / "ntfs-growth.journal")
+    assert "NTFS direct metadata layout:" in output, output
+'''
+          new_growth = '''    output = mutate(worker, image, "growth-defrag", work / "ntfs-growth.journal")
+    assert_ntfs_live_reset(output)
+    assert "NTFS direct metadata layout:" in output, output
+'''
+          if text.count(old_growth) != 1:
+              raise SystemExit('NTFS growth anchor not unique')
+          tests.write_text(text.replace(old_growth, new_growth, 1), encoding='utf-8')
+          PY
+          git diff --check
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config python3 python3-gi python3-cairo gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Build native engines with warnings as errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON -DBUILD_TESTING=ON
+          cmake --build build -j2 --target \
+            linux-defragger-ntfs-worker \
+            linux-defragger-exfat-worker \
+            linux-defragger-fat-worker \
+            linux-defragger-ext-worker \
+            linux-defragger-ext-fixture
+
+      - name: Run native and GUI regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          LINUX_DEFRAGGER_BUILD_DIR="$PWD/build" PYTHONPATH="$PWD/gui:$PWD/tests" \
+            python3 tests/test_native_top3.py
+          PYTHONPATH="$PWD/gui" PYTHONDONTWRITEBYTECODE=1 \
+            python3 tests/test_gui_models.py
+
+      - name: Publish clean validated branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gui/filesystems/ntfs/native/ntfs_worker.c tests/test_native_top3.py
+          git diff --cached --check
+          git commit -m "Fix NTFS live allocation reset protocol"
+          git push --force origin HEAD:c-first-ntfs-live-reset-128-final
