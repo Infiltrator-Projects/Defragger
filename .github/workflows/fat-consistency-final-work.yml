@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Final FAT relayout consistency work
+
+on:
+  push:
+    branches:
+      - c-first-fat-consistency-work-125
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out work branch
+        uses: actions/checkout@v4
+        with:
+          ref: c-first-fat-consistency-work-125
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config python3 python3-gi python3-cairo gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Generate clean consistency candidate from current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main c-first-fat-relayout-consistency-125
+          git show origin/c-first-fat-relayout-consistency-125:tests/apply_fat_relayout_consistency_patch.py > /tmp/apply-fat-consistency.py
+          git checkout -B generated origin/main
+          python3 /tmp/apply-fat-consistency.py
+
+      - name: Compile and validate native FAT and exFAT
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON -DBUILD_TESTING=ON
+          cmake --build build -j2 --target linux-defragger-fat-worker linux-defragger-exfat-worker
+          python3 tests/test_fat_relayout_architecture.py
+          bash tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
+          ctest --test-dir build --output-on-failure -R 'linux-defragger-(fat-relayout|exfat-relayout)'
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/test_no_external_fs_tools.py
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/test_architecture.py
+
+      - name: Publish validated code-only branch
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u
+          git add gui/filesystems/fat/native/fat_relayout.c gui/filesystems/fat/native/fat_relayout.h tests/test_fat_relayout_architecture.py
+          git diff --cached --check
+          git commit -m "Make FAT relayout explicitly width-neutral"
+          git push origin HEAD:c-first-fat-relayout-consistency-125-final
