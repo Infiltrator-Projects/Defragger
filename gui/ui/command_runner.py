@@ -182,8 +182,8 @@ class CommandRunner:
             RunnerEvent(
                 "stop-requested",
                 purpose,
-                "Stop requested. Waiting for the active journalled transaction "
-                "to finish…",
+                "Stop requested. Waiting for the engine to reach the next safe "
+                "transaction boundary…",
             )
         )
         if request.privileged:
