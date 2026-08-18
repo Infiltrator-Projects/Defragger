@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: FAT relayout validation
+
+on:
+  push:
+    branches:
+      - "c-first-fat-unified-relayout"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config python3 python3-gi python3-cairo \
+            gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Build and run FAT regression suite
+        id: validation
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            cmake -S . -B build \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLD_ENABLE_WERROR=ON \
+              -DBUILD_TESTING=ON
+            cmake --build build -j2
+            ctest --test-dir build --output-on-failure -E '^linux-defragger-tests$'
+            ./tests/run_tests.sh build/linux-defragger-fat-worker
+          } 2>&1 | tee fat-relayout-validation.log
+
+      - name: Report validation result on PR 2
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          printf 'FAT relayout validation: **%s** for `%s`.\n' "$JOB_STATUS" "$GITHUB_SHA" > /tmp/body.md
+          if [[ "$JOB_STATUS" != "success" && -f fat-relayout-validation.log ]]; then
+            printf '\nLast validation output:\n```text\n' >> /tmp/body.md
+            tail -n 60 fat-relayout-validation.log >> /tmp/body.md
+            printf '\n```\n' >> /tmp/body.md
+          fi
+          gh pr comment 2 --body-file /tmp/body.md
