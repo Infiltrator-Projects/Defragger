@@ -6,6 +6,7 @@ pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
 add_library(linux-defragger-test-media-core STATIC
     test_media/test_media_core.c
     test_media/test_media_worker.c
+    test_media/test_media_reserved.c
     test_media/test_media_amiga.c
     test_media/test_media_amiga_payload.c)
 target_include_directories(linux-defragger-test-media-core PUBLIC
