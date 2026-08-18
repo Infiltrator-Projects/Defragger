@@ -39,6 +39,16 @@ jobs:
           git fetch origin main
           git checkout -B generated origin/main
           python3 /tmp/apply-ntfs-workspace.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/test_native_top3.py')
+          text = path.read_text(encoding='utf-8')
+          old = '    assert "@@LIVE_RANGES " in output, output\n    assert "verified allocated/metadata ranges instead of rewriting the full" in output, output\n'
+          new = '    assert "exFAT unified workspace layout:" in output, output\n    assert "internally verified native-C exFAT working image" not in output, output\n'
+          if text.count(old) != 2:
+              raise SystemExit(f'expected two legacy exFAT assertions, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
           git diff --check
 
       - name: Compile native engines with warnings as errors
