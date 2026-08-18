@@ -32,10 +32,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cp tests/apply_fat_consistency_cmake_fix.py /tmp/fix-fat-cmake.py
           git fetch origin main c-first-fat-relayout-consistency-125
           git show origin/c-first-fat-relayout-consistency-125:tests/apply_fat_relayout_consistency_patch.py > /tmp/apply-fat-consistency.py
           git checkout -B generated origin/main
           python3 /tmp/apply-fat-consistency.py
+          python3 /tmp/fix-fat-cmake.py
 
       - name: Compile and validate native FAT and exFAT
         shell: bash
