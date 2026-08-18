@@ -71,7 +71,8 @@ int ext_assign_targets(ext2_filsys fs, sqlite3 *db,
 int ext_plan_move_count(sqlite3 *db, uint64_t *count, char **error);
 int ext_permute_payloads(const char *stage, sqlite3 *db, uint32_t block_size,
                          uint64_t move_count, char **error);
-int ext_apply_mappings(const char *stage, sqlite3 *db, char **error);
+int ext_apply_mappings(const char *stage, sqlite3 *db, bool allow_stop,
+                       char **error);
 int ext_verify_stage(const char *stage, sqlite3 *db, const ExtGeometry *geometry,
                      bool growth, ExtCatalogue *verified, char **error);
 

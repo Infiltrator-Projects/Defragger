@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ext_native.h"
+#include "ext_workspace.h"
 
 #include "ld_device.h"
 #include "ld_io.h"
@@ -506,9 +507,232 @@ static void emit_live_reset(const ExtGeometry *geometry, const ExtCatalogue *cat
     puts("]}"); fflush(stdout);
 }
 
+
+static void discard_plan_files(const char *plan) {
+    unlink_if_exists(plan);
+    if (plan != NULL) {
+        char *wal = ld_path_append_suffix(plan, "-wal");
+        char *shm = ld_path_append_suffix(plan, "-shm");
+        unlink_if_exists(wal);
+        unlink_if_exists(shm);
+        free(wal);
+        free(shm);
+    }
+}
+
+static int validate_restored_ext(const char *device, char **error) {
+    ext2_filsys fs = NULL;
+    if (ext_open_fs(device, false, &fs, error) != 0) return -1;
+    int result = ext_validate_metadata(fs, true, error);
+    (void)ext2fs_close(fs);
+    return result;
+}
+
+/* Return 0/130 for a completed or stopped direct operation, 2 when the complete
+   original allocation set cannot fit in a safe high-address workspace and the
+   verified working-image fallback should be used, or -1 for a hard failure. */
+static int try_workspace_relayout(const char *device, const char *operation,
+                                  const char *journal_path, bool live_updates,
+                                  uint64_t requested_batch_blocks,
+                                  ExtJournal *state,
+                                  const ExtGeometry *source_geometry,
+                                  char **error) {
+    ext2_filsys fs = NULL;
+    sqlite3 *db = NULL;
+    int fd = -1;
+    ExtWorkspace workspace = {0};
+    bool growth = strcmp(operation, "growth-defrag") == 0;
+    bool source_touched = false;
+
+    if (ext_open_plan_db(state->plan, true, &db, error) != 0) goto fail_clean;
+    if (ext_open_fs(device, false, &fs, error) != 0) goto fail_clean;
+    fd = open(device, O_RDWR | O_CLOEXEC);
+    if (fd < 0) {
+        ext_set_error(error, "cannot open EXT source for direct relayout: %s", strerror(errno));
+        goto fail_clean;
+    }
+    if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        ext_set_error(error, "cannot lock EXT source for direct relayout: %s", strerror(errno));
+        goto fail_clean;
+    }
+    if (ext_catalog_plan(fs, fd, db, source_geometry,
+                         &state->movable_blocks, error) != 0 ||
+        ext_assign_targets(fs, db, source_geometry, growth, error) != 0 ||
+        ext_plan_move_count(db, &state->move_blocks, error) != 0)
+        goto fail_clean;
+
+    if (state->move_blocks == 0) {
+        ExtCatalogue current = {0};
+        ExtGeometry current_geometry;
+        if (ext_scan_catalogue(device, &current_geometry, &current, error) != 0)
+            goto fail_clean;
+        bool okay = !growth || current.growth_10_satisfied;
+        ext_catalogue_free(&current);
+        if (okay) {
+            (void)ext2fs_close(fs); fs = NULL;
+            (void)flock(fd, LOCK_UN); close(fd); fd = -1;
+            sqlite3_close(db); db = NULL;
+            transaction_cleanup(journal_path, state);
+            puts("Not needed; canonical EXT layout already verified.");
+            emit_result(operation, "not-needed", "");
+            return 0;
+        }
+        goto fallback;
+    }
+
+    int prepared = ext_workspace_prepare(fs, db, source_geometry,
+                                         requested_batch_blocks,
+                                         &workspace, error);
+    if (prepared == EXT_WORKSPACE_UNAVAILABLE) goto fallback;
+    if (prepared != 0) goto fail_clean;
+    (void)ext2fs_close(fs); fs = NULL;
+
+    if (journal_phase(journal_path, state, "direct-staging", error) != 0)
+        goto fail_clean;
+    printf("EXT relayout preflight: %" PRIu64 " movable allocation blocks; %" PRIu64
+           " require relocation; canonical reserve policy %s.\n",
+           state->movable_blocks, state->move_blocks, growth ? "10%" : "0%");
+    printf("EXT phase 1: staging the complete original allocated set into a %" PRIu64
+           "-block high-address safety workspace beginning at block %" PRIu64 ".\n",
+           workspace.blocks, workspace.start);
+    printf("EXT adaptive transaction budget: up to %" PRIu64
+           " blocks (%.1f MiB) per durable copy boundary.\n",
+           workspace.batch_blocks,
+           (double)(workspace.batch_blocks * (uint64_t)workspace.block_size) /
+               (1024.0 * 1024.0));
+    fflush(stdout);
+
+    int staged = ext_workspace_stage(fd, db, &workspace, error);
+    if (staged == -2 || ld_stop_requested()) {
+        (void)flock(fd, LOCK_UN); close(fd); fd = -1;
+        sqlite3_close(db); db = NULL;
+        transaction_cleanup(journal_path, state);
+        puts("Stop requested during EXT workspace staging; original filesystem metadata and payload remain unchanged.");
+        emit_result(operation, "stopped", "");
+        return 130;
+    }
+    if (staged != 0) goto fail_clean;
+    if (journal_phase(journal_path, state, "direct-staged", error) != 0)
+        goto fail_clean;
+    if (ld_stop_requested()) {
+        (void)flock(fd, LOCK_UN); close(fd); fd = -1;
+        sqlite3_close(db); db = NULL;
+        transaction_cleanup(journal_path, state);
+        puts("Stop requested after EXT workspace staging; original filesystem remains unchanged.");
+        emit_result(operation, "stopped", "");
+        return 130;
+    }
+    if (check_unchanged_target(device, state, source_geometry, error) != 0)
+        goto fail_clean;
+
+    if (journal_phase(journal_path, state, "direct-placing", error) != 0)
+        goto fail_clean;
+    source_touched = true;
+    puts("EXT phase 2: placing the canonical layout directly from the durable safety workspace; no filesystem-sized working image is used.");
+    fflush(stdout);
+    int placed = ext_workspace_place(fd, db, &workspace, error);
+    if (placed == -2 || ld_stop_requested()) goto stop_restore;
+    if (placed != 0) goto fail_restore;
+
+    if (journal_phase(journal_path, state, "direct-metadata", error) != 0)
+        goto fail_restore;
+    puts("EXT phase 3: committing canonical inode mappings, allocation bitmaps and filesystem metadata.");
+    fflush(stdout);
+    /* Once direct metadata mutation begins it is intentionally uninterruptible;
+       Stop is honoured at the next complete metadata boundary. */
+    if (ext_apply_mappings(device, db, false, error) != 0) goto fail_restore;
+
+    if (journal_phase(journal_path, state, "direct-verifying", error) != 0)
+        goto fail_restore;
+    ExtCatalogue committed = {0};
+    if (ext_verify_stage(device, db, source_geometry, growth,
+                         &committed, error) != 0) {
+        ext_catalogue_free(&committed);
+        goto fail_restore;
+    }
+    printf("Layout verification:      %" PRIu64 " files and %" PRIu64
+           " directories contiguous; canonical %s policy verified.\n",
+           committed.regular_files, committed.directories, growth ? "10%" : "0%");
+    if (live_updates) emit_live_reset(source_geometry, &committed);
+    ext_catalogue_free(&committed);
+
+    printf("EXT unified workspace layout: %" PRIu64
+           " original allocated blocks protected, %" PRIu64
+           " relocated directly, without a filesystem-sized working image.\n",
+           workspace.blocks, state->move_blocks);
+    printf("%s %s completed with UUID and active filesystem capacity preserved.\n",
+           source_geometry->filesystem,
+           growth ? "Growth Defrag" : "Defragment");
+    fflush(stdout);
+    (void)flock(fd, LOCK_UN); close(fd); fd = -1;
+    sqlite3_close(db); db = NULL;
+    transaction_cleanup(journal_path, state);
+    if (ld_stop_requested()) {
+        emit_result(operation, "stopped", "");
+        return 130;
+    }
+    emit_result(operation, "completed", "");
+    return 0;
+
+stop_restore:
+    {
+        char *restore_error = NULL;
+        if (ext_workspace_restore(fd, db, &workspace, &restore_error) != 0 ||
+            validate_restored_ext(device, &restore_error) != 0) {
+            free(*error); *error = restore_error;
+            goto keep_recovery;
+        }
+        free(restore_error);
+    }
+    source_touched = false;
+    (void)flock(fd, LOCK_UN); close(fd); fd = -1;
+    sqlite3_close(db); db = NULL;
+    transaction_cleanup(journal_path, state);
+    puts("Growth/Defrag Stop restored the original EXT allocation from the durable workspace at a complete transaction boundary.");
+    emit_result(operation, "stopped", "");
+    return 130;
+
+fail_restore:
+    if (source_touched) {
+        char *restore_error = NULL;
+        if (ext_workspace_restore(fd, db, &workspace, &restore_error) != 0 ||
+            validate_restored_ext(device, &restore_error) != 0) {
+            free(*error); *error = restore_error;
+            goto keep_recovery;
+        }
+        free(restore_error);
+        source_touched = false;
+    }
+    goto fail_clean;
+
+fallback:
+    if (fs != NULL) { (void)ext2fs_close(fs); fs = NULL; }
+    if (fd >= 0) { (void)flock(fd, LOCK_UN); close(fd); fd = -1; }
+    if (db != NULL) { sqlite3_close(db); db = NULL; }
+    discard_plan_files(state->plan);
+    puts("EXT complete live allocation set does not fit a safe high-address workspace; using the verified working-image fallback.");
+    fflush(stdout);
+    return 2;
+
+fail_clean:
+    if (fs != NULL) (void)ext2fs_close(fs);
+    if (fd >= 0) { (void)flock(fd, LOCK_UN); close(fd); }
+    if (db != NULL) sqlite3_close(db);
+    transaction_cleanup(journal_path, state);
+    return -1;
+
+keep_recovery:
+    if (fs != NULL) (void)ext2fs_close(fs);
+    if (fd >= 0) { (void)flock(fd, LOCK_UN); close(fd); }
+    if (db != NULL) sqlite3_close(db);
+    puts("EXT direct relayout needs Recover; the durable workspace and plan have been retained.");
+    fflush(stdout);
+    return -1;
+}
+
 static int build_and_commit(const char *device, const char *operation,
                             const char *journal_path, bool live_updates,
-                            char **error) {
+                            uint64_t batch_blocks, char **error) {
     if (ld_path_is_mounted(device)) { ext_set_error(error, "refusing EXT mutation while the block device is mounted"); return 1; }
     char *identity = NULL, *real = NULL; uint64_t physical_bytes = 0;
     ExtGeometry source_geometry, staged_geometry; ExtCatalogue verified = {0};
@@ -525,9 +749,13 @@ static int build_and_commit(const char *device, const char *operation,
     snprintf(state.operation, sizeof(state.operation), "%s", operation); snprintf(state.phase, sizeof(state.phase), "preflight");
     state.stage = ld_path_append_suffix(journal_path, ".ext-stage.img"); state.plan = ld_path_append_suffix(journal_path, ".ext-plan.sqlite");
     state.physical_bytes = physical_bytes; state.filesystem_bytes = source_geometry.total_blocks * source_geometry.block_size;
-    if (capacity_preflight(journal_path, &source_geometry, error) != 0 || journal_save(journal_path, &state, error) != 0) goto done;
-    printf("Raw userspace native-C %s engine %s\n", source_geometry.filesystem, LD_VERSION); fflush(stdout);
+    if (journal_save(journal_path, &state, error) != 0) goto done;
+    printf("Raw userspace native-C %s relayout engine %s\n", source_geometry.filesystem, LD_VERSION); fflush(stdout);
     if (ld_stop_requested()) goto stopped;
+    int direct = try_workspace_relayout(device, operation, journal_path, live_updates,
+                                        batch_blocks, &state, &source_geometry, error);
+    if (direct != 2) { result = direct < 0 ? 1 : direct; goto done; }
+    if (capacity_preflight(journal_path, &source_geometry, error) != 0) goto precommit_fail;
     if (journal_phase(journal_path, &state, "cloning", error) != 0) goto precommit_fail;
     int clone = create_stage(device, state.stage, &source_geometry, error);
     if (clone == -2 || ld_stop_requested()) goto stopped;
@@ -563,7 +791,7 @@ static int build_and_commit(const char *device, const char *operation,
     printf("Arranging %" PRIu64 " EXT allocation blocks; %" PRIu64 " require relocation.\n",
            state.movable_blocks, state.move_blocks); fflush(stdout);
     if (ext_permute_payloads(state.stage, db, staged_geometry.block_size, state.move_blocks, error) != 0 ||
-        ext_apply_mappings(state.stage, db, error) != 0) goto precommit_fail;
+        ext_apply_mappings(state.stage, db, true, error) != 0) goto precommit_fail;
     if (journal_phase(journal_path, &state, "verifying-stage", error) != 0 ||
         ext_verify_stage(state.stage, db, &staged_geometry, strcmp(operation, "growth-defrag") == 0, &verified, error) != 0) goto precommit_fail;
     if (ld_stop_requested()) goto stopped;
@@ -611,6 +839,68 @@ static int recover(const char *device, const char *journal_path, char **error) {
         ext_set_error(error, "EXT recovery journal belongs to a different target"); free(real); free(identity); journal_free(&state); return 1;
     }
     free(real); free(identity);
+    if (strncmp(state.phase, "direct-", 7) == 0) {
+        sqlite3 *direct_db = NULL;
+        if (ext_open_plan_db(state.plan, false, &direct_db, error) != 0) {
+            journal_free(&state);
+            return 1;
+        }
+        if (strcmp(state.phase, "direct-staging") == 0 ||
+            strcmp(state.phase, "direct-staged") == 0) {
+            sqlite3_close(direct_db);
+            transaction_cleanup(journal_path, &state);
+            puts("Discarded an incomplete EXT workspace stage; source filesystem was unchanged.");
+            journal_free(&state);
+            emit_result("recover", "completed", "");
+            return 0;
+        }
+        ExtWorkspace workspace;
+        if (ext_workspace_load(direct_db, &workspace, error) != 0) {
+            sqlite3_close(direct_db);
+            journal_free(&state);
+            return 1;
+        }
+        if (strcmp(state.phase, "direct-verifying") == 0) {
+            ExtGeometry current_geometry;
+            ExtCatalogue verified = {0};
+            if (ext_read_geometry(device, &current_geometry, error) == 0 &&
+                ext_verify_stage(device, direct_db, &current_geometry,
+                                 strcmp(state.operation, "growth-defrag") == 0,
+                                 &verified, error) == 0) {
+                ext_catalogue_free(&verified);
+                sqlite3_close(direct_db);
+                transaction_cleanup(journal_path, &state);
+                puts("EXT direct workspace recovery verified the completed canonical layout.");
+                journal_free(&state);
+                emit_result("recover", "completed", "");
+                return 0;
+            }
+            ext_catalogue_free(&verified);
+            free(*error); *error = NULL;
+        }
+        int direct_fd = open(device, O_RDWR | O_CLOEXEC);
+        if (direct_fd < 0 || flock(direct_fd, LOCK_EX | LOCK_NB) != 0) {
+            if (direct_fd >= 0) close(direct_fd);
+            sqlite3_close(direct_db);
+            ext_set_error(error, "cannot lock EXT source for direct workspace recovery: %s", strerror(errno));
+            journal_free(&state);
+            return 1;
+        }
+        if (ext_workspace_restore(direct_fd, direct_db, &workspace, error) != 0 ||
+            validate_restored_ext(device, error) != 0) {
+            (void)flock(direct_fd, LOCK_UN); close(direct_fd);
+            sqlite3_close(direct_db);
+            journal_free(&state);
+            return 1;
+        }
+        (void)flock(direct_fd, LOCK_UN); close(direct_fd);
+        sqlite3_close(direct_db);
+        transaction_cleanup(journal_path, &state);
+        puts("EXT direct workspace recovery restored the exact original allocated filesystem state.");
+        journal_free(&state);
+        emit_result("recover", "completed", "");
+        return 0;
+    }
     if (strcmp(state.phase, "commit") != 0 && strcmp(state.phase, "verifying-source") != 0) {
         transaction_cleanup(journal_path, &state);
         puts("Discarded an incomplete EXT working image; the source filesystem was unchanged.");
@@ -660,13 +950,19 @@ int main(int argc, char **argv) {
     }
     const char *operation = argv[1], *device = argv[2], *confirm = NULL, *journal = NULL;
     bool write = false, live_updates = false; int growth_percent = 10;
+    uint64_t batch_blocks = 0;
     for (int index = 3; index < argc; ++index) {
         if (strcmp(argv[index], "--write") == 0) write = true;
         else if (strcmp(argv[index], "--confirm") == 0 && index + 1 < argc) confirm = argv[++index];
         else if (strcmp(argv[index], "--journal") == 0 && index + 1 < argc) journal = argv[++index];
         else if (strcmp(argv[index], "--growth-percent") == 0 && index + 1 < argc) growth_percent = atoi(argv[++index]);
         else if (strcmp(argv[index], "--live-map-cells") == 0 && index + 1 < argc) { live_updates = atoi(argv[++index]) > 0; }
-        else if ((strcmp(argv[index], "--workers") == 0 || strcmp(argv[index], "--ram-buffer") == 0 || strcmp(argv[index], "--batch-clusters") == 0) && index + 1 < argc) { index++; }
+        else if (strcmp(argv[index], "--batch-clusters") == 0 && index + 1 < argc) {
+            if (parse_u64(argv[++index], &batch_blocks) != 0 || batch_blocks == 0) {
+                fprintf(stderr, "%s: --batch-clusters requires a positive integer\n", PROGRAM_NAME); return 2;
+            }
+        }
+        else if ((strcmp(argv[index], "--workers") == 0 || strcmp(argv[index], "--ram-buffer") == 0) && index + 1 < argc) { index++; }
         else { fprintf(stderr, "%s: unknown or incomplete option: %s\n", PROGRAM_NAME, argv[index]); return 2; }
     }
     if (!write || confirm == NULL || strcmp(confirm, device) != 0 || journal == NULL) {
@@ -679,7 +975,7 @@ int main(int argc, char **argv) {
     if (strcmp(operation, "recover") == 0) result = recover(device, journal, &error);
     else {
         if (access(journal, F_OK) == 0) { fprintf(stderr, "%s: an unfinished EXT journal exists; run Recover first\n", PROGRAM_NAME); return 1; }
-        result = build_and_commit(device, operation, journal, live_updates, &error);
+        result = build_and_commit(device, operation, journal, live_updates, batch_blocks, &error);
     }
     if (result != 0 && result != 130 && error != NULL) fprintf(stderr, "%s: %s\n", PROGRAM_NAME, error);
     free(error); return result;

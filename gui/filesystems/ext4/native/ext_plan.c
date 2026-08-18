@@ -388,7 +388,8 @@ static int reserve_blocks(ext2_filsys fs, sqlite3 *db, bool allocate, char **err
     return 0;
 }
 
-int ext_apply_mappings(const char *stage, sqlite3 *db, char **error) {
+int ext_apply_mappings(const char *stage, sqlite3 *db, bool allow_stop,
+                       char **error) {
     ext2_filsys fs = NULL;
     if (ext_open_fs(stage, true, &fs, error) != 0) return -1;
     int result = -1;
@@ -413,7 +414,7 @@ int ext_apply_mappings(const char *stage, sqlite3 *db, char **error) {
     }
     size_t inode_index = 0;
     while ((state = sqlite3_step(inodes)) == SQLITE_ROW) {
-        if (ld_stop_requested()) { ext_set_error(error, "stop requested before EXT source commit"); sqlite3_finalize(inodes); sqlite3_finalize(mappings); goto done; }
+        if (allow_stop && ld_stop_requested()) { ext_set_error(error, "stop requested before EXT source commit"); sqlite3_finalize(inodes); sqlite3_finalize(mappings); goto done; }
         ext2_ino_t ino = (ext2_ino_t)sqlite3_column_int64(inodes, 0);
         sqlite3_reset(mappings); sqlite3_clear_bindings(mappings); sqlite3_bind_int64(mappings, 1, (sqlite3_int64)ino);
         MappingContext context = {0};

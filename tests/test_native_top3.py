@@ -159,26 +159,16 @@ def test_ext(work: Path) -> None:
     assert before["fragmented_files"] > 0 or before["fragmented_directories"] > 0
     identity = before["uuid"]
     output = mutate(worker, image, "defrag", work / "ext-defrag.journal")
-    match = re.search(
-        r"EXT source commit: writing ([0-9.]+) MB of verified allocated blocks "
-        r"instead of rewriting the full ([0-9.]+) MB filesystem\.",
-        output,
-    )
-    assert match is not None, output
-    committed_mb, full_mb = map(float, match.groups())
-    assert committed_mb < full_mb * 0.50, (committed_mb, full_mb, output)
+    assert "EXT unified workspace layout:" in output, output
+    assert "EXT workspace staging complete:" in output, output
+    assert "internally verified EXT working image" not in output, output
     packed = run_json(worker, image)
     assert packed["uuid"] == identity
     assert_clean(packed, growth=False)
     output = mutate(worker, image, "growth-defrag", work / "ext-growth.journal")
-    match = re.search(
-        r"EXT source commit: writing ([0-9.]+) MB of verified allocated blocks "
-        r"instead of rewriting the full ([0-9.]+) MB filesystem\.",
-        output,
-    )
-    assert match is not None, output
-    committed_mb, full_mb = map(float, match.groups())
-    assert committed_mb < full_mb * 0.50, (committed_mb, full_mb, output)
+    assert "EXT unified workspace layout:" in output, output
+    assert "EXT workspace staging complete:" in output, output
+    assert "internally verified EXT working image" not in output, output
     grown = run_json(worker, image)
     assert grown["uuid"] == identity
     assert_clean(grown, growth=True)

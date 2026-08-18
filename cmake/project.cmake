@@ -267,7 +267,8 @@ find_library(COM_ERR_LIBRARY com_err REQUIRED)
 add_library(linux-defragger-ext-native STATIC
     gui/filesystems/ext4/native/ext_common.c
     gui/filesystems/ext4/native/ext_catalog.c
-    gui/filesystems/ext4/native/ext_plan.c)
+    gui/filesystems/ext4/native/ext_plan.c
+    gui/filesystems/ext4/native/ext_workspace.c)
 target_include_directories(linux-defragger-ext-native PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/ext4/native"
