@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
@@ -15,6 +16,7 @@ from .backend_catalog import BackendCatalog
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
 _GENERIC_FAT_TYPES = frozenset({"vfat", "fat", "msdos"})
+_NATURAL_DEVICE_PARTS = re.compile(r"(\d+)")
 
 
 def json_bool(value: Any) -> bool:
@@ -29,6 +31,25 @@ def flatten_lsblk(nodes: Iterable[dict[str, Any]]) -> Iterable[dict[str, Any]]:
     for node in nodes:
         yield node
         yield from flatten_lsblk(node.get("children") or [])
+
+
+def natural_device_sort_key(path: str) -> tuple[tuple[int, object], ...]:
+    """Sort Linux block-device paths by numeric components, not text order.
+
+    This keeps partitions grouped in the order humans expect, for example
+    ``mmcblk0p1, mmcblk0p2, ... mmcblk0p10`` and
+    ``nvme0n1p1, nvme0n1p2, ... nvme0n1p12``.
+    """
+
+    parts: list[tuple[int, object]] = []
+    for part in _NATURAL_DEVICE_PARTS.split(path.casefold()):
+        if not part:
+            continue
+        if part.isdigit():
+            parts.append((1, int(part)))
+        else:
+            parts.append((0, part))
+    return tuple(parts)
 
 
 def fat_variant(fstype: str, fs_version: str) -> str:
@@ -185,5 +206,10 @@ def discover_volumes(
                 partition_uuid=str(node.get("partuuid") or ""),
             )
         )
-    volumes.sort(key=lambda volume: (not volume.removable, volume.path))
+    volumes.sort(
+        key=lambda volume: (
+            not volume.removable,
+            natural_device_sort_key(volume.path),
+        )
+    )
     return volumes
