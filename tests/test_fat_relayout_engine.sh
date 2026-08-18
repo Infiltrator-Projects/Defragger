@@ -112,6 +112,14 @@ grep -q 'adaptive dependency batch' "$WORK/fat16-dependencies.log" || {
     cat "$WORK/fat16-dependencies.log" >&2
     fail "FAT16 dependency blocker workload did not exercise batched adaptive staging"
 }
+grep -q 'adaptive dependency transaction budget:' "$WORK/fat16-dependencies.log" || {
+    cat "$WORK/fat16-dependencies.log" >&2
+    fail "FAT16 adaptive dependency workload did not report its Stop-safe transaction budget"
+}
+grep -q 'adaptive dependency batch: staging' "$WORK/fat16-dependencies.log" || {
+    cat "$WORK/fat16-dependencies.log" >&2
+    fail "FAT16 adaptive dependency workload did not report the staging transaction before it began"
+}
 dependency_transactions=$(sed -n \
     's/^Growth Defrag layout I\/O:.* in \([0-9][0-9]*\) transaction.*$/\1/p' \
     "$WORK/fat16-dependencies.log" | tail -n 1)

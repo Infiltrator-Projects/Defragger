@@ -254,8 +254,8 @@ class PrivilegeSession:
                     RunnerEvent(
                         "stop-delivered",
                         purpose,
-                        "Stop signal delivered; the engine will exit after the "
-                        "active journalled transaction.",
+                        "Stop signal delivered; the engine will exit at the next safe "
+                        "transaction boundary.",
                     )
                 )
             else:
