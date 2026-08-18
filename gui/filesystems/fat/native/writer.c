@@ -733,6 +733,440 @@ static bool execute_full_workspace_layout(
     return true;
 }
 
+
+static bool chain_is_inside_workspace(const U32Vec *chain,
+                            uint32_t workspace_start,
+                            size_t workspace_clusters) {
+    if (chain->len == 0 || workspace_clusters == 0) return false;
+    uint64_t workspace_end =
+        (uint64_t)workspace_start + workspace_clusters - 1;
+    for (size_t i = 0; i < chain->len; i++) {
+        uint64_t cluster = chain->v[i];
+        if (cluster < workspace_start || cluster > workspace_end) return false;
+    }
+    return true;
+}
+
+static size_t largest_free_workspace_run(const Fat32 *fs,
+                               uint32_t workspace_start,
+                               size_t workspace_clusters) {
+    size_t best = 0;
+    size_t run = 0;
+    for (size_t offset = 0; offset < workspace_clusters; offset++) {
+        uint32_t cluster = workspace_start + (uint32_t)offset;
+        if (fat_is_free(fs, cluster)) {
+  run++;
+  if (run > best) best = run;
+        } else {
+  run = 0;
+        }
+    }
+    return best;
+}
+
+static uint32_t find_free_workspace_run(const Fat32 *fs,
+                              uint32_t workspace_start,
+                              size_t workspace_clusters,
+                              size_t length) {
+    if (length == 0 || length > workspace_clusters) return 0;
+    size_t run = 0;
+    for (size_t offset = 0; offset < workspace_clusters; offset++) {
+        uint32_t cluster = workspace_start + (uint32_t)offset;
+        if (fat_is_free(fs, cluster)) {
+  run++;
+  if (run == length) {
+      return cluster - (uint32_t)(length - 1);
+  }
+        } else {
+  run = 0;
+        }
+    }
+    return 0;
+}
+
+/* Mixed FAT layouts can contain a small number of fragmented objects whose
+   scattered source clusters block thousands of otherwise independent final
+   targets.  Staging each victim object and immediately shuffling its blocker
+   wastes three transactions per file.  Instead, finish every currently-free
+   target in one RAM-sized transaction.  If the dependency graph stalls, park
+   the object that blocks the most outstanding target clusters in the durable
+   terminal workspace, leave it there, and rescan.  Its released source extents
+   usually unlock a large direct batch.  Staged blockers return to their final
+   targets as soon as those targets become free, so workspace capacity is reused
+   rather than requiring the entire live set to fit at once. */
+static bool execute_adaptive_dependency_layout(
+    Fat32 *fs,
+    const char *journal_path,
+    GrowthObjectList *objects,
+    uint32_t workspace_start,
+    size_t workspace_clusters,
+    size_t cluster_batch_limit,
+    const char *layout_name,
+    GrowthStats *stats
+) {
+    for (;;) {
+        if (ld_stop_requested()) {
+  stats->interrupted = true;
+  fprintf(stderr,
+          "%s stopped safely during adaptive dependency layout between "
+          "complete transactions.\n",
+          layout_name);
+  return true;
+        }
+
+        DirRefList current_refs = {0};
+        FileList current_files = scan_files(fs, &current_refs);
+        uint8_t *nonexact = ld_xcalloc(objects->len, 1);
+        uint8_t *staged = ld_xcalloc(objects->len, 1);
+        uint8_t *target_needed = ld_xcalloc((size_t)fs->max_cluster + 1, 1);
+        size_t remaining = 0;
+
+        for (size_t index = 0; index < objects->len; index++) {
+  GrowthObject *object = &objects->v[index];
+  const FileRecord *current_file = NULL;
+  U32Vec local_root = {0};
+  const U32Vec *chain = find_growth_object_chain(
+      fs, object, &current_files, &local_root, &current_file);
+  (void)current_file;
+  if (chain->len != object->clusters) {
+      u32vec_free(&local_root);
+      free(target_needed);
+      free(staged);
+      free(nonexact);
+      filelist_free(&current_files);
+      dirreflist_free(&current_refs);
+      ld_die("layout object changed size during adaptive dependency scan");
+  }
+  if (!chain_is_exact_run(chain, object->target)) {
+      nonexact[index] = 1;
+      staged[index] = chain_is_inside_workspace(
+          chain, workspace_start, workspace_clusters) ? 1 : 0;
+      remaining++;
+      uint64_t target_end =
+          (uint64_t)object->target + object->clusters - 1;
+      if (target_end > fs->max_cluster) {
+          u32vec_free(&local_root);
+          free(target_needed);
+          free(staged);
+          free(nonexact);
+          filelist_free(&current_files);
+          dirreflist_free(&current_refs);
+          ld_die("adaptive dependency target exceeds the filesystem");
+      }
+      for (size_t i = 0; i < object->clusters; i++) {
+          target_needed[object->target + (uint32_t)i] = 1;
+      }
+  }
+  u32vec_free(&local_root);
+        }
+
+        if (remaining == 0) {
+  free(target_needed);
+  free(staged);
+  free(nonexact);
+  filelist_free(&current_files);
+  dirreflist_free(&current_refs);
+  return true;
+        }
+
+        uint8_t *source_seen = ld_xcalloc((size_t)fs->max_cluster + 1, 1);
+        uint8_t *destination_seen = ld_xcalloc((size_t)fs->max_cluster + 1, 1);
+        RelocationMove *moves = NULL;
+        size_t move_count = 0;
+        size_t move_cap = 0;
+        size_t batch_objects = 0;
+        size_t batch_files = 0;
+        size_t batch_directories = 0;
+
+        for (size_t cursor = objects->len; cursor != 0; cursor--) {
+  size_t index = cursor - 1;
+  if (!nonexact[index]) continue;
+  GrowthObject *object = &objects->v[index];
+  const FileRecord *current_file = NULL;
+  U32Vec local_root = {0};
+  const U32Vec *chain = find_growth_object_chain(
+      fs, object, &current_files, &local_root, &current_file);
+  (void)current_file;
+  if (chain->len != object->clusters) {
+      u32vec_free(&local_root);
+      free(moves);
+      free(destination_seen);
+      free(source_seen);
+      free(target_needed);
+      free(staged);
+      free(nonexact);
+      filelist_free(&current_files);
+      dirreflist_free(&current_refs);
+      ld_die("layout object changed size during adaptive direct batch");
+  }
+
+  if (move_count != 0 &&
+      object->clusters > cluster_batch_limit - move_count) {
+      u32vec_free(&local_root);
+      continue;
+  }
+  if (move_count != 0 &&
+      move_count + object->clusters > cluster_batch_limit) {
+      u32vec_free(&local_root);
+      continue;
+  }
+  if (!growth_batch_can_add(fs, chain, object->target,
+                            source_seen, destination_seen)) {
+      u32vec_free(&local_root);
+      continue;
+  }
+
+  if (move_count + chain->len > move_cap) {
+      size_t new_cap = move_cap == 0 ? chain->len : move_cap;
+      while (new_cap < move_count + chain->len) new_cap *= 2;
+      moves = ld_xrealloc(moves, new_cap * sizeof(*moves));
+      move_cap = new_cap;
+  }
+  for (size_t i = 0; i < chain->len; i++) {
+      uint32_t source = chain->v[i];
+      uint32_t destination = object->target + (uint32_t)i;
+      moves[move_count++] = (RelocationMove){
+          .source = source,
+          .destination = destination,
+      };
+      source_seen[source] = 1;
+      destination_seen[destination] = 1;
+  }
+  batch_objects++;
+  if (object->is_dir) batch_directories++;
+  else batch_files++;
+  u32vec_free(&local_root);
+  if (move_count >= cluster_batch_limit) break;
+        }
+
+        free(destination_seen);
+        free(source_seen);
+        if (move_count != 0) {
+  relocation_execute_moves(
+      fs, &current_refs, journal_path, moves, move_count);
+  stats->transactions++;
+  stats->clusters_copied += move_count;
+  stats->objects_moved += batch_objects;
+  stats->files_moved += batch_files;
+  stats->directories_moved += batch_directories;
+  fprintf(stderr,
+          "%s adaptive direct batch: %zu object%s (%zu file%s, "
+          "%zu director%s), %zu cluster%s committed in one journal "
+          "transaction; %zu object%s remain.\n",
+          layout_name,
+          batch_objects, batch_objects == 1 ? "" : "s",
+          batch_files, batch_files == 1 ? "" : "s",
+          batch_directories, batch_directories == 1 ? "y" : "ies",
+          move_count, move_count == 1 ? "" : "s",
+          remaining - batch_objects,
+          remaining - batch_objects == 1 ? "" : "s");
+  free(moves);
+  free(target_needed);
+  free(staged);
+  free(nonexact);
+  filelist_free(&current_files);
+  dirreflist_free(&current_refs);
+  continue;
+        }
+        free(moves);
+
+        size_t max_workspace_run = largest_free_workspace_run(
+            fs, workspace_start, workspace_clusters);
+        uint32_t first_workspace_cluster = find_free_workspace_run(
+            fs, workspace_start, workspace_clusters, 1);
+        if (max_workspace_run == 0 || first_workspace_cluster == 0) {
+            free(target_needed);
+            free(staged);
+            free(nonexact);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            return false;
+        }
+
+        uint8_t *workspace_available = ld_xcalloc(workspace_clusters, 1);
+        for (size_t offset = 0; offset < workspace_clusters; offset++) {
+            workspace_available[offset] = fat_is_free(
+                fs, workspace_start + (uint32_t)offset) ? 1 : 0;
+        }
+        uint8_t *selected = ld_xcalloc(objects->len, 1);
+        RelocationMove *stage_moves = NULL;
+        size_t stage_move_count = 0;
+        size_t stage_move_cap = 0;
+        size_t stage_objects = 0;
+        size_t stage_files = 0;
+        size_t stage_directories = 0;
+        size_t released_targets = 0;
+
+        for (;;) {
+            if (stage_move_count >= cluster_batch_limit) break;
+
+            size_t best_index = SIZE_MAX;
+            size_t best_score = 0;
+            size_t best_clusters = 0;
+            uint32_t best_staged_at = 0;
+
+            for (size_t index = 0; index < objects->len; index++) {
+                if (!nonexact[index] || staged[index] || selected[index]) continue;
+                GrowthObject *object = &objects->v[index];
+                if (object->clusters > max_workspace_run ||
+                    object->clusters > cluster_batch_limit - stage_move_count) {
+                    continue;
+                }
+
+                const FileRecord *current_file = NULL;
+                U32Vec local_root = {0};
+                const U32Vec *chain = find_growth_object_chain(
+                    fs, object, &current_files, &local_root, &current_file);
+                (void)current_file;
+
+                size_t score = 0;
+                for (size_t i = 0; i < chain->len; i++) {
+                    if (target_needed[chain->v[i]]) score++;
+                }
+                if (score == 0) {
+                    u32vec_free(&local_root);
+                    continue;
+                }
+
+                size_t run = 0;
+                uint32_t candidate_at = 0;
+                for (size_t offset = 0; offset < workspace_clusters; offset++) {
+                    if (workspace_available[offset]) {
+                        run++;
+                        if (run == chain->len) {
+                            size_t first_offset = offset + 1 - chain->len;
+                            candidate_at = workspace_start + (uint32_t)first_offset;
+                            break;
+                        }
+                    } else {
+                        run = 0;
+                    }
+                }
+
+                if (candidate_at != 0 &&
+                    (score > best_score ||
+                     (score == best_score &&
+                      (best_index == SIZE_MAX || chain->len < best_clusters)))) {
+                    best_index = index;
+                    best_score = score;
+                    best_clusters = chain->len;
+                    best_staged_at = candidate_at;
+                }
+                u32vec_free(&local_root);
+            }
+
+            if (best_index == SIZE_MAX) break;
+
+            GrowthObject *blocker = &objects->v[best_index];
+            const FileRecord *current_file = NULL;
+            U32Vec local_root = {0};
+            const U32Vec *chain = find_growth_object_chain(
+                fs, blocker, &current_files, &local_root, &current_file);
+            (void)current_file;
+            if (chain->len != blocker->clusters) {
+                u32vec_free(&local_root);
+                free(stage_moves);
+                free(selected);
+                free(workspace_available);
+                free(target_needed);
+                free(staged);
+                free(nonexact);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("layout object changed size during adaptive blocker batch");
+            }
+
+            if (stage_move_count + chain->len > stage_move_cap) {
+                size_t new_cap = stage_move_cap == 0 ? chain->len : stage_move_cap;
+                while (new_cap < stage_move_count + chain->len) {
+                    if (new_cap > SIZE_MAX / 2) {
+                        u32vec_free(&local_root);
+                        free(stage_moves);
+                        free(selected);
+                        free(workspace_available);
+                        free(target_needed);
+                        free(staged);
+                        free(nonexact);
+                        filelist_free(&current_files);
+                        dirreflist_free(&current_refs);
+                        ld_die("adaptive blocker move array overflow");
+                    }
+                    new_cap *= 2;
+                }
+                stage_moves = ld_xrealloc(stage_moves, new_cap * sizeof(*stage_moves));
+                stage_move_cap = new_cap;
+            }
+            for (size_t i = 0; i < chain->len; i++) {
+                stage_moves[stage_move_count++] = (RelocationMove){
+                    .source = chain->v[i],
+                    .destination = best_staged_at + (uint32_t)i,
+                };
+            }
+            size_t first_offset = (size_t)(best_staged_at - workspace_start);
+            for (size_t i = 0; i < chain->len; i++) {
+                workspace_available[first_offset + i] = 0;
+            }
+            selected[best_index] = 1;
+            stage_objects++;
+            if (blocker->is_dir) stage_directories++;
+            else stage_files++;
+            if (best_score > SIZE_MAX - released_targets) {
+                u32vec_free(&local_root);
+                free(stage_moves);
+                free(selected);
+                free(workspace_available);
+                free(target_needed);
+                free(staged);
+                free(nonexact);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("adaptive blocker score overflow");
+            }
+            released_targets += best_score;
+            u32vec_free(&local_root);
+        }
+
+        free(selected);
+        free(workspace_available);
+        if (stage_move_count == 0) {
+            free(stage_moves);
+            free(target_needed);
+            free(staged);
+            free(nonexact);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            return false;
+        }
+
+        detail_log(
+            "layout-adaptive-stage-batch: %zu blockers / %zu clusters -> reusable "
+            "terminal workspace; releases %zu outstanding target-cluster references\n",
+            stage_objects, stage_move_count, released_targets);
+        fat_relocation_execute(
+            fs, &current_refs, journal_path, stage_moves, stage_move_count,
+            &g_io, detail_log);
+        stats->transactions++;
+        stats->clusters_copied += stage_move_count;
+        fprintf(stderr,
+                "%s adaptive dependency batch: staged %zu blocker%s "
+                "(%zu file%s, %zu director%s), %zu cluster%s in one journal "
+                "transaction to release %zu blocked target-cluster references.\n",
+                layout_name,
+                stage_objects, stage_objects == 1 ? "" : "s",
+                stage_files, stage_files == 1 ? "" : "s",
+                stage_directories, stage_directories == 1 ? "y" : "ies",
+                stage_move_count, stage_move_count == 1 ? "" : "s",
+                released_targets);
+
+        free(stage_moves);
+        free(target_needed);
+        free(staged);
+        free(nonexact);
+        filelist_free(&current_files);
+        dirreflist_free(&current_refs);
+    }
+}
+
 static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                                        unsigned requested_percent,
                                        size_t batch_clusters) {
@@ -971,8 +1405,22 @@ static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         return stats;
     }
     fprintf(stderr,
-            "%s remaining dependency set exceeds the RAM/workspace fast path; "
-            "continuing with the general safe planner.\n",
+            "%s remaining dependency set exceeds the all-at-once workspace fast path; "
+            "switching to the adaptive dependency scheduler.\n",
+            layout_name);
+
+    bool completed_adaptive = execute_adaptive_dependency_layout(
+        fs, journal_path, &objects, workspace_start, workspace_clusters,
+        cluster_batch_limit, layout_name, &stats);
+    if (completed_adaptive) {
+        fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
+        fat32_sync(fs);
+        growth_object_list_free(&objects);
+        return stats;
+    }
+    fprintf(stderr,
+            "%s adaptive dependency scheduler exhausted the reusable workspace; "
+            "continuing with the final one-object safety fallback.\n",
             layout_name);
 
     while (reverse != 0) {
