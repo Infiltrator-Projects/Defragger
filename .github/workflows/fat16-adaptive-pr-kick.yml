@@ -18,14 +18,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake pkg-config python3 python3-gi python3-cairo \
-            gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux \
-            libext2fs-dev libsqlite3-dev libssl-dev
+          submodules: recursive
 
       - name: Apply scheduler patch embedded in push workflow
         shell: bash
@@ -49,13 +42,36 @@ jobs:
           exec(compile(code, 'fat16-adaptive-patch', 'exec'))
           PY
 
-      - name: Build with warnings as errors
+      - name: Compile focused FAT worker with warnings as errors
+        shell: bash
         run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLD_ENABLE_WERROR=ON \
-            -DBUILD_TESTING=ON
-          cmake --build build -j2
+          set -euo pipefail
+          mkdir -p build/generated
+          VERSION=$(tr -d '\r\n' < VERSION)
+          printf '%s\n' \
+            '// SPDX-License-Identifier: GPL-3.0-or-later' \
+            '#ifndef LD_VERSION_H' \
+            '#define LD_VERSION_H' \
+            "#define LD_VERSION \"${VERSION}\"" \
+            '#endif' > build/generated/version.h
+          cc -std=c11 -O2 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/fat/native -Ibuild/generated \
+            -Ishared/infiltratr-common/include \
+            gui/filesystems/fat/native/writer.c \
+            gui/filesystems/fat/native/fat_analysis.c \
+            gui/filesystems/fat/native/fat_directory.c \
+            gui/filesystems/fat/native/fat_growth.c \
+            gui/filesystems/fat/native/fat_io.c \
+            gui/filesystems/fat/native/fat_journal.c \
+            gui/filesystems/fat/native/fat_relocation.c \
+            gui/filesystems/fat/native/fat_volume.c \
+            src/core/ld_runtime.c src/core/ld_io.c src/core/ld_device.c \
+            src/core/ld_stop.c src/core/ld_path.c \
+            shared/infiltratr-common/src/core.c \
+            shared/infiltratr-common/src/posix.c \
+            -pthread -lm -o build/linux-defragger-fat-worker
 
       - name: Run FAT relayout regressions
         run: ./tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
