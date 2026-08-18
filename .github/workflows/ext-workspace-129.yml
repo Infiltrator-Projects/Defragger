@@ -74,7 +74,7 @@ jobs:
         run: python3 tests/test_native_top3.py
 
       - name: Run classic FAT relayout regression
-        run: tests/test_fat_relayout_engine.sh
+        run: bash tests/test_fat_relayout_engine.sh
 
       - name: Run GUI model regressions
         env:
