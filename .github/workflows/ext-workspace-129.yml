@@ -33,6 +33,16 @@ jobs:
         run: |
           set -euo pipefail
           python3 tests/apply_ext_workspace_129.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('gui/filesystems/ext4/native/ext_worker.c')
+          s = p.read_text(encoding='utf-8')
+          old = '''    bool source_touched = false;\n    int result = -1;\n\n    if (ext_open_plan_db(state->plan, true, &db, error) != 0) goto fail_clean;'''
+          new = '''    bool source_touched = false;\n\n    if (ext_open_plan_db(state->plan, true, &db, error) != 0) goto fail_clean;'''
+          if s.count(old) != 1:
+              raise SystemExit('unused-result validation fix anchor is not unique')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
           git diff --check
 
       - name: Install build dependencies
