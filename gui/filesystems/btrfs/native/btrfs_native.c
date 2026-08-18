@@ -403,8 +403,9 @@ static int parse_chunk(const uint8_t *data, size_t size, uint64_t logical,
         set_error(error, error_size, "invalid Btrfs chunk geometry");
         return -1;
     }
-    if ((size_t)stripe_count > (SIZE_MAX - BTRFS_CHUNK_FIXED_SIZE) / BTRFS_STRIPE_SIZE ||
-        BTRFS_CHUNK_FIXED_SIZE + (size_t)stripe_count * BTRFS_STRIPE_SIZE > size) {
+    const size_t stripe_bytes = BTRFS_CHUNK_FIXED_SIZE +
+                                (size_t)stripe_count * BTRFS_STRIPE_SIZE;
+    if (stripe_bytes > size) {
         set_error(error, error_size, "truncated Btrfs chunk stripes");
         return -1;
     }
