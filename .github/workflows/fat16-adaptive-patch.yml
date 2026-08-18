@@ -1,0 +1,403 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: FAT16 adaptive dependency patch
+
+on:
+  push:
+    branches:
+      - c-first-fat16-adaptive-dependencies
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: ${{ !contains(github.event.head_commit.message, '[adaptive-patched]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: c-first-fat16-adaptive-dependencies
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config python3 python3-gi python3-cairo \
+            gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux \
+            libext2fs-dev libsqlite3-dev libssl-dev
+
+      - name: Apply adaptive dependency scheduler
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('gui/filesystems/fat/native/writer.c')
+          text = path.read_text(encoding='utf-8')
+          if 'execute_adaptive_dependency_layout' in text:
+              raise SystemExit('adaptive dependency scheduler already present')
+
+          marker = 'static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,'
+          if marker not in text:
+              raise SystemExit('fat_relayout_volume marker not found')
+
+          helper = r'''
+static bool chain_is_inside_workspace(const U32Vec *chain,
+                                      uint32_t workspace_start,
+                                      size_t workspace_clusters) {
+    if (chain->len == 0 || workspace_clusters == 0) return false;
+    uint64_t workspace_end =
+        (uint64_t)workspace_start + workspace_clusters - 1;
+    for (size_t i = 0; i < chain->len; i++) {
+        uint64_t cluster = chain->v[i];
+        if (cluster < workspace_start || cluster > workspace_end) return false;
+    }
+    return true;
+}
+
+static size_t largest_free_workspace_run(const Fat32 *fs,
+                                         uint32_t workspace_start,
+                                         size_t workspace_clusters) {
+    size_t best = 0;
+    size_t run = 0;
+    for (size_t offset = 0; offset < workspace_clusters; offset++) {
+        uint32_t cluster = workspace_start + (uint32_t)offset;
+        if (fat_is_free(fs, cluster)) {
+            run++;
+            if (run > best) best = run;
+        } else {
+            run = 0;
+        }
+    }
+    return best;
+}
+
+static uint32_t find_free_workspace_run(const Fat32 *fs,
+                                        uint32_t workspace_start,
+                                        size_t workspace_clusters,
+                                        size_t length) {
+    if (length == 0 || length > workspace_clusters) return 0;
+    size_t run = 0;
+    for (size_t offset = 0; offset < workspace_clusters; offset++) {
+        uint32_t cluster = workspace_start + (uint32_t)offset;
+        if (fat_is_free(fs, cluster)) {
+            run++;
+            if (run == length) {
+                return cluster - (uint32_t)(length - 1);
+            }
+        } else {
+            run = 0;
+        }
+    }
+    return 0;
+}
+
+/* Mixed FAT layouts can contain a small number of fragmented objects whose
+   scattered source clusters block thousands of otherwise independent final
+   targets.  Staging each victim object and immediately shuffling its blocker
+   wastes three transactions per file.  Instead, finish every currently-free
+   target in one RAM-sized transaction.  If the dependency graph stalls, park
+   the object that blocks the most outstanding target clusters in the durable
+   terminal workspace, leave it there, and rescan.  Its released source extents
+   usually unlock a large direct batch.  Staged blockers return to their final
+   targets as soon as those targets become free, so workspace capacity is reused
+   rather than requiring the entire live set to fit at once. */
+static bool execute_adaptive_dependency_layout(
+    Fat32 *fs,
+    const char *journal_path,
+    GrowthObjectList *objects,
+    uint32_t workspace_start,
+    size_t workspace_clusters,
+    size_t cluster_batch_limit,
+    const char *layout_name,
+    GrowthStats *stats
+) {
+    for (;;) {
+        if (ld_stop_requested()) {
+            stats->interrupted = true;
+            fprintf(stderr,
+                    "%s stopped safely during adaptive dependency layout between "
+                    "complete transactions.\n",
+                    layout_name);
+            return true;
+        }
+
+        DirRefList current_refs = {0};
+        FileList current_files = scan_files(fs, &current_refs);
+        uint8_t *nonexact = ld_xcalloc(objects->len, 1);
+        uint8_t *staged = ld_xcalloc(objects->len, 1);
+        uint8_t *target_needed = ld_xcalloc((size_t)fs->max_cluster + 1, 1);
+        size_t remaining = 0;
+
+        for (size_t index = 0; index < objects->len; index++) {
+            GrowthObject *object = &objects->v[index];
+            const FileRecord *current_file = NULL;
+            U32Vec local_root = {0};
+            const U32Vec *chain = find_growth_object_chain(
+                fs, object, &current_files, &local_root, &current_file);
+            (void)current_file;
+            if (chain->len != object->clusters) {
+                u32vec_free(&local_root);
+                free(target_needed);
+                free(staged);
+                free(nonexact);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("layout object changed size during adaptive dependency scan");
+            }
+            if (!chain_is_exact_run(chain, object->target)) {
+                nonexact[index] = 1;
+                staged[index] = chain_is_inside_workspace(
+                    chain, workspace_start, workspace_clusters) ? 1 : 0;
+                remaining++;
+                uint64_t target_end =
+                    (uint64_t)object->target + object->clusters - 1;
+                if (target_end > fs->max_cluster) {
+                    u32vec_free(&local_root);
+                    free(target_needed);
+                    free(staged);
+                    free(nonexact);
+                    filelist_free(&current_files);
+                    dirreflist_free(&current_refs);
+                    ld_die("adaptive dependency target exceeds the filesystem");
+                }
+                for (size_t i = 0; i < object->clusters; i++) {
+                    target_needed[object->target + (uint32_t)i] = 1;
+                }
+            }
+            u32vec_free(&local_root);
+        }
+
+        if (remaining == 0) {
+            free(target_needed);
+            free(staged);
+            free(nonexact);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            return true;
+        }
+
+        uint8_t *source_seen = ld_xcalloc((size_t)fs->max_cluster + 1, 1);
+        uint8_t *destination_seen = ld_xcalloc((size_t)fs->max_cluster + 1, 1);
+        RelocationMove *moves = NULL;
+        size_t move_count = 0;
+        size_t move_cap = 0;
+        size_t batch_objects = 0;
+        size_t batch_files = 0;
+        size_t batch_directories = 0;
+
+        for (size_t cursor = objects->len; cursor != 0; cursor--) {
+            size_t index = cursor - 1;
+            if (!nonexact[index]) continue;
+            GrowthObject *object = &objects->v[index];
+            const FileRecord *current_file = NULL;
+            U32Vec local_root = {0};
+            const U32Vec *chain = find_growth_object_chain(
+                fs, object, &current_files, &local_root, &current_file);
+            (void)current_file;
+            if (chain->len != object->clusters) {
+                u32vec_free(&local_root);
+                free(moves);
+                free(destination_seen);
+                free(source_seen);
+                free(target_needed);
+                free(staged);
+                free(nonexact);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("layout object changed size during adaptive direct batch");
+            }
+
+            if (move_count != 0 &&
+                object->clusters > cluster_batch_limit - move_count) {
+                u32vec_free(&local_root);
+                continue;
+            }
+            if (move_count != 0 &&
+                move_count + object->clusters > cluster_batch_limit) {
+                u32vec_free(&local_root);
+                continue;
+            }
+            if (!growth_batch_can_add(fs, chain, object->target,
+                                      source_seen, destination_seen)) {
+                u32vec_free(&local_root);
+                continue;
+            }
+
+            if (move_count + chain->len > move_cap) {
+                size_t new_cap = move_cap == 0 ? chain->len : move_cap;
+                while (new_cap < move_count + chain->len) new_cap *= 2;
+                moves = ld_xrealloc(moves, new_cap * sizeof(*moves));
+                move_cap = new_cap;
+            }
+            for (size_t i = 0; i < chain->len; i++) {
+                uint32_t source = chain->v[i];
+                uint32_t destination = object->target + (uint32_t)i;
+                moves[move_count++] = (RelocationMove){
+                    .source = source,
+                    .destination = destination,
+                };
+                source_seen[source] = 1;
+                destination_seen[destination] = 1;
+            }
+            batch_objects++;
+            if (object->is_dir) batch_directories++;
+            else batch_files++;
+            u32vec_free(&local_root);
+            if (move_count >= cluster_batch_limit) break;
+        }
+
+        free(destination_seen);
+        free(source_seen);
+        if (move_count != 0) {
+            relocation_execute_moves(
+                fs, &current_refs, journal_path, moves, move_count);
+            stats->transactions++;
+            stats->clusters_copied += move_count;
+            stats->objects_moved += batch_objects;
+            stats->files_moved += batch_files;
+            stats->directories_moved += batch_directories;
+            fprintf(stderr,
+                    "%s adaptive direct batch: %zu object%s (%zu file%s, "
+                    "%zu director%s), %zu cluster%s committed in one journal "
+                    "transaction; %zu object%s remain.\n",
+                    layout_name,
+                    batch_objects, batch_objects == 1 ? "" : "s",
+                    batch_files, batch_files == 1 ? "" : "s",
+                    batch_directories, batch_directories == 1 ? "y" : "ies",
+                    move_count, move_count == 1 ? "" : "s",
+                    remaining - batch_objects,
+                    remaining - batch_objects == 1 ? "" : "s");
+            free(moves);
+            free(target_needed);
+            free(staged);
+            free(nonexact);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            continue;
+        }
+        free(moves);
+
+        size_t max_workspace_run = largest_free_workspace_run(
+            fs, workspace_start, workspace_clusters);
+        size_t best_index = SIZE_MAX;
+        size_t best_score = 0;
+        size_t best_clusters = 0;
+
+        if (max_workspace_run != 0) {
+            for (size_t index = 0; index < objects->len; index++) {
+                if (!nonexact[index] || staged[index]) continue;
+                GrowthObject *object = &objects->v[index];
+                if (object->clusters > max_workspace_run) continue;
+
+                const FileRecord *current_file = NULL;
+                U32Vec local_root = {0};
+                const U32Vec *chain = find_growth_object_chain(
+                    fs, object, &current_files, &local_root, &current_file);
+                (void)current_file;
+                size_t score = 0;
+                for (size_t i = 0; i < chain->len; i++) {
+                    if (target_needed[chain->v[i]]) score++;
+                }
+                if (score > best_score ||
+                    (score == best_score && score != 0 &&
+                     (best_index == SIZE_MAX || chain->len < best_clusters))) {
+                    best_index = index;
+                    best_score = score;
+                    best_clusters = chain->len;
+                }
+                u32vec_free(&local_root);
+            }
+        }
+
+        if (best_index == SIZE_MAX || best_score == 0) {
+            free(target_needed);
+            free(staged);
+            free(nonexact);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            return false;
+        }
+
+        uint32_t staged_at = find_free_workspace_run(
+            fs, workspace_start, workspace_clusters, best_clusters);
+        if (staged_at == 0) {
+            free(target_needed);
+            free(staged);
+            free(nonexact);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            return false;
+        }
+
+        GrowthObject *blocker = &objects->v[best_index];
+        const FileRecord *current_file = NULL;
+        U32Vec local_root = {0};
+        const U32Vec *chain = find_growth_object_chain(
+            fs, blocker, &current_files, &local_root, &current_file);
+        (void)current_file;
+        detail_log(
+            "layout-adaptive-stage: %s %s (%zu clusters) -> workspace cluster "
+            "%" PRIu32 "; blocks %zu outstanding target cluster%s\n",
+            blocker->is_dir ? "DIR" : "FILE",
+            blocker->path,
+            blocker->clusters,
+            staged_at,
+            best_score,
+            best_score == 1 ? "" : "s");
+        growth_move_chain(
+            fs, &current_refs, chain, staged_at, journal_path, false);
+        stats->transactions++;
+        stats->clusters_copied += blocker->clusters;
+        fprintf(stderr,
+                "%s adaptive dependency blocker: staged %s %s (%zu cluster%s) "
+                "once to release %zu blocked target cluster%s.\n",
+                layout_name,
+                blocker->is_dir ? "directory" : "file",
+                blocker->path,
+                blocker->clusters,
+                blocker->clusters == 1 ? "" : "s",
+                best_score,
+                best_score == 1 ? "" : "s");
+
+        u32vec_free(&local_root);
+        free(target_needed);
+        free(staged);
+        free(nonexact);
+        filelist_free(&current_files);
+        dirreflist_free(&current_refs);
+    }
+}
+
+'''
+          text = text.replace(marker, helper + marker, 1)
+
+          old = '''    fprintf(stderr,\n            "%s remaining dependency set exceeds the RAM/workspace fast path; "\n            "continuing with the general safe planner.\\n",\n            layout_name);\n\n    while (reverse != 0) {'''
+          new = '''    fprintf(stderr,\n            "%s remaining dependency set exceeds the all-at-once workspace fast path; "\n            "switching to the adaptive dependency scheduler.\\n",\n            layout_name);\n\n    bool completed_adaptive = execute_adaptive_dependency_layout(\n        fs, journal_path, &objects, workspace_start, workspace_clusters,\n        cluster_batch_limit, layout_name, &stats);\n    if (completed_adaptive) {\n        fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));\n        fat32_sync(fs);\n        growth_object_list_free(&objects);\n        return stats;\n    }\n    fprintf(stderr,\n            "%s adaptive dependency scheduler exhausted the reusable workspace; "\n            "continuing with the final one-object safety fallback.\\n",\n            layout_name);\n\n    while (reverse != 0) {'''
+          if old not in text:
+              raise SystemExit('general planner insertion point not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Build with warnings as errors
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build -j2
+
+      - name: Run FAT relayout regressions
+        run: ./tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
+
+      - name: Commit validated scheduler
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gui/filesystems/fat/native/writer.c
+          git commit -m "Batch mixed FAT dependency blockers [adaptive-patched]"
+          git push origin HEAD:c-first-fat16-adaptive-dependencies
