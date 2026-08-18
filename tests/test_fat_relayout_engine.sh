@@ -91,6 +91,36 @@ if grep -q 'Defragment layout staged one' "$WORK/fat16-workspace.log"; then
     fail "FAT16 Defragment fell back to one-object staging"
 fi
 
+# Reproduce the large FAT16 failure mode seen on physical Test Media: the live
+# set is larger than the terminal workspace and one fragmented early file owns
+# clusters inside hundreds of later Growth targets.  The adaptive scheduler
+# must park dependency blockers and then commit final placements in batches,
+# never degrade to the legacy one-object/three-transaction loop.
+python3 "$ROOT/tests/make_fat16_dependency_blocker_image.py" \
+    "$WORK/fat16-dependencies.img" >/dev/null
+"$FAT_WORKER" growth-defrag "$WORK/fat16-dependencies.img" \
+    --write --confirm "$WORK/fat16-dependencies.img" \
+    --journal "$WORK/fat16-dependencies.journal" --growth-percent 10 \
+    --ram-buffer 128M >"$WORK/fat16-dependencies.log" 2>&1
+python3 "$ROOT/tests/verify_fat16_dependency_blocker_image.py" \
+    "$WORK/fat16-dependencies.img"
+if grep -q 'Growth Defrag layout staged one' "$WORK/fat16-dependencies.log"; then
+    cat "$WORK/fat16-dependencies.log" >&2
+    fail "FAT16 adaptive dependency test fell back to one-object staging"
+fi
+grep -q 'adaptive dependency blocker' "$WORK/fat16-dependencies.log" || {
+    cat "$WORK/fat16-dependencies.log" >&2
+    fail "FAT16 dependency blocker workload did not exercise adaptive staging"
+}
+dependency_transactions=$(sed -n \
+    's/^Growth Defrag layout I\/O:.* in \([0-9][0-9]*\) transaction.*$/\1/p' \
+    "$WORK/fat16-dependencies.log" | tail -n 1)
+if [[ -z "$dependency_transactions" || "$dependency_transactions" -gt 40 ]]; then
+    cat "$WORK/fat16-dependencies.log" >&2
+    fail "FAT16 adaptive dependency workload used ${dependency_transactions:-unknown} layout transactions"
+fi
+echo "FAT16 adaptive dependency layout transactions: $dependency_transactions"
+
 # Direction is selected from the target dependencies, not from the operation
 # name: build a 10% layout, then collapse the same volume to a zero-gap layout.
 "$FAT_WORKER" growth-defrag "$WORK/fat16-workspace.img" \
