@@ -33,6 +33,11 @@ PROGRAMS: dict[str, ProgramPath] = {
         "/usr/lib/linux-defragger/filesystems/affs/linux-defragger-affs-worker",
         "../../build/linux-defragger-affs-worker"
     ),
+    "btrfs-native": ProgramPath(
+        "btrfs-native", "LINUX_DEFRAGGER_BTRFS_WORKER",
+        "/usr/lib/linux-defragger/filesystems/btrfs/linux-defragger-btrfs-worker",
+        "../../build/linux-defragger-btrfs-worker"
+    ),
     "fat-native": ProgramPath(
         "fat-native", "LINUX_DEFRAGGER_FAT_WORKER",
         "/usr/lib/linux-defragger/filesystems/fat/linux-defragger-fat-worker",
