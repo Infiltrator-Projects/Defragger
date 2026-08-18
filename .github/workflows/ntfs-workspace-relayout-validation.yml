@@ -41,6 +41,15 @@ jobs:
           python3 /tmp/apply-ntfs-workspace.py
           python3 - <<'PY'
           from pathlib import Path
+
+          worker = Path('gui/filesystems/ntfs/native/ntfs_worker.c')
+          worker_text = worker.read_text(encoding='utf-8')
+          old_direct = '''        printf("NTFS direct metadata layout: %zu supported streams already have their canonical payload placement; no payload relocation is required.\\n",\n               placements.count);\n        fflush(stdout);\n'''
+          new_direct = '''        printf("NTFS direct metadata layout: %zu supported streams already have their canonical payload placement; no payload relocation is required.\\n",\n               placements.count);\n        if (placements.fixed_streams != 0)\n            printf("Preserving %llu unsupported-but-safe NTFS user stream%s in place as fixed allocation obstacle%s.\\n",\n                   (unsigned long long)placements.fixed_streams,\n                   placements.fixed_streams == 1U ? "" : "s",\n                   placements.fixed_streams == 1U ? "" : "s");\n        if (placements.fixed_slack_clusters != 0)\n            printf("NTFS fixed allocations leave %llu unavoidable low-address free cluster%s too small to fill with complete movable streams; preserving them.\\n",\n                   (unsigned long long)placements.fixed_slack_clusters,\n                   placements.fixed_slack_clusters == 1U ? "" : "s");\n        fflush(stdout);\n'''
+          if worker_text.count(old_direct) != 1:
+              raise SystemExit(f'expected one direct metadata logging anchor, found {worker_text.count(old_direct)}')
+          worker.write_text(worker_text.replace(old_direct, new_direct, 1), encoding='utf-8')
+
           path = Path('tests/test_native_top3.py')
           text = path.read_text(encoding='utf-8')
           old = '    assert "@@LIVE_RANGES " in output, output\n    assert "verified allocated/metadata ranges instead of rewriting the full" in output, output\n'
