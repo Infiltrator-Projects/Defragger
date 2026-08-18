@@ -16,6 +16,7 @@ from .backend_catalog import BackendCatalog
 
 RunCommand = Callable[..., subprocess.CompletedProcess[str]]
 _GENERIC_FAT_TYPES = frozenset({"vfat", "fat", "msdos"})
+_EXT_TYPES = frozenset({"ext2", "ext3", "ext4"})
 _NATURAL_DEVICE_PARTS = re.compile(r"(\d+)")
 
 
@@ -102,12 +103,19 @@ class Volume:
 
     @property
     def display_fstype(self) -> str:
+        """Return the real filesystem identity rather than its shared backend id."""
+
         raw = self.fstype.strip().lower()
         variant = fat_variant(raw, self.fs_version)
         if variant:
             return variant
         if raw in _GENERIC_FAT_TYPES:
             return "fat"
+        # EXT2/3/4 deliberately share one backend, historically named ext4.
+        # Routing may therefore normalize ext2/ext3 to ext4, but the selector
+        # must continue to show the filesystem that was actually discovered.
+        if raw in _EXT_TYPES:
+            return raw
         return self.normalized_fstype
 
     @property
