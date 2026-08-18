@@ -72,7 +72,7 @@ static int build_metadata_bitmap(ext2_filsys fs, ext2fs_block_bitmap *metadata)
 
     MarkContext context = {
         .bitmap = *metadata,
-        .total_blocks = ext2fs_blocks_count(fs->super),
+        .total_blocks = (uint64_t)ext2fs_blocks_count(fs->super),
     };
 
     for (uint64_t block = 0U; block < (uint64_t)fs->super->s_first_data_block;
@@ -137,7 +137,7 @@ static bool is_allocated(ext2_filsys fs, uint64_t block)
 static void emit_metadata_ranges(ext2_filsys fs,
                                  ext2fs_block_bitmap metadata)
 {
-    const uint64_t total_blocks = ext2fs_blocks_count(fs->super);
+    const uint64_t total_blocks = (uint64_t)ext2fs_blocks_count(fs->super);
     bool first = true;
     bool in_run = false;
     uint64_t run_start = 0U;
@@ -199,7 +199,7 @@ int main(int argc, char **argv)
 
     (void)printf("{\"block_size\":%u,\"total_blocks\":%" PRIu64
                  ",\"metadata_ranges\":",
-                 fs->blocksize, ext2fs_blocks_count(fs->super));
+                 fs->blocksize, (uint64_t)ext2fs_blocks_count(fs->super));
     emit_metadata_ranges(fs, metadata);
     (void)puts("}");
 
