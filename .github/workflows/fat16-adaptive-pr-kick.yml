@@ -74,7 +74,7 @@ jobs:
             -pthread -lm -o build/linux-defragger-fat-worker
 
       - name: Run FAT relayout regressions
-        run: ./tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
+        run: bash ./tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
 
       - name: Commit validated scheduler
         shell: bash
