@@ -180,6 +180,11 @@ int main(void) {
     CHECK(zfs->package_hint != NULL && strcmp(zfs->package_hint, "zfsutils-linux") == 0);
     CHECK(apfs->creator == LDTM_CREATOR_MANUAL);
     CHECK(ldtm_creator_program(apfs) == NULL);
+    CHECK(ldtm_is_reserved_partition_label("LD_SFS") == 1);
+    CHECK(ldtm_is_reserved_partition_label("LD_PFS3") == 1);
+    CHECK(ldtm_is_reserved_partition_label("LD_APFS") == 1);
+    CHECK(ldtm_is_reserved_partition_label("LD_OFS") == 0);
+    CHECK(ldtm_is_reserved_partition_label("LD_HFSPLUS") == 0);
     CHECK(test_amiga_formatters_and_payload() == 0);
 
     CHECK(ldtm_transport_is_field_media(0, "mmc") == 1);
