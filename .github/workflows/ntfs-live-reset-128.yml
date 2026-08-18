@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - c-first-ntfs-live-reset-128
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
