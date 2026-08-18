@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: FAT16 stop responsiveness validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply FAT16 stop responsiveness patch
+        run: python3 tests/apply_fat16_stop_responsiveness_patch.py
+
+      - name: Compile focused FAT worker with warnings as errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/generated
+          VERSION=$(tr -d '\r\n' < VERSION)
+          printf '%s\n' \
+            '// SPDX-License-Identifier: GPL-3.0-or-later' \
+            '#ifndef LD_VERSION_H' \
+            '#define LD_VERSION_H' \
+            "#define LD_VERSION \"${VERSION}\"" \
+            '#endif' > build/generated/version.h
+          cc -std=c11 -O2 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/fat/native -Ibuild/generated \
+            -Ishared/infiltratr-common/include \
+            gui/filesystems/fat/native/writer.c \
+            gui/filesystems/fat/native/fat_analysis.c \
+            gui/filesystems/fat/native/fat_directory.c \
+            gui/filesystems/fat/native/fat_growth.c \
+            gui/filesystems/fat/native/fat_io.c \
+            gui/filesystems/fat/native/fat_journal.c \
+            gui/filesystems/fat/native/fat_relocation.c \
+            gui/filesystems/fat/native/fat_volume.c \
+            src/core/ld_runtime.c src/core/ld_io.c src/core/ld_device.c \
+            src/core/ld_stop.c src/core/ld_path.c \
+            shared/infiltratr-common/src/core.c \
+            shared/infiltratr-common/src/posix.c \
+            -pthread -lm -o build/linux-defragger-fat-worker
+
+      - name: Validate Python stop messaging
+        run: python3 -m py_compile gui/ui/command_runner.py gui/ui/privilege_session.py
+
+      - name: Run FAT relayout regressions
+        run: bash ./tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
+
+      - name: Commit validated implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- \
+              gui/filesystems/fat/native/writer.c \
+              gui/ui/command_runner.py \
+              gui/ui/privilege_session.py \
+              tests/test_fat_relayout_engine.sh; then
+            echo 'validated implementation is already committed'
+            exit 0
+          fi
+          git add \
+            gui/filesystems/fat/native/writer.c \
+            gui/ui/command_runner.py \
+            gui/ui/privilege_session.py \
+            tests/test_fat_relayout_engine.sh
+          git commit -m "Bound FAT adaptive Stop latency"
+          git push origin HEAD:${{ github.head_ref }}
