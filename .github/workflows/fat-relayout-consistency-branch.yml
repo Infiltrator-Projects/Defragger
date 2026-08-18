@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: FAT relayout consistency validation
+
+on:
+  push:
+    branches:
+      - c-first-fat-relayout-consistency-125
+
+permissions:
+  contents: write
+
+jobs:
+  refactor-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: c-first-fat-relayout-consistency-125
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply shared FAT relayout refactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f gui/filesystems/fat/native/fat_growth.c ]]; then
+            python3 tests/apply_fat_relayout_consistency_patch.py
+          else
+            echo 'Shared FAT relayout refactor already applied.'
+          fi
+
+      - name: Compile shared FAT worker with warnings as errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/generated
+          VERSION=$(tr -d '\r\n' < VERSION)
+          printf '%s\n' \
+            '// SPDX-License-Identifier: GPL-3.0-or-later' \
+            '#ifndef LD_VERSION_H' \
+            '#define LD_VERSION_H' \
+            "#define LD_VERSION \"${VERSION}\"" \
+            '#endif' > build/generated/version.h
+          cc -std=c11 -O2 \
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Werror \
+            -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE \
+            -Isrc/core -Igui/filesystems/fat/native -Ibuild/generated \
+            -Ishared/infiltratr-common/include \
+            gui/filesystems/fat/native/writer.c \
+            gui/filesystems/fat/native/fat_analysis.c \
+            gui/filesystems/fat/native/fat_directory.c \
+            gui/filesystems/fat/native/fat_relayout.c \
+            gui/filesystems/fat/native/fat_io.c \
+            gui/filesystems/fat/native/fat_journal.c \
+            gui/filesystems/fat/native/fat_relocation.c \
+            gui/filesystems/fat/native/fat_volume.c \
+            src/core/ld_runtime.c src/core/ld_io.c src/core/ld_device.c \
+            src/core/ld_stop.c src/core/ld_path.c \
+            shared/infiltratr-common/src/core.c \
+            shared/infiltratr-common/src/posix.c \
+            -pthread -lm -o build/linux-defragger-fat-worker
+
+      - name: Assert one width-neutral FAT architecture
+        run: python3 tests/test_fat_relayout_architecture.py
+
+      - name: Run FAT12 FAT16 FAT32 relayout regressions
+        run: bash ./tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
+
+      - name: Commit validated refactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
+            echo 'Validated shared FAT relayout is already committed.'
+            exit 0
+          fi
+          git add -A
+          git commit -m "Unify FAT relayout model naming"
+          git push origin HEAD:c-first-fat-relayout-consistency-125
