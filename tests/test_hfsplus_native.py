@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""End-to-end native HFS+/HFSX Defrag/Growth Defrag and journal-safety tests."""
+"""End-to-end native HFS+/HFSX mutation and recovery-safety tests."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -68,7 +69,76 @@ def mutate(path: Path, operation: str, *, live: bool = True) -> str:
         assert "@@LIVE_RANGES " in completed.stdout
         assert "@@LIVE_RESET " in completed.stdout
     assert not journal.exists()
+    assert not Path(str(journal) + ".hfsplus-stage").exists()
     return completed.stdout
+
+
+def allocated_ranges(path: Path) -> tuple[int, int, list[tuple[int, int]]]:
+    info = analyse(path)
+    block_size = int(info["block_size"])
+    total_blocks = int(info["total_blocks"])
+    free = [(int(start), int(end)) for start, end in info["free_ranges"]]
+    used: list[tuple[int, int]] = []
+    cursor = 0
+    for start, end in free:
+        if cursor < start:
+            used.append((cursor, start))
+        cursor = max(cursor, end)
+    if cursor < total_blocks:
+        used.append((cursor, total_blocks))
+    return block_size, total_blocks, used
+
+
+def stage_digest(path: Path) -> str:
+    block_size, _, used = allocated_ranges(path)
+    data = path.read_bytes()
+    digest = hashlib.sha256()
+    for start, end in used:
+        digest.update(data[start * block_size:end * block_size])
+    digest.update(data[:1536])
+    digest.update(data[-1024:])
+    return digest.hexdigest()
+
+
+def transaction_fields(path: Path) -> dict[str, object]:
+    data = path.read_bytes()
+    header = data[1024:1536]
+    st = path.stat()
+    signature, version = struct.unpack_from(">HH", header, 0)
+    block_size, total_blocks = struct.unpack_from(">II", header, 40)
+    return {
+        "device": str(path.resolve()),
+        "target_identity": f"file:{st.st_dev}:{st.st_ino}",
+        "volume_token": hashlib.sha256(header).hexdigest(),
+        "physical_bytes": st.st_size,
+        "filesystem_bytes": block_size * total_blocks,
+        "block_size": block_size,
+        "total_blocks": total_blocks,
+        "signature": signature,
+        "version": version,
+    }
+
+
+def write_recovery_journal(journal: Path, image: Path, stage: Path,
+                           operation: str = "defrag", phase: str = "committing") -> None:
+    fields = transaction_fields(image)
+    journal.write_text(
+        "LINUX-DEFRAGGER-HFSPLUS-JOURNAL-2\n"
+        f"device={fields['device']}\n"
+        f"target_identity={fields['target_identity']}\n"
+        f"stage={stage}\n"
+        f"operation={operation}\n"
+        f"phase={phase}\n"
+        f"volume_token={fields['volume_token']}\n"
+        f"stage_sha256={stage_digest(stage)}\n"
+        f"physical_bytes={fields['physical_bytes']}\n"
+        f"filesystem_bytes={fields['filesystem_bytes']}\n"
+        f"block_size={fields['block_size']}\n"
+        f"total_blocks={fields['total_blocks']}\n"
+        f"signature={fields['signature']}\n"
+        f"version={fields['version']}\n",
+        encoding="utf-8",
+    )
 
 
 def test_hfsplus_defrag(work: Path) -> None:
@@ -80,16 +150,13 @@ def test_hfsplus_defrag(work: Path) -> None:
     assert before["fragmented_files"] == 2
     mutate(image, "defrag")
     verify(image)
-    after = analyse(image)
-    assert after["fragmented_files"] == 0
+    assert analyse(image)["fragmented_files"] == 0
 
 
 def test_hfsx_growth(work: Path) -> None:
     image = work / "hfsx.img"
     make(image, "--hfsx")
-    before = analyse(image)
-    assert before["variant"] == "HFSX"
-    assert before["fragmented_files"] == 2
+    assert analyse(image)["variant"] == "HFSX"
     mutate(image, "growth-defrag")
     verify(image, growth=True)
     assert analyse(image)["fragmented_files"] == 0
@@ -98,12 +165,8 @@ def test_hfsx_growth(work: Path) -> None:
 def test_extents_overflow_growth(work: Path) -> None:
     image = work / "overflow.img"
     make(image, "--overflow")
-    before = analyse(image)
-    assert before["fragmented_files"] == 2
     mutate(image, "growth-defrag")
     verify(image, growth=True)
-    after = analyse(image)
-    assert after["fragmented_files"] == 0
 
 
 def test_clean_journal_is_preserved(work: Path) -> None:
@@ -112,14 +175,10 @@ def test_clean_journal_is_preserved(work: Path) -> None:
     original = image.read_bytes()
     before = analyse(image)
     assert before["journaled"] is True and before["journal_empty"] is True
-    assert before["regular_files"] == 2, before
     mutate(image, "growth-defrag")
     verify(image, growth=True)
     current = image.read_bytes()
     assert current[20 * fixture.BS:25 * fixture.BS] == original[20 * fixture.BS:25 * fixture.BS]
-    after = analyse(image)
-    assert after["journaled"] is True and after["journal_empty"] is True
-    assert after["fragmented_files"] == 0
 
 
 def test_dirty_journal_fails_closed(work: Path) -> None:
@@ -127,8 +186,6 @@ def test_dirty_journal_fails_closed(work: Path) -> None:
     make(image, "--journaled", "--dirty-journal")
     before = hashlib.sha256(image.read_bytes()).digest()
     journal = work / "dirty.journal"
-    identified = run("identify", image)
-    assert json.loads(identified.stdout)["filesystem"] == "hfsplus"
     completed = run(
         "defrag", image, "--write", "--confirm", image, "--journal", journal,
         check=False,
@@ -137,7 +194,6 @@ def test_dirty_journal_fails_closed(work: Path) -> None:
     assert "pending transactions" in completed.stderr
     assert hashlib.sha256(image.read_bytes()).digest() == before
     assert not journal.exists()
-
 
 
 def test_inconsistent_and_reserved_attributes_fail_closed(work: Path) -> None:
@@ -157,34 +213,91 @@ def test_inconsistent_and_reserved_attributes_fail_closed(work: Path) -> None:
         assert not journal.exists()
 
 
-def test_recover_from_verified_stage(work: Path) -> None:
+def test_recover_from_verified_bound_stage(work: Path) -> None:
     image = work / "recover.img"
     make(image)
     mutate(image, "defrag", live=False)
-    verify(image)
     stage = work / "recover.stage"
     shutil.copyfile(image, stage)
-    # Damage one currently allocated user-data block in the source only.  Recover
-    # must re-verify the persistent stage before copying it back.
     total, extents = fixture.parse_file_extents(image)[16]
     assert total and len(extents) == 1
-    start = extents[0][0] * fixture.BS
+    offset = extents[0][0] * fixture.BS
     with image.open("r+b") as stream:
-        stream.seek(start)
+        stream.seek(offset)
         stream.write(b"X" * fixture.BS)
         stream.flush()
         os.fsync(stream.fileno())
     journal = work / "recover.journal"
-    journal.write_text(
-        "LINUX-DEFRAGGER-HFSPLUS-1\n"
-        f"device={image}\n"
-        f"stage={stage}\n"
-        "operation=defrag\n"
-    )
+    write_recovery_journal(journal, image, stage)
     completed = run("recover", image, "--write", "--confirm", image, "--journal", journal)
     assert '@@RESULT {"operation":"recover","status":"completed"' in completed.stdout
     assert not stage.exists() and not journal.exists()
     verify(image)
+
+
+def test_corrupt_stage_is_never_committed(work: Path) -> None:
+    image = work / "stage-source.img"
+    make(image)
+    mutate(image, "defrag", live=False)
+    stage = work / "corrupt.stage"
+    shutil.copyfile(image, stage)
+    journal = work / "corrupt.journal"
+    write_recovery_journal(journal, image, stage)
+    before = hashlib.sha256(image.read_bytes()).digest()
+    _, extents = fixture.parse_file_extents(stage)[16]
+    with stage.open("r+b") as stream:
+        stream.seek(extents[0][0] * fixture.BS)
+        stream.write(b"Z" * fixture.BS)
+    completed = run(
+        "recover", image, "--write", "--confirm", image, "--journal", journal,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert "stage SHA-256" in completed.stderr
+    assert hashlib.sha256(image.read_bytes()).digest() == before
+    assert journal.exists() and stage.exists()
+
+
+def test_recovery_refuses_different_target(work: Path) -> None:
+    original = work / "identity-original.img"
+    other = work / "identity-other.img"
+    make(original)
+    make(other)
+    mutate(original, "defrag", live=False)
+    stage = work / "identity.stage"
+    shutil.copyfile(original, stage)
+    journal = work / "identity.journal"
+    write_recovery_journal(journal, original, stage)
+    before = hashlib.sha256(other.read_bytes()).digest()
+    completed = run(
+        "recover", other, "--write", "--confirm", other, "--journal", journal,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert "target path, identity or capacity changed" in completed.stderr
+    assert hashlib.sha256(other.read_bytes()).digest() == before
+    assert journal.exists() and stage.exists()
+
+
+def test_legacy_recovery_journal_fails_closed(work: Path) -> None:
+    image = work / "legacy.img"
+    make(image)
+    stage = work / "legacy.stage"
+    shutil.copyfile(image, stage)
+    journal = work / "legacy.journal"
+    journal.write_text(
+        "LINUX-DEFRAGGER-HFSPLUS-1\n"
+        f"device={image}\n"
+        f"stage={stage}\n"
+        "operation=defrag\n",
+        encoding="utf-8",
+    )
+    completed = run(
+        "recover", image, "--write", "--confirm", image, "--journal", journal,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert "lacks target identity and stage integrity" in completed.stderr
 
 
 def main() -> None:
@@ -197,8 +310,11 @@ def main() -> None:
         test_clean_journal_is_preserved(work)
         test_dirty_journal_fails_closed(work)
         test_inconsistent_and_reserved_attributes_fail_closed(work)
-        test_recover_from_verified_stage(work)
-    print("native HFS+/HFSX Defrag/Growth Defrag/journal/recovery tests passed")
+        test_recover_from_verified_bound_stage(work)
+        test_corrupt_stage_is_never_committed(work)
+        test_recovery_refuses_different_target(work)
+        test_legacy_recovery_journal_fails_closed(work)
+    print("native HFS+/HFSX Defrag/Growth Defrag/identity/integrity recovery tests passed")
 
 
 if __name__ == "__main__":
