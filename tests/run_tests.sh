@@ -103,7 +103,8 @@ if "$FAT_WORKER" growth-defrag "$WORK/growth.img" \
     fail "Growth Defrag accepted a reserve other than ten percent"
 fi
 
-# FAT12 and FAT16 use the same raw canonical planner.
+# FAT12 and FAT16 use exactly the same native relayout engine.  The reserve
+# percentage is policy: zero for packed Defrag, ten for Growth Defrag.
 for kind in fat12 fat16; do
     python3 "$ROOT/tests/make_fat12_16_image.py" "$kind" "$WORK/$kind-defrag.img" fragmented >/dev/null
     "$FAT_WORKER" map "$WORK/$kind-defrag.img" --cells 100000 \
@@ -119,23 +120,39 @@ for kind in fat12 fat16; do
         --write --confirm "$WORK/$kind-growth.img" --journal "$WORK/$kind-growth.journal" \
         --growth-percent 10 >"$WORK/$kind-growth.log" 2>&1
     python3 "$ROOT/tests/verify_growth_fat12_16.py" "$kind" "$WORK/$kind-growth.img"
+
+    if grep -q 'Growth Defrag layout staged one' "$WORK/$kind-growth.log"; then
+        fail "$kind Growth Defrag fell back to pathological one-object staging"
+    fi
+    growth_transactions=$(sed -n \
+        's/^Growth Defrag layout I\/O:.* in \([0-9][0-9]*\) transaction.*$/\1/p' \
+        "$WORK/$kind-growth.log" | tail -n 1)
+    [[ -n "$growth_transactions" && "$growth_transactions" -le 8 ]] || \
+        fail "$kind Growth Defrag exceeded eight layout transactions: ${growth_transactions:-missing}"
 done
 
-# FAT16: preparation must evacuate only the largest object's terminal workspace,
-# not chase thousands of low one-cluster holes through separate transactions.
+# FAT16: terminal safety-workspace preparation may expand beyond the largest
+# single object when RAM and spare tail capacity permit it, but the whole
+# preparation must remain one bounded journal transaction rather than chasing
+# low holes object by object.
 python3 "$ROOT/tests/make_fat16_workspace_image.py" "$WORK/fat16-workspace.img" >/dev/null
 "$FAT_WORKER" defrag "$WORK/fat16-workspace.img" \
     --write --confirm "$WORK/fat16-workspace.img" \
     --journal "$WORK/fat16-workspace.journal" \
     >"$WORK/fat16-workspace.log" 2>&1
-grep -q 'preparation complete: 64 clusters moved in 1 transaction' \
-    "$WORK/fat16-workspace.log" || \
-    fail "FAT16 preparation did not remain bounded to one 64-cluster transaction"
+prep_transactions=$(sed -n \
+    's/^Defragment preparation complete:.* in \([0-9][0-9]*\) transaction.*$/\1/p' \
+    "$WORK/fat16-workspace.log" | tail -n 1)
+[[ -n "$prep_transactions" && "$prep_transactions" -le 1 ]] || \
+    fail "FAT16 preparation exceeded one bounded transaction: ${prep_transactions:-missing}"
+if grep -q 'Defragment layout staged one' "$WORK/fat16-workspace.log"; then
+    fail "FAT16 Defragment regressed to one-object staging"
+fi
 python3 "$ROOT/tests/verify_fat16_workspace_image.py" "$WORK/fat16-workspace.img"
 
 # FAT16: collapsing a verified 10% Growth layout back to zero-gap packing must
-# walk forward in bounded workspace batches. It must not bounce thousands of
-# one-cluster files through the terminal workspace one object at a time.
+# use the same relayout engine.  A leftward target plan should choose forward
+# dependency batches automatically; the command name does not choose direction.
 "$FAT_WORKER" growth-defrag "$WORK/fat16-workspace.img" \
     --write --confirm "$WORK/fat16-workspace.img" \
     --journal "$WORK/fat16-workspace-growth.journal" --growth-percent 10 \
@@ -149,7 +166,7 @@ grep -q 'canonical 10% growth gaps verified' \
     >"$WORK/fat16-growth-to-packed.log" 2>&1
 grep -q 'Defragment forward layout batch:' \
     "$WORK/fat16-growth-to-packed.log" || \
-    fail "FAT16 Growth-to-Defragment did not use forward workspace batches"
+    fail "FAT16 Growth-to-Defragment did not choose forward dependency batches"
 if grep -q 'Growth layout cleared\|Defragment layout staged one' \
     "$WORK/fat16-growth-to-packed.log"; then
     fail "FAT16 Growth-to-Defragment still bounced individual objects"
