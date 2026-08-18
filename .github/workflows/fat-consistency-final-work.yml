@@ -59,7 +59,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -u
-          git add gui/filesystems/fat/native/fat_relayout.c gui/filesystems/fat/native/fat_relayout.h tests/test_fat_relayout_architecture.py
+          git add \
+            gui/filesystems/fat/native/fat_relayout.c \
+            gui/filesystems/fat/native/fat_relayout.h \
+            tests/test_fat_relayout.c \
+            tests/test_fat_relayout_architecture.py
           git diff --cached --check
           git commit -m "Make FAT relayout explicitly width-neutral"
           git push origin HEAD:c-first-fat-relayout-consistency-125-final
