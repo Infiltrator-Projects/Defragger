@@ -60,6 +60,7 @@ static void detail_log(const char *format, ...) {
     }
     va_end(args);
 }
+
 static char *default_journal_path(const char *device_path) {
     const char *base = strrchr(device_path, '/');
     base = base == NULL ? device_path : base + 1;
@@ -93,33 +94,56 @@ static uint64_t terminal_free_clusters(const Fat32 *fs) {
     return free_count;
 }
 
+static size_t terminal_workspace_capacity(const Fat32 *fs) {
+    size_t capacity = 0;
+    for (uint32_t c = fs->max_cluster; c >= 2; c--) {
+        uint32_t value = fat_value(fs, c);
+        if (value == fat_bad_value(fs) ||
+            (value >= fat_reserved_min(fs) && value < fat_eoc_min(fs))) {
+            break;
+        }
+        capacity++;
+        if (c == 2) break;
+    }
+    return capacity;
+}
+
+static size_t growth_object_cluster_total(const GrowthObjectList *objects) {
+    size_t total = 0;
+    for (size_t i = 0; i < objects->len; i++) {
+        if (objects->v[i].clusters > SIZE_MAX - total) {
+            ld_die("FAT relayout object-cluster total overflow");
+        }
+        total += objects->v[i].clusters;
+    }
+    return total;
+}
+
 typedef struct {
     size_t clusters_moved;
     size_t transactions;
 } PackingStats;
 
 static void relocation_execute_moves(Fat32 *fs, const DirRefList *dir_refs,
-                                  const char *journal_path,
-                                  const RelocationMove *moves, size_t move_count) {
+                                     const char *journal_path,
+                                     const RelocationMove *moves,
+                                     size_t move_count) {
     fat_relocation_execute(
         fs, dir_refs, journal_path, moves, move_count, &g_io, detail_log
     );
     fat_analysis_emit_live_map_update(fs);
 }
 
-/* Phase 2 needs one reusable free run as large as the largest object.  Older
-   releases obtained it by stably chasing every low hole to the end of the
-   volume.  On a FAT16 volume with thousands of one-cluster files that turned a
-   bounded staging requirement into thousands of one-object transactions and
-   almost two full copies of the live data.  Evacuating only the terminal
-   workspace is sufficient: the canonical planner retains the original object
-   order and phase 2 performs the actual layout rewrite. */
+/* Canonical relayout keeps one durable terminal safety workspace.  The workspace
+   is sized from the actual RAM budget and spare tail capacity, not from a fixed
+   object count.  Direct moves use RAM first; the terminal copy is used only when
+   overlapping live dependencies must survive power loss. */
 static PackingStats prepare_terminal_workspace(Fat32 *fs, const char *journal_path,
                                                 uint32_t workspace_start,
                                                 size_t workspace_clusters,
                                                 size_t batch_clusters) {
     PackingStats stats = {0};
-    if (batch_clusters == 0) batch_clusters = 4096;
+    if (batch_clusters == 0) batch_clusters = 1;
     if (workspace_clusters == 0 || workspace_start < 2 ||
         (uint64_t)workspace_start + workspace_clusters - 1 > fs->max_cluster) {
         ld_die("invalid terminal staging workspace");
@@ -187,9 +211,6 @@ static PackingStats prepare_terminal_workspace(Fat32 *fs, const char *journal_pa
     return stats;
 }
 
-
-
-
 static bool cluster_range_is_free(const Fat32 *fs, uint32_t start, size_t length) {
     if (length == 0) return false;
     uint64_t end64 = (uint64_t)start + length - 1;
@@ -240,15 +261,8 @@ static size_t automatic_growth_batch_clusters(const Fat32 *fs) {
     size_t by_ram = g_io.ram_limit / (size_t)fs->cluster_size;
     size_t four_gb = (size_t)(UINT64_C(4) * 1024 * 1024 * 1024 / fs->cluster_size);
     if (by_ram > four_gb) by_ram = four_gb;
-    if (by_ram < 4096) by_ram = 4096;
+    if (by_ram == 0) by_ram = 1;
     return by_ram;
-}
-
-static size_t automatic_growth_batch_objects(void) {
-    const size_t gb = (size_t)1024 * 1024 * 1024;
-    if (g_io.ram_limit >= 8 * gb) return 128;
-    if (g_io.ram_limit >= 2 * gb) return 64;
-    return 32;
 }
 
 static bool growth_batch_can_add(const Fat32 *fs, const U32Vec *chain,
@@ -268,16 +282,11 @@ static bool growth_batch_can_add(const Fat32 *fs, const U32Vec *chain,
 typedef struct {
     size_t object_index;
     uint32_t staged_at;
-} ForwardStageItem;
+} WorkspaceStageItem;
 
-/* A canonical zero-gap rewrite of an already-contiguous layout is a leftward
-   compaction.  Walking that plan backwards makes every low target depend on an
-   object that has not moved yet, so the general fallback has to bounce one
-   object through the terminal workspace and evacuate its blockers.  Walking
-   forward removes that dependency.  Whole consecutive batches are staged in
-   the existing largest-object workspace, then placed in one second journalled
-   transaction.  The live map is emitted only after placement, never for the
-   transient terminal copy. */
+/* A leftward canonical plan is cheapest when walked from the front.  This is a
+   plan property, not a Defrag-vs-Growth distinction.  Consecutive dependencies
+   are durably staged as one batch and then placed in one second transaction. */
 static bool execute_forward_compaction(
     Fat32 *fs,
     const char *journal_path,
@@ -329,7 +338,7 @@ static bool execute_forward_compaction(
             break;
         }
 
-        ForwardStageItem *items = ld_xmalloc(
+        WorkspaceStageItem *items = ld_xmalloc(
             object_batch_limit * sizeof(*items));
         RelocationMove *stage_moves = NULL;
         size_t stage_move_count = 0;
@@ -362,8 +371,7 @@ static bool execute_forward_compaction(
                 u32vec_free(&local_root);
                 break;
             }
-            if (!chain_is_exact_run(chain, chain->v[0]) ||
-                object->target > chain->v[0]) {
+            if (object->target > object->physical_first) {
                 u32vec_free(&local_root);
                 free(source_seen);
                 free(stage_moves);
@@ -386,7 +394,7 @@ static bool execute_forward_compaction(
                 free(items);
                 filelist_free(&current_files);
                 dirreflist_free(&current_refs);
-                ld_die("forward compaction object exceeds the staging workspace");
+                return false;
             }
 
             if (stage_move_count + chain->len > stage_move_cap) {
@@ -405,7 +413,7 @@ static bool execute_forward_compaction(
                 };
                 source_seen[source] = 1;
             }
-            items[batch_objects++] = (ForwardStageItem){
+            items[batch_objects++] = (WorkspaceStageItem){
                 .object_index = candidate,
                 .staged_at = staged_at,
             };
@@ -521,9 +529,185 @@ static bool execute_forward_compaction(
     return true;
 }
 
-static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
-                                        unsigned requested_percent,
-                                        size_t batch_clusters) {
+/* If every outstanding object fits inside the durable workspace and the RAM
+   budget, evacuate the entire dependency set together.  This is the safe form
+   of the "hold everything in RAM" optimisation: RAM coalesces the I/O, while
+   the terminal copy preserves recoverability if power fails before placement. */
+static bool execute_full_workspace_layout(
+    Fat32 *fs,
+    const char *journal_path,
+    GrowthObjectList *objects,
+    uint32_t workspace_start,
+    size_t workspace_clusters,
+    size_t cluster_batch_limit,
+    const char *layout_name,
+    GrowthStats *stats
+) {
+    DirRefList current_refs = {0};
+    FileList current_files = scan_files(fs, &current_refs);
+    size_t moving_objects = 0;
+    size_t moving_clusters = 0;
+    size_t moving_files = 0;
+    size_t moving_directories = 0;
+
+    for (size_t index = 0; index < objects->len; index++) {
+        GrowthObject *object = &objects->v[index];
+        const FileRecord *current_file = NULL;
+        U32Vec local_root = {0};
+        const U32Vec *chain = find_growth_object_chain(
+            fs, object, &current_files, &local_root, &current_file);
+        (void)current_file;
+        if (chain->len != object->clusters) {
+            u32vec_free(&local_root);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            ld_die("layout object changed size during unified workspace planning");
+        }
+        if (!chain_is_exact_run(chain, object->target)) {
+            if (chain->len > SIZE_MAX - moving_clusters) {
+                u32vec_free(&local_root);
+                filelist_free(&current_files);
+                dirreflist_free(&current_refs);
+                ld_die("unified FAT workspace cluster total overflow");
+            }
+            moving_clusters += chain->len;
+            moving_objects++;
+            if (object->is_dir) moving_directories++;
+            else moving_files++;
+        }
+        u32vec_free(&local_root);
+    }
+
+    if (moving_objects == 0) {
+        filelist_free(&current_files);
+        dirreflist_free(&current_refs);
+        return true;
+    }
+    if (moving_clusters > workspace_clusters ||
+        moving_clusters > cluster_batch_limit) {
+        filelist_free(&current_files);
+        dirreflist_free(&current_refs);
+        return false;
+    }
+    if (!cluster_range_is_free(fs, workspace_start, moving_clusters)) {
+        filelist_free(&current_files);
+        dirreflist_free(&current_refs);
+        ld_die("unified FAT workspace is unexpectedly occupied");
+    }
+
+    WorkspaceStageItem *items = ld_xmalloc(
+        moving_objects * sizeof(*items));
+    RelocationMove *stage_moves = ld_xmalloc(
+        moving_clusters * sizeof(*stage_moves));
+    size_t item_count = 0;
+    size_t move_count = 0;
+    uint32_t staged_cursor = workspace_start;
+
+    for (size_t index = 0; index < objects->len; index++) {
+        GrowthObject *object = &objects->v[index];
+        const FileRecord *current_file = NULL;
+        U32Vec local_root = {0};
+        const U32Vec *chain = find_growth_object_chain(
+            fs, object, &current_files, &local_root, &current_file);
+        (void)current_file;
+        if (chain_is_exact_run(chain, object->target)) {
+            u32vec_free(&local_root);
+            continue;
+        }
+        items[item_count++] = (WorkspaceStageItem){
+            .object_index = index,
+            .staged_at = staged_cursor,
+        };
+        for (size_t i = 0; i < chain->len; i++) {
+            stage_moves[move_count++] = (RelocationMove){
+                .source = chain->v[i],
+                .destination = staged_cursor + (uint32_t)i,
+            };
+        }
+        staged_cursor += (uint32_t)chain->len;
+        u32vec_free(&local_root);
+    }
+
+    detail_log(
+        "layout-unified-stage: %zu object%s / %zu cluster%s -> workspace "
+        "cluster %" PRIu32 "\n",
+        item_count, item_count == 1 ? "" : "s",
+        move_count, move_count == 1 ? "" : "s", workspace_start);
+    fat_relocation_execute(
+        fs, &current_refs, journal_path, stage_moves, move_count,
+        &g_io, detail_log);
+    stats->transactions++;
+    stats->clusters_copied += move_count;
+    free(stage_moves);
+    filelist_free(&current_files);
+    dirreflist_free(&current_refs);
+
+    current_refs = (DirRefList){0};
+    current_files = scan_files(fs, &current_refs);
+    RelocationMove *place_moves = ld_xmalloc(
+        moving_clusters * sizeof(*place_moves));
+    size_t place_count = 0;
+    for (size_t item_index = 0; item_index < item_count; item_index++) {
+        GrowthObject *object = &objects->v[items[item_index].object_index];
+        const FileRecord *current_file = NULL;
+        U32Vec local_root = {0};
+        const U32Vec *chain = find_growth_object_chain(
+            fs, object, &current_files, &local_root, &current_file);
+        (void)current_file;
+        if (!chain_is_exact_run(chain, items[item_index].staged_at)) {
+            u32vec_free(&local_root);
+            free(place_moves);
+            free(items);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            ld_die("unified FAT workspace object did not reopen at its staged location");
+        }
+        if (!cluster_range_is_free(fs, object->target, object->clusters)) {
+            u32vec_free(&local_root);
+            free(place_moves);
+            free(items);
+            filelist_free(&current_files);
+            dirreflist_free(&current_refs);
+            ld_die("unified FAT workspace did not release every canonical target");
+        }
+        for (size_t i = 0; i < chain->len; i++) {
+            place_moves[place_count++] = (RelocationMove){
+                .source = chain->v[i],
+                .destination = object->target + (uint32_t)i,
+            };
+        }
+        u32vec_free(&local_root);
+    }
+
+    detail_log(
+        "layout-unified-place: %zu object%s / %zu cluster%s from workspace\n",
+        item_count, item_count == 1 ? "" : "s",
+        place_count, place_count == 1 ? "" : "s");
+    relocation_execute_moves(
+        fs, &current_refs, journal_path, place_moves, place_count);
+    stats->transactions++;
+    stats->clusters_copied += place_count;
+    stats->objects_moved += moving_objects;
+    stats->files_moved += moving_files;
+    stats->directories_moved += moving_directories;
+    fprintf(stderr,
+            "%s unified workspace batch: %zu object%s (%zu file%s, %zu director%s), "
+            "%zu cluster%s staged and placed in 2 journal transactions.\n",
+            layout_name, moving_objects, moving_objects == 1 ? "" : "s",
+            moving_files, moving_files == 1 ? "" : "s",
+            moving_directories, moving_directories == 1 ? "y" : "ies",
+            place_count, place_count == 1 ? "" : "s");
+
+    free(place_moves);
+    free(items);
+    filelist_free(&current_files);
+    dirreflist_free(&current_refs);
+    return true;
+}
+
+static GrowthStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
+                                       unsigned requested_percent,
+                                       size_t batch_clusters) {
     GrowthStats stats = {0};
     const char *layout_name = requested_percent == 0 ? "Defragment" : "Growth Defrag";
     if (requested_percent > 25) {
@@ -549,8 +733,6 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                                      " with a 10% post-file reserve");
     GrowthPreflight preflight = growth_layout_preflight(
         fs, &initial_files, requested_percent);
-    bool contiguous_zero_gap_compaction =
-        requested_percent == 0 && preflight.issue == GROWTH_PREFLIGHT_OK;
     size_t existing_reserve = preflight.reserve_clusters;
     bool canonical_verified = false;
     if (regular_files != 0 && preflight.issue == GROWTH_PREFLIGHT_OK) {
@@ -588,10 +770,10 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
         fprintf(stderr,
                 "%s preflight result: all objects are contiguous, but the physical layout is "
                 "not the canonical earliest packed layout.\n",
-                requested_percent == 0 ? "Defragment" : "Growth Defrag");
+                layout_name);
         fprintf(stderr,
                 "%s preflight completed read-only; no filesystem writes have occurred yet.\n",
-                requested_percent == 0 ? "Defragment" : "Growth Defrag");
+                layout_name);
     } else {
         print_growth_preflight_failure(&preflight, requested_percent, layout_name);
     }
@@ -610,6 +792,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
         dirreflist_free(&initial_refs);
         ld_die("layout rewrite needs free space larger than the largest allocated object for safe staging");
     }
+
     uint64_t requested_reserve = 0;
     for (size_t i = 0; i < initial_objects.len; i++) {
         const GrowthObject *object = &initial_objects.v[i];
@@ -623,22 +806,54 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
         dirreflist_free(&initial_refs);
         ld_die("layout rewrite does not have enough free clusters for the requested reserve plus a safe staging workspace");
     }
+
+    size_t preliminary_reserve = 0;
+    uint32_t preliminary_end = 1;
+    if (fs->max_cluster == UINT32_MAX ||
+        !plan_growth_layout(fs, &initial_objects, requested_percent,
+                            fs->max_cluster + 1,
+                            &preliminary_reserve, &preliminary_end)) {
+        growth_object_list_free(&initial_objects);
+        filelist_free(&initial_files);
+        dirreflist_free(&initial_refs);
+        ld_die("layout rewrite could not construct the canonical target layout");
+    }
+    (void)preliminary_reserve;
+
+    size_t total_object_clusters = growth_object_cluster_total(&initial_objects);
+    size_t ram_cluster_limit = automatic_growth_batch_clusters(fs);
+    size_t tail_slack = (size_t)(fs->max_cluster - preliminary_end);
+    size_t terminal_capacity = terminal_workspace_capacity(fs);
+    size_t workspace_clusters = total_object_clusters;
+    if (workspace_clusters > ram_cluster_limit) workspace_clusters = ram_cluster_limit;
+    if (workspace_clusters > tail_slack) workspace_clusters = tail_slack;
+    if (workspace_clusters > terminal_capacity) workspace_clusters = terminal_capacity;
+    if (workspace_clusters < initial_largest) workspace_clusters = initial_largest;
+    if (workspace_clusters > tail_slack || workspace_clusters > terminal_capacity) {
+        growth_object_list_free(&initial_objects);
+        filelist_free(&initial_files);
+        dirreflist_free(&initial_refs);
+        ld_die("layout rewrite cannot create a durable terminal workspace large enough for the largest object");
+    }
+
     filelist_free(&initial_files);
     dirreflist_free(&initial_refs);
 
-    uint32_t workspace_start = fs->max_cluster - (uint32_t)initial_largest + 1;
+    uint32_t workspace_start =
+        fs->max_cluster - (uint32_t)workspace_clusters + 1;
     fprintf(stderr,
-            "%s phase 1: creating a %zu-cluster terminal staging workspace.\n",
-            layout_name, initial_largest);
+            "%s phase 1: creating a %zu-cluster terminal safety workspace "
+            "from a %zu-cluster RAM budget.\n",
+            layout_name, workspace_clusters, ram_cluster_limit);
     size_t preparation_batch_clusters = batch_clusters;
     if (preparation_batch_clusters == 4096) {
-        preparation_batch_clusters = automatic_growth_batch_clusters(fs);
+        preparation_batch_clusters = ram_cluster_limit;
     }
     fprintf(stderr,
             "%s preparation batching: up to %zu clusters per journal transaction.\n",
             layout_name, preparation_batch_clusters);
     PackingStats packing_stats = prepare_terminal_workspace(
-        fs, journal_path, workspace_start, initial_largest,
+        fs, journal_path, workspace_start, workspace_clusters,
         preparation_batch_clusters);
     stats.packing_clusters = packing_stats.clusters_moved;
     stats.packing_transactions = packing_stats.transactions;
@@ -654,7 +869,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
         fprintf(stderr,
                 "The canonical layout phase was not started; the filesystem is valid "
                 "but %s is incomplete.\n",
-                requested_percent == 0 ? "Defragment" : "Growth Defrag");
+                layout_name);
         if (requested_percent != 0) {
             fprintf(stderr, "No growth-space reserve was applied.\n");
         }
@@ -663,15 +878,17 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
     }
     fprintf(stderr,
             "%s preparation complete: %zu cluster%s moved in %zu transaction%s.\n",
-            layout_name, packing_stats.clusters_moved, packing_stats.clusters_moved == 1 ? "" : "s",
-            packing_stats.transactions, packing_stats.transactions == 1 ? "" : "s");
+            layout_name, packing_stats.clusters_moved,
+            packing_stats.clusters_moved == 1 ? "" : "s",
+            packing_stats.transactions,
+            packing_stats.transactions == 1 ? "" : "s");
 
     GrowthObjectList objects = initial_objects;
     initial_objects = (GrowthObjectList){0};
     uint64_t terminal = terminal_free_clusters(fs);
-    if (terminal < initial_largest) {
+    if (terminal < workspace_clusters) {
         growth_object_list_free(&objects);
-        ld_die("layout rewrite could not create a terminal workspace large enough for the largest object");
+        ld_die("layout rewrite could not create the requested terminal safety workspace");
     }
     unsigned applied_percent = requested_percent;
     size_t reserve_total = 0;
@@ -691,31 +908,44 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
             applied_percent == 0 ? " with no internal free clusters" :
                                    " with a 10% post-file reserve");
     fprintf(stderr,
-            "Final planned layout ends at cluster %" PRIu32 "; reusable staging workspace begins at cluster %" PRIu32 ".\n",
+            "Final planned layout ends at cluster %" PRIu32 "; reusable safety workspace begins at cluster %" PRIu32 ".\n",
             layout_end, workspace_start);
 
     size_t reverse = objects.len;
-    size_t object_batch_limit = automatic_growth_batch_objects();
-    size_t cluster_batch_limit = automatic_growth_batch_clusters(fs);
+    size_t object_batch_limit = objects.len;
+    size_t cluster_batch_limit = ram_cluster_limit;
     fprintf(stderr,
-            "%s layout batching: up to %zu objects or %zu clusters per journal transaction.\n",
-            layout_name, object_batch_limit, cluster_batch_limit);
+            "%s layout batching: RAM budget up to %zu clusters; up to %zu objects "
+            "may share a dependency batch.\n",
+            layout_name, cluster_batch_limit, object_batch_limit);
 
-    if (contiguous_zero_gap_compaction) {
-        bool completed_forward = execute_forward_compaction(
-            fs, journal_path, &objects, workspace_start, initial_largest,
-            object_batch_limit, cluster_batch_limit, layout_name, &stats);
-        if (completed_forward) {
-            fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
-            fat32_sync(fs);
-            growth_object_list_free(&objects);
-            return stats;
-        }
-        fprintf(stderr,
-                "%s forward layout encountered a non-leftward dependency; "
-                "continuing with the general safe planner.\n",
-                layout_name);
+    bool completed_forward = execute_forward_compaction(
+        fs, journal_path, &objects, workspace_start, workspace_clusters,
+        object_batch_limit, cluster_batch_limit, layout_name, &stats);
+    if (completed_forward) {
+        fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
+        fat32_sync(fs);
+        growth_object_list_free(&objects);
+        return stats;
     }
+    fprintf(stderr,
+            "%s forward dependency pass is not sufficient for the remaining layout; "
+            "trying one unified workspace dependency batch.\n",
+            layout_name);
+
+    bool completed_workspace = execute_full_workspace_layout(
+        fs, journal_path, &objects, workspace_start, workspace_clusters,
+        cluster_batch_limit, layout_name, &stats);
+    if (completed_workspace) {
+        fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
+        fat32_sync(fs);
+        growth_object_list_free(&objects);
+        return stats;
+    }
+    fprintf(stderr,
+            "%s remaining dependency set exceeds the RAM/workspace fast path; "
+            "continuing with the general safe planner.\n",
+            layout_name);
 
     while (reverse != 0) {
         if (ld_stop_requested()) {
@@ -815,7 +1045,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
         free(destination_seen);
         if (batch_move_count != 0) {
             relocation_execute_moves(fs, &current_refs, journal_path,
-                                  batch_moves, batch_move_count);
+                                     batch_moves, batch_move_count);
             stats.transactions++;
             stats.clusters_copied += batch_move_count;
             stats.objects_moved += batch_objects;
@@ -843,11 +1073,9 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
             continue;
         }
 
-        /* The next target is not currently free.  Stage this object in the
-           reusable terminal workspace.  A fragmented chain can leave another
-           object's clusters inside the target even after this object's own
-           source has been freed.  Evacuate those blockers into the staged
-           object's now-free source clusters, then place the staged object. */
+        /* The next target is not currently free.  This final fallback stages one
+           object at a time.  It is retained for very full filesystems whose
+           dependency set cannot fit in the RAM-sized durable workspace. */
         GrowthObject *object = &objects.v[reverse - 1];
         const FileRecord *current_file = NULL;
         const U32Vec *chain = find_growth_object_chain(
@@ -957,7 +1185,7 @@ static GrowthStats growth_defrag_volume(Fat32 *fs, const char *journal_path,
                 blocker_count, blocker_count == 1 ? "" : "s",
                 object->target, target_end);
             relocation_execute_moves(fs, &current_refs, journal_path,
-                                  blocker_moves, blocker_count);
+                                     blocker_moves, blocker_count);
             target_blockers_evacuated = true;
             stats.transactions++;
             stats.clusters_copied += blocker_count;
@@ -1042,13 +1270,15 @@ static void usage(FILE *out) {
         "  %s recover DEVICE --write --confirm DEVICE [--journal PATH]\n"
         "       [--ram-buffer auto|SIZE] [--workers auto|N]\n\n"
         "DEVICE may be an unmounted block-device partition or a regular FAT12/FAT16/FAT32 image.\n"
-        "Defragment rewrites every allocated file and directory into the canonical packed\n"
-        "layout: every chain is contiguous and every usable data cluster before the final\n"
-        "object is allocated. Growth Defrag applies the same layout while leaving the\n"
-        "requested proportional free run immediately after each regular file. Both operations\n"
-        "write the unmounted FAT volume directly, journal every completed transaction and\n"
-        "publish live allocation-map updates. SIZE accepts suffixes such as 512M, 2G, or 8GB.\n"
-        "Ctrl-C requests a clean stop after the current journalled transaction.\n",
+        "Defragment and Growth Defrag call the same canonical FAT relayout engine.\n"
+        "Defragment passes a zero-percent post-file reserve; Growth Defrag passes ten percent.\n"
+        "The loaded BPB supplies FAT12/FAT16/FAT32 geometry and cluster size, so callers never\n"
+        "duplicate or override on-disk filesystem geometry. Direct dependency-free relocation\n"
+        "is RAM-buffered; overlapping dependency sets use the minimum durable terminal safety\n"
+        "workspace needed to remain recoverable across power loss. Every completed transaction\n"
+        "is journalled and live allocation-map updates are published only for committed layouts.\n"
+        "SIZE accepts suffixes such as 512M, 2G, or 8GB. Ctrl-C requests a clean stop after the\n"
+        "current journalled transaction.\n",
         PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME,
         PROGRAM_NAME);
 }
@@ -1294,7 +1524,7 @@ int main(int argc, char **argv) {
         result_operation = "defrag";
         filelist_free(&files);
         dirreflist_free(&dir_refs);
-        GrowthStats packed = growth_defrag_volume(&fs, journal_path, 0, batch_clusters);
+        GrowthStats packed = fat_relayout_volume(&fs, journal_path, 0, batch_clusters);
         if (packed.already_satisfied) {
             result_status = "not-needed";
             printf("Defragment status:        Not needed; canonical packed layout verified\n");
@@ -1330,7 +1560,7 @@ int main(int argc, char **argv) {
         result_operation = "growth-defrag";
         filelist_free(&files);
         dirreflist_free(&dir_refs);
-        GrowthStats growth = growth_defrag_volume(&fs, journal_path, growth_percent, batch_clusters);
+        GrowthStats growth = fat_relayout_volume(&fs, journal_path, growth_percent, batch_clusters);
         if (growth.already_satisfied) {
             result_status = "not-needed";
             printf("Growth Defrag status:          Not needed; layout already satisfies %u%% reserve\n",
@@ -1387,7 +1617,6 @@ int main(int argc, char **argv) {
         if (!growth.interrupted) {
             fat_analysis_verify_layout_policy(&fs, growth_percent);
         }
-
     }
     if (mutating) print_io_statistics();
     if (result_operation != NULL && result_status != NULL) {
