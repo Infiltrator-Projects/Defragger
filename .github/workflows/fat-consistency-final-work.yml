@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON -DBUILD_TESTING=ON
-          cmake --build build -j2 --target linux-defragger-fat-worker linux-defragger-exfat-worker
+          cmake --build build -j2 --target linux-defragger-fat-worker linux-defragger-exfat-worker linux-defragger-fat-relayout-model-test
           python3 tests/test_fat_relayout_architecture.py
           bash tests/test_fat_relayout_engine.sh build/linux-defragger-fat-worker
           ctest --test-dir build --output-on-failure -R 'linux-defragger-(fat-relayout|exfat-relayout)'
