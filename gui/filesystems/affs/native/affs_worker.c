@@ -27,6 +27,8 @@
 #define PROG "linux-defragger-affs-worker"
 #define JOURNAL_MAGIC "LINUX-DEFRAGGER-AFFS-JOURNAL-2"
 #define BLOCK_SIZE 512U
+#define AMIGA_IO_BATCH_BLOCKS 8192U
+#define AMIGA_IO_BATCH_BYTES ((size_t)AMIGA_IO_BATCH_BLOCKS * BLOCK_SIZE)
 #define STOPPED 130
 
 typedef struct {
@@ -348,34 +350,54 @@ static int volume_token(const char *path, uint64_t physical_bytes,
     return 0;
 }
 
+static uint32_t allocated_run_blocks(const AffsVolume *stage, uint32_t start) {
+    uint32_t count = 0U;
+    while (start + count < stage->blocks && count < AMIGA_IO_BATCH_BLOCKS &&
+           !stage->free_map[start + count]) {
+        ++count;
+    }
+    return count;
+}
+
 static int stage_sha256(const char *path, char output[65], char **error) {
     AffsVolume stage;
     if (affs_scan(path, false, &stage, error) != 0) return -1;
     EVP_MD_CTX *context = EVP_MD_CTX_new();
-    if (context == NULL || EVP_DigestInit_ex(context, EVP_sha256(), NULL) != 1) {
+    unsigned char *buffer = malloc(AMIGA_IO_BATCH_BYTES);
+    if (context == NULL || buffer == NULL ||
+        EVP_DigestInit_ex(context, EVP_sha256(), NULL) != 1) {
+        free(buffer);
         EVP_MD_CTX_free(context);
         affs_close(&stage);
         affs_set_error(error, "initialising Amiga stage SHA-256 failed");
         return -1;
     }
-    unsigned char block[BLOCK_SIZE];
+    printf("Amiga stage integrity: hashing allocated runs in batches up to %u KiB.\n",
+           (unsigned)(AMIGA_IO_BATCH_BYTES / 1024U));
+    fflush(stdout);
     int rc = 0;
-    for (uint32_t i = 0; i < stage.blocks; ++i) {
-        if (stage.free_map[i]) continue;
+    for (uint32_t i = 0; i < stage.blocks;) {
+        if (stage.free_map[i]) {
+            ++i;
+            continue;
+        }
         if (ld_stop_requested()) {
             rc = STOPPED;
             break;
         }
-        ssize_t got = ld_pread_full(stage.fd, block, sizeof(block),
-                                    (uint64_t)i * BLOCK_SIZE);
-        if (got != (ssize_t)sizeof(block) ||
-            EVP_DigestUpdate(context, block, sizeof(block)) != 1) {
-            affs_set_error(error, "hashing verified Amiga stage failed");
+        uint32_t count = allocated_run_blocks(&stage, i);
+        size_t bytes = (size_t)count * BLOCK_SIZE;
+        uint64_t offset = (uint64_t)i * BLOCK_SIZE;
+        ssize_t got = ld_pread_full(stage.fd, buffer, bytes, offset);
+        if (got != (ssize_t)bytes || EVP_DigestUpdate(context, buffer, bytes) != 1) {
+            affs_set_error(error, "hashing verified Amiga stage blocks %u..%u failed", i, i + count);
             rc = -1;
             break;
         }
+        i += count;
     }
     if (rc == 0) rc = digest_final_hex(context, output, error);
+    free(buffer);
     EVP_MD_CTX_free(context);
     affs_close(&stage);
     return rc;
@@ -452,31 +474,48 @@ static int safe_commit_stage(const char *stage_path, const char *target_path,
         affs_close(&stage);
         return -1;
     }
-    unsigned char block[BLOCK_SIZE];
+    unsigned char *buffer = malloc(AMIGA_IO_BATCH_BYTES);
+    if (buffer == NULL) {
+        affs_set_error(error, "out of memory batching Amiga source commit");
+        (void)flock(target, LOCK_UN);
+        close(target);
+        affs_close(&stage);
+        return -1;
+    }
+    printf("Amiga source commit batching: up to %u KiB per contiguous I/O batch.\n",
+           (unsigned)(AMIGA_IO_BATCH_BYTES / 1024U));
+    fflush(stdout);
     uint64_t total_written = 0;
     int rc = 0;
-    for (uint32_t i = 0; i < stage.blocks; ++i) {
-        if (stage.free_map[i]) continue;
+    for (uint32_t i = 0; i < stage.blocks;) {
+        if (stage.free_map[i]) {
+            ++i;
+            continue;
+        }
         if (ld_stop_requested()) {
             rc = stop_commit(target, error);
             break;
         }
+        uint32_t count = allocated_run_blocks(&stage, i);
+        size_t bytes = (size_t)count * BLOCK_SIZE;
         uint64_t offset = (uint64_t)i * BLOCK_SIZE;
-        ssize_t got = ld_pread_full(stage.fd, block, sizeof(block), offset);
-        ssize_t put = got == (ssize_t)sizeof(block)
-            ? ld_pwrite_full(target, block, sizeof(block), offset) : -1;
-        if (got != (ssize_t)sizeof(block) || put != (ssize_t)sizeof(block)) {
-            affs_set_error(error, "short I/O committing Amiga block %u", i);
+        ssize_t got = ld_pread_full(stage.fd, buffer, bytes, offset);
+        ssize_t put = got == (ssize_t)bytes
+            ? ld_pwrite_full(target, buffer, bytes, offset) : -1;
+        if (got != (ssize_t)bytes || put != (ssize_t)bytes) {
+            affs_set_error(error, "short I/O committing Amiga blocks %u..%u", i, i + count);
             rc = -1;
             break;
         }
-        total_written += BLOCK_SIZE;
+        total_written += bytes;
+        i += count;
     }
     if (rc == 0 && ld_stop_requested()) rc = stop_commit(target, error);
     if (rc == 0 && fsync(target) != 0) {
         affs_set_error(error, "cannot sync Amiga source: %s", strerror(errno));
         rc = -1;
     }
+    free(buffer);
     (void)flock(target, LOCK_UN);
     close(target);
     affs_close(&stage);
