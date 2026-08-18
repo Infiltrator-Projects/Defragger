@@ -65,16 +65,14 @@ def main() -> None:
                 for free_range in free_ranges
             ), (reserved, free_ranges)
 
-        total_blocks = int(allocation["total_blocks"])
-        assert max(end for _start, end in metadata_ranges) > total_blocks // 4
-
+        expected_metadata_blocks = sum(end - start for start, end in metadata_ranges)
         mapped = BACKEND.map(str(image), 8192)
         metadata_cells = [cell for cell in mapped["cells"] if int(cell.get("bad", 0))]
         assert metadata_cells, "EXT GUI map did not expose metadata/reserved cells"
-        assert sum(int(cell["bad"]) for cell in mapped["cells"]) > 0
-        assert int(mapped["details"]["metadata_blocks_mapped"]) > 0
+        mapped_metadata_blocks = sum(int(cell["bad"]) for cell in mapped["cells"])
+        assert mapped_metadata_blocks == expected_metadata_blocks
+        assert int(mapped["details"]["metadata_blocks_mapped"]) == expected_metadata_blocks
         assert mapped["details"]["metadata_basis"].startswith("native C EXT")
-        assert max(int(cell["end"]) for cell in metadata_cells) > total_blocks // 4
         assert all(int(cell["bad"]) <= int(cell["used"]) for cell in mapped["cells"])
 
     source = (GUI / "filesystems" / "ext4" / "plugin.py").read_text()
