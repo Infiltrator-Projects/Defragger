@@ -33,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           cp tests/apply_ntfs_workspace_relayout_patch.py /tmp/apply-ntfs-workspace.py
+          sed -i 's|ROOT = Path(__file__).resolve().parents\[1\]|ROOT = Path.cwd()|' /tmp/apply-ntfs-workspace.py
           git fetch origin main
           git checkout -B generated origin/main
           python3 /tmp/apply-ntfs-workspace.py
