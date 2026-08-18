@@ -21,7 +21,20 @@ jobs:
           submodules: recursive
 
       - name: Apply FAT16 stop responsiveness patch
-        run: python3 tests/apply_fat16_stop_responsiveness_patch.py
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/apply_fat16_stop_responsiveness_patch.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'fail "FAT16 dependency blocker workload did not exercise adaptive staging"',
+              'fail "FAT16 dependency blocker workload did not exercise batched adaptive staging"',
+              1,
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+          python3 tests/apply_fat16_stop_responsiveness_patch.py
 
       - name: Compile focused FAT worker with warnings as errors
         shell: bash
