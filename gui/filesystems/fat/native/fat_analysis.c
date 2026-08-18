@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "fat_growth.h"
+#include "fat_relayout.h"
 #include "ld_runtime.h"
 #include "version.h"
 
@@ -214,27 +214,27 @@ static void mark_map_chain(uint8_t *flags, const U32Vec *chain, bool directory) 
 
 static bool growth_layout_satisfied_for_map(Fat32 *fs, const FileList *files,
                                             unsigned percent) {
-    GrowthPreflight preflight = growth_layout_preflight(fs, files, percent);
-    bool satisfied = preflight.issue == GROWTH_PREFLIGHT_OK;
-    if (!satisfied && preflight.issue != GROWTH_PREFLIGHT_OBJECT_FRAGMENTED &&
-        preflight.issue != GROWTH_PREFLIGHT_ROOT_FRAGMENTED) {
+    FatRelayoutPreflight preflight = fat_relayout_preflight(fs, files, percent);
+    bool satisfied = preflight.issue == FAT_RELAYOUT_PREFLIGHT_OK;
+    if (!satisfied && preflight.issue != FAT_RELAYOUT_PREFLIGHT_OBJECT_FRAGMENTED &&
+        preflight.issue != FAT_RELAYOUT_PREFLIGHT_ROOT_FRAGMENTED) {
         size_t largest = 0;
         uint64_t regular_clusters = 0;
         size_t regular_files = 0;
         size_t directories = 0;
-        GrowthObjectList objects = build_growth_objects(
+        FatRelayoutObjectList objects = fat_relayout_build_objects(
             fs, files, &largest, &regular_clusters, &regular_files, &directories);
         size_t reserve_clusters = 0;
         (void)largest;
         (void)regular_clusters;
         (void)directories;
         if (regular_files != 0) {
-            satisfied = growth_layout_matches_canonical(
+            satisfied = fat_relayout_matches_canonical(
                 fs, &objects, percent, &reserve_clusters);
         }
-        growth_object_list_free(&objects);
+        fat_relayout_object_list_free(&objects);
     }
-    growth_preflight_free(&preflight);
+    fat_relayout_preflight_free(&preflight);
     return satisfied;
 }
 
@@ -468,12 +468,12 @@ void fat_analysis_verify_layout_policy(Fat32 *fs, unsigned reserve_percent) {
 
     size_t largest = 0, regular_files = 0, directories = 0;
     uint64_t regular_clusters = 0;
-    GrowthObjectList objects = build_growth_objects(
+    FatRelayoutObjectList objects = fat_relayout_build_objects(
         fs, &files, &largest, &regular_clusters, &regular_files, &directories);
     size_t reserve_clusters = 0;
-    bool canonical = growth_layout_matches_canonical(
+    bool canonical = fat_relayout_matches_canonical(
         fs, &objects, reserve_percent, &reserve_clusters);
-    growth_object_list_free(&objects);
+    fat_relayout_object_list_free(&objects);
     if (!canonical && (regular_files != 0 || directories != 0)) {
         filelist_free(&files);
         dirreflist_free(&refs);
