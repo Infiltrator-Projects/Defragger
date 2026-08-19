@@ -18,6 +18,7 @@
   "extraPaths": [
     "gui"
   ],
+  "stubPath": "typings",
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic",
   "reportMissingImports": false,
