@@ -169,7 +169,7 @@ static ext2_ino_t create_directory(ext2_filsys fs, ext2_ino_t parent,
 static void require_deep_extent_tree(ext2_filsys fs, ext2_ino_t ino) {
     ext2_extent_handle_t handle = NULL;
     struct ext2fs_extent extent;
-    struct ext2fs_extent_info info;
+    struct ext2_extent_info info;
     errcode_t err = ext2fs_extent_open(fs, ino, &handle);
     if (err) fail_ext("opening fragmented test extent tree", err);
     err = ext2fs_extent_get(handle, EXT2_EXTENT_ROOT, &extent);
