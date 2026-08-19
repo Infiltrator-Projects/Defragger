@@ -3,6 +3,11 @@ name: Build and publish release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .release-request
 
 permissions:
   contents: write
@@ -20,13 +25,21 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Verify manual release source
+      - name: Verify release source and request
         shell: bash
         run: |
           set -euo pipefail
           if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-            echo "Releases must be dispatched from main, not $GITHUB_REF." >&2
+            echo "Releases must run from main, not $GITHUB_REF." >&2
             exit 1
+          fi
+          VERSION=$(tr -d '\r\n' < VERSION)
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            REQUESTED=$(tr -d '\r\n' < .release-request)
+            if [ "$REQUESTED" != "$VERSION" ]; then
+              echo "Release request $REQUESTED does not match VERSION $VERSION." >&2
+              exit 1
+            fi
           fi
 
       - name: Install build dependencies
