@@ -11,9 +11,9 @@ TEMPLATE="$ROOT/packaging/local-run-header.sh.in"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-run-build.XXXXXX")
 COMMON_DIR="$ROOT/shared/infiltratr-common"
 COMMON_URL="https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git"
-COMMON_TAG="v1.5.0"
-COMMON_VERSION="1.5.0"
-COMMON_COMMIT="a0e75ffbe4e038c74c8f1e3d589f2dae87b2b7bb"
+COMMON_TAG="v1.6.0"
+COMMON_VERSION="1.6.0"
+COMMON_COMMIT="7dc1195efd3f066e84c57520b44b2aa448847b90"
 COMMON_TEMP=0
 cleanup() {
     rm -rf "$WORK"
@@ -58,7 +58,7 @@ for command_name in tar gzip sha256sum sed; do
 done
 
 [ -f "$TEMPLATE" ] || {
-    printf 'Installer template is missing: %s\n' "$TEMPLATE" >&2
+    printf '%s\n' 'Installer template is missing: %s' "$TEMPLATE" >&2
     exit 1
 }
 
