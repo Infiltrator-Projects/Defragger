@@ -74,15 +74,15 @@ The native `.run` installer installs required build/runtime packages, compiles f
 
 ## Release files
 
-Each numbered release uses the standard three-download model. For the version stored in `VERSION`, the release consists of:
+Each numbered release uses the standard three-download model. For the version stored in `VERSION`, the project's verified release artefacts are:
 
 | File | Purpose |
 |---|---|
 | `linux-defragger_${VERSION}_amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
 | `linux-defragger-${VERSION}-local-folder.run` | Hardware-optimised local compile-and-install program. |
-| `Defragger-${VERSION}.zip` | Canonical GitHub source archive from the exact matching version tag. |
+| `Defragger-${VERSION}.zip` | Clean source archive built and tested from the exact release commit. |
 
-The generic package and native installer are built with `packaging/build-deb.sh` and `packaging/build-local-run.sh`. `packaging/build-source-zip.sh` produces the same canonical `Defragger-${VERSION}.zip` name and top-level directory when a local source archive is required.
+The generic package, native installer and clean source archive are built with `packaging/build-deb.sh`, `packaging/build-local-run.sh` and `packaging/build-source-zip.sh`. Release publication is deliberately manual and may only be dispatched from `main` after the reusable project quality gate passes. GitHub also displays automatic tag source links; the versioned `Defragger-${VERSION}.zip` release asset is the project's tested source deliverable.
 
 ## Documentation
 
