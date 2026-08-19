@@ -16,6 +16,9 @@ permissions:
 jobs:
   quality-gate:
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: defragger
     steps:
       - name: Check out exact candidate
         uses: actions/checkout@v4
@@ -53,15 +56,15 @@ jobs:
       - name: Run complete native, filesystem, GUI and release test suite
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-          PYTHONPATH: ${{ github.workspace }}/gui:${{ github.workspace }}/tests
-          LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/build
+          PYTHONPATH: ${{ github.workspace }}/defragger/gui:${{ github.workspace }}/defragger/tests
+          LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/defragger/build
         run: ctest --test-dir build --output-on-failure
 
       - name: Enforce remaining architecture and release invariants
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-          PYTHONPATH: ${{ github.workspace }}/gui:${{ github.workspace }}/tests
-          LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/build
+          PYTHONPATH: ${{ github.workspace }}/defragger/gui:${{ github.workspace }}/defragger/tests
+          LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/defragger/build
         run: |
           python3 tests/test_btrfs_architecture.py
           python3 tests/test_release_gate.py
