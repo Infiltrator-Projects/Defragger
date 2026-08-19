@@ -527,7 +527,8 @@ static void emit_live_moves(const XfsLiveMove *moves, size_t count, uint32_t blo
                block_size);
     }
     printf("],\"moved_total_bytes\":%" PRIu64
-           ",\"pass\":1,\"objects_done\":0,\"objects_total\":0,\"sequence\":%" PRIu64 "}\n",
+           ",\"pass\":1,\"objects_done\":0,\"objects_total\":0,"
+           "\"scope\":\"stage-preview\",\"sequence\":%" PRIu64 "}\n",
            placed * (uint64_t)block_size, ++(*sequence));
     fflush(stdout);
 }
