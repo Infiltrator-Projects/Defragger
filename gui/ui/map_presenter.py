@@ -138,8 +138,18 @@ def _domain_presentation(
     )
     has_fragmentation = all(name in data for name in summary_fields)
     labels = operation_labels(capabilities)
+    full_allocation_unknown = (
+        not is_swap
+        and str(data.get("map_accuracy") or "").lower() == "summary"
+        and used_bytes == 0
+        and free_bytes == 0
+        and filesystem_bytes > 0
+        and unknown_bytes >= filesystem_bytes
+    )
 
-    if outside_bytes:
+    if full_allocation_unknown:
+        free_value = "Unknown"
+    elif outside_bytes:
         free_value = (
             f"{human_bytes(free_bytes)} usable · "
             f"{human_bytes(outside_bytes)} outside filesystem"
@@ -188,8 +198,12 @@ def _domain_presentation(
                 f"{_required_int(data, 'fragmented_directories'):,} dirs"
             )
     else:
-        files_value = f"{human_bytes(used_bytes)} allocated"
-        fragmentation_value = "Not calculated" if labels else "Not available"
+        if full_allocation_unknown:
+            files_value = "Unknown"
+            fragmentation_value = "Not available"
+        else:
+            files_value = f"{human_bytes(used_bytes)} allocated"
+            fragmentation_value = "Not calculated" if labels else "Not available"
 
     unit_size = _optional_int(data, "unit_size", 512)
     if unit_size <= 0:
@@ -212,6 +226,11 @@ def _domain_presentation(
         caption = (
             f"Inactive swap area · approximately {units_per_cell:,.1f} "
             f"{unit_label} per cell"
+        )
+    elif full_allocation_unknown:
+        caption = (
+            f"Allocation grid: {cell_count:,} cells · exact allocated/free "
+            "locations are not decoded yet"
         )
     elif outside_bytes:
         caption = (
@@ -241,6 +260,10 @@ def _domain_presentation(
             f"{filesystem} · {_required_int(data, 'fragmented_files')} fragmented files · "
             f"{_required_int(data, 'fragmented_directories')} fragmented directories"
         )
+    elif full_allocation_unknown:
+        status = (
+            f"{filesystem} read-only summary · exact allocation totals not decoded"
+        )
     elif labels:
         status = (
             f"{filesystem} allocation map · available: {', '.join(labels)} · "
@@ -267,6 +290,11 @@ def _domain_presentation(
         analysis_log = (
             f"Analysis complete: {_required_int(data, 'fragmented_files')} fragmented files, "
             f"{_required_int(data, 'fragmented_directories')} fragmented directories."
+        )
+    elif full_allocation_unknown:
+        analysis_log = (
+            f"Analysis complete: {filesystem} detected; exact allocated/free totals "
+            "are not decoded by this read-only backend."
         )
     else:
         availability = (

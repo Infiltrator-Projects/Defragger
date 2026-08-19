@@ -197,6 +197,33 @@ def test_map_presenter_handles_domain_and_swap_maps() -> None:
     assert read_only.fragmentation_value == "Not available"
     assert "read-only allocation map" in read_only.status
 
+    unknown_cells = [
+        {"start": 0, "end": 3, "free": 0, "used": 0, "unknown": 4},
+        {"start": 4, "end": 7, "free": 0, "used": 0, "unknown": 4},
+    ]
+    for filesystem in ("ufs", "zfs"):
+        unknown_summary = {
+            "backend": "read-only-domain",
+            "filesystem": filesystem,
+            "map_accuracy": "summary",
+            "unit_size": 512,
+            "total_units": 8,
+            "cell_count": 2,
+            "total_bytes": 4096,
+            "free_bytes": 0,
+            "used_bytes": 0,
+            "unknown_bytes": 4096,
+            "cells": unknown_cells,
+        }
+        unknown_view = present_allocation_map(unknown_summary, 0)
+        assert unknown_view.free_value == "Unknown"
+        assert unknown_view.files_value == "Unknown"
+        assert unknown_view.fragmentation_value == "Not available"
+        assert "exact allocation totals not decoded" in unknown_view.status
+        assert "exact allocated/free totals" in unknown_view.analysis_log
+        assert "0 B allocated" not in unknown_view.analysis_log
+        assert "0 B free" not in unknown_view.analysis_log
+
     swap = dict(domain)
     swap.update(
         filesystem="swap",
