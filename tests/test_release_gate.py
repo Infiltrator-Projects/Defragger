@@ -52,14 +52,20 @@ def main() -> None:
 
     trigger_block = release.split("permissions:", 1)[0]
     assert "workflow_dispatch:" in trigger_block
-    assert "\n  push:" not in trigger_block, (
-        "changing VERSION or pushing main must not publish a release automatically"
+    assert "\n  push:" in trigger_block, "release request push trigger is missing"
+    assert "branches:" in trigger_block and "- main" in trigger_block
+    assert "paths:" in trigger_block and "- .release-request" in trigger_block
+    assert "VERSION" not in trigger_block, (
+        "changing VERSION alone must never publish a release"
     )
     for required in (
         "quality-gate:",
         "uses: ./.github/workflows/quality-gate.yml",
         "needs: quality-gate",
         'refs/heads/main',
+        '.release-request',
+        'REQUESTED',
+        'GITHUB_EVENT_NAME',
         "packaging/build-source-zip.sh",
         'Defragger-${VERSION}.zip',
         "RELEASE_SHA256SUMS.txt",
