@@ -22,5 +22,6 @@
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic",
   "reportMissingImports": false,
+  "reportMissingModuleSource": false,
   "reportMissingTypeStubs": false
 }
