@@ -12,28 +12,66 @@ ROOT = Path(__file__).resolve().parents[1]
 def main() -> None:
     gate = (ROOT / ".github" / "workflows" / "quality-gate.yml").read_text(encoding="utf-8")
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    harness = (ROOT / "tests" / "run_tests.sh").read_text(encoding="utf-8")
     local_run = (ROOT / "packaging" / "build-local-run.sh").read_text(encoding="utf-8")
+    source_zip = (ROOT / "packaging" / "build-source-zip.sh").read_text(encoding="utf-8")
     cmake = (ROOT / "cmake" / "project.cmake").read_text(encoding="utf-8")
+    design = (ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
 
     for required in (
         "workflow_call:",
         "pull_request:",
         "LD_ENABLE_WERROR=ON",
+        "git ls-files",
         "ctest --test-dir build --output-on-failure",
+        "tests/test_btrfs_architecture.py",
+        "tests/test_release_gate.py",
+    ):
+        assert required in gate, f"quality gate lost required check: {required}"
+    assert "-E '^linux-defragger-tests$'" not in gate, (
+        "quality gate must not exclude the aggregate project test harness"
+    )
+
+    for required in (
+        "tests/test_release_artifacts.sh",
+        "tests/run_typecheck.sh",
         "tests/test_spdx_licensing.py",
         "tests/test_no_external_fs_tools.py",
         "tests/test_architecture.py",
-        "tests/test_btrfs_architecture.py",
-        "tests/test_release_artifacts.sh",
+        "tests/test_gui_models.py",
+        "tests/test_gui_services.py",
+        "tests/test_transactions.py",
+        "tests/test_safety.py",
+        "tests/test_xfs_writer.py",
+        "verify_defragged_image.py",
+        "verify_growth_defrag.py",
+        "verify_growth_fat12_16.py",
     ):
-        assert required in gate, f"quality gate lost required check: {required}"
+        assert required in harness, f"aggregate harness lost required regression: {required}"
 
-    assert "quality-gate:" in release
-    assert "uses: ./.github/workflows/quality-gate.yml" in release
-    assert "needs: quality-gate" in release
-    assert "- VERSION" in release
-    assert "gh release create" in release
+    trigger_block = release.split("permissions:", 1)[0]
+    assert "workflow_dispatch:" in trigger_block
+    assert "\n  push:" not in trigger_block, (
+        "changing VERSION or pushing main must not publish a release automatically"
+    )
+    for required in (
+        "quality-gate:",
+        "uses: ./.github/workflows/quality-gate.yml",
+        "needs: quality-gate",
+        'refs/heads/main',
+        "packaging/build-source-zip.sh",
+        'Defragger-${VERSION}.zip',
+        "RELEASE_SHA256SUMS.txt",
+        "gh release create",
+    ):
+        assert required in release, f"release workflow lost required contract: {required}"
     assert release.index("needs: quality-gate") < release.index("gh release create")
+    assert "GitHub-generated source archive" not in release
+
+    assert "__pycache__" in source_zip and ".pyc" in source_zip
+    assert "__pycache__/" in gitignore
+    assert "*.py[cod]" in gitignore
 
     common_contract = (
         ('COMMON_TAG="v1.6.0"', 'INFILTRATR_COMMON_TAG "v1.6.0"'),
@@ -52,6 +90,9 @@ def main() -> None:
         )
     assert "v1.5.0" not in local_run
     assert 'COMMON_VERSION="1.5.0"' not in local_run
+    assert "Infiltratr Common 1.6.0" in design
+    assert "7dc1195efd3f066e84c57520b44b2aa448847b90" in design
+    assert "Infiltratr Common 1.5.0" not in design
 
     print("release quality-gate contract passed")
 
