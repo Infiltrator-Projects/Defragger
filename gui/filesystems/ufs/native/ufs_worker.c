@@ -79,6 +79,16 @@ static void print_summary_json(const LdUfsSummary *summary, int detailed)
         (void)printf(",\"superblock_offset\":%llu,\"magic_offset\":%llu",
                      (unsigned long long)summary->superblock_offset,
                      (unsigned long long)summary->magic_offset);
+        if (summary->allocation_totals_known) {
+            (void)printf(",\"allocation_totals\":\"recorded-superblock\","
+                         "\"block_size\":%u,\"fragment_size\":%u,"
+                         "\"filesystem_bytes\":%llu,\"free_bytes\":%llu,"
+                         "\"used_bytes\":%llu",
+                         summary->block_size, summary->fragment_size,
+                         (unsigned long long)ufs_recorded_data_bytes(summary),
+                         (unsigned long long)ufs_recorded_free_bytes(summary),
+                         (unsigned long long)ufs_recorded_used_bytes(summary));
+        }
     }
     (void)puts("}");
 }
@@ -98,16 +108,28 @@ static void print_map_json(const LdUfsSummary *summary, uint64_t size_bytes,
     if (cell_count == 0U)
         cell_count = 1U;
 
+    const uint64_t rounded_bytes = total_units * UFS_MAP_UNIT_SIZE;
+    const uint64_t filesystem_bytes = ufs_recorded_data_bytes(summary);
+    const uint64_t free_bytes = ufs_recorded_free_bytes(summary);
+    const uint64_t used_bytes = ufs_recorded_used_bytes(summary);
+
     (void)printf("{\"schema\":1,\"backend\":\"read-only-domain\","
                  "\"filesystem\":\"ufs\",\"map_accuracy\":\"summary\","
                  "\"unit_size\":%u,\"total_units\":%llu,\"cell_count\":%llu,"
-                 "\"total_bytes\":%llu,\"free_bytes\":0,\"used_bytes\":0,"
-                 "\"unknown_bytes\":%llu,\"cells\":[",
+                 "\"total_bytes\":%llu,\"free_bytes\":%llu,\"used_bytes\":%llu,"
+                 "\"unknown_bytes\":%llu",
                  UFS_MAP_UNIT_SIZE,
                  (unsigned long long)total_units,
                  (unsigned long long)cell_count,
-                 (unsigned long long)(total_units * UFS_MAP_UNIT_SIZE),
-                 (unsigned long long)(total_units * UFS_MAP_UNIT_SIZE));
+                 (unsigned long long)rounded_bytes,
+                 (unsigned long long)free_bytes,
+                 (unsigned long long)used_bytes,
+                 (unsigned long long)rounded_bytes);
+    if (summary->allocation_totals_known) {
+        (void)printf(",\"filesystem_bytes\":%llu",
+                     (unsigned long long)filesystem_bytes);
+    }
+    (void)printf(",\"cells\":[");
 
     for (uint64_t index = 0U; index < cell_count; ++index) {
         const uint64_t start = (index * total_units) / cell_count;
@@ -126,11 +148,16 @@ static void print_map_json(const LdUfsSummary *summary, uint64_t size_bytes,
     (void)printf("],\"details\":{\"variant\":\"%s\","
                  "\"version\":%u,\"byte_order\":\"%s\","
                  "\"superblock_offset\":%llu,\"magic_offset\":%llu,"
-                 "\"note\":\"UFS detected; cylinder-group allocation locations not yet decoded\"}}\n",
+                 "\"allocation_totals\":\"%s\","
+                 "\"note\":\"%s\"}}\n",
                  ufs_variant_name(summary), ufs_version(summary),
                  ufs_byte_order_name(summary),
                  (unsigned long long)summary->superblock_offset,
-                 (unsigned long long)summary->magic_offset);
+                 (unsigned long long)summary->magic_offset,
+                 summary->allocation_totals_known ? "recorded-superblock" : "unknown",
+                 summary->allocation_totals_known
+                     ? "UFS2 recorded free/allocated totals decoded; cylinder-group locations not yet decoded"
+                     : "UFS detected; allocation totals and cylinder-group locations not yet decoded");
 }
 
 int main(int argc, char **argv)
