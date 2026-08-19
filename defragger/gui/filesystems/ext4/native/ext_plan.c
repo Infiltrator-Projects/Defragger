@@ -428,7 +428,8 @@ int ext_apply_mappings(const char *stage, sqlite3 *db, bool allow_stop,
             item->changed = item->old_block != item->target;
         }
         if (mstate != SQLITE_DONE) { free(context.items); sql_error(db, error, "reading EXT inode mappings"); sqlite3_finalize(inodes); sqlite3_finalize(mappings); goto done; }
-        code = ext2fs_block_iterate3(fs, ino, 0, NULL, replace_mapping, &context);
+        code = ext2fs_block_iterate3(fs, ino, BLOCK_FLAG_DATA_ONLY, NULL,
+                                      replace_mapping, &context);
         size_t expected_changed = 0;
         for (size_t index = 0; index < context.count; ++index) if (context.items[index].changed) expected_changed++;
         if (code != 0 || context.mismatch || context.position != context.count || context.changed != expected_changed) {
@@ -602,7 +603,9 @@ int ext_verify_stage(const char *stage, sqlite3 *db, const ExtGeometry *geometry
         }
         sqlite3_reset(expected); sqlite3_clear_bindings(expected); sqlite3_bind_int64(expected, 1, (sqlite3_int64)ino);
         VerifyMapContext context = {.expected = expected};
-        code = ext2fs_block_iterate3(fs, ino, BLOCK_FLAG_READ_ONLY, NULL, verify_mapping, &context);
+        code = ext2fs_block_iterate3(fs, ino,
+                                      BLOCK_FLAG_READ_ONLY | BLOCK_FLAG_DATA_ONLY,
+                                      NULL, verify_mapping, &context);
         int trailing = sqlite3_step(expected);
         if (code != 0 || context.mismatch || context.seen != expected_allocations || trailing != SQLITE_DONE) {
             ext_set_error(error, "EXT inode %u canonical allocation verification failed", (unsigned)ino); goto finalize;
