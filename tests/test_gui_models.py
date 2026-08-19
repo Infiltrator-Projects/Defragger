@@ -18,6 +18,7 @@ from ui.backend_catalog import BackendCatalog
 from ui.devices import Volume
 from ui.map_geometry import allocation_grid, block_bounds, source_cell_at
 from ui.map_presenter import AllocationMapError, present_allocation_map
+from ui.live_controller import LiveEventController
 from ui.operation_status import successful_completion
 
 
@@ -247,6 +248,61 @@ def test_map_presenter_handles_domain_and_swap_maps() -> None:
     assert one_page.files_value == "4.0 KB used · 1 page"
 
 
+def test_xfs_live_strokes_are_preview_then_authoritative() -> None:
+    data = {
+        "backend": "read-only-domain",
+        "filesystem": "xfs",
+        "unit_size": 4096,
+        "total_units": 8,
+        "filesystem_bytes": 8 * 4096,
+        "cells": _cells(),
+    }
+    controller = LiveEventController()
+
+    preview = controller.consume(
+        '@@LIVE_RANGES {"ranges":[[0,16384,4096]],'
+        '"moved_total_bytes":4096,"pass":1,"objects_done":0,'
+        '"objects_total":0,"scope":"stage-preview","sequence":1}',
+        data,
+        purpose="defrag",
+    )
+    assert preview.map_changed
+    assert preview.draw_immediately
+    assert preview.status is not None
+    assert "Staging preview" in preview.status
+    assert "source filesystem unchanged" in preview.status
+
+    source_reset = controller.consume(
+        '@@LIVE_RESET {"scope":"source-authoritative","unit_size":4096,'
+        '"filesystem_units":8,"used_ranges":[[0,8192]]}',
+        data,
+        purpose="defrag",
+    )
+    assert source_reset.map_changed
+    assert source_reset.draw_immediately
+    assert source_reset.status is not None
+    assert "Authoritative source allocation restored" in source_reset.status
+    assert sum(int(cell["used"]) for cell in data["cells"]) == 2
+
+    verified_reset = controller.consume(
+        '@@LIVE_RESET {"scope":"verified-authoritative","unit_size":4096,'
+        '"filesystem_units":8,"used_ranges":[[0,16384]]}',
+        data,
+        purpose="defrag",
+    )
+    assert verified_reset.map_changed
+    assert verified_reset.status is not None
+    assert "verified source filesystem" in verified_reset.status
+    assert sum(int(cell["used"]) for cell in data["cells"]) == 4
+
+    worker_source = (GUI / "filesystems" / "xfs" / "native" / "xfs_worker.c").read_text()
+    plan_source = (GUI / "filesystems" / "xfs" / "native" / "xfs_plan.c").read_text()
+    assert 'emit_live_reset(&source, "source-authoritative")' in worker_source
+    assert 'emit_live_reset(&committed, "verified-authoritative")' in worker_source
+    assert 'emit_live_reset(&verified)' not in worker_source
+    assert 'stage-preview' in plan_source
+
+
 def test_invalid_map_is_rejected_before_widget_state_changes() -> None:
     invalid = {
         "filesystem": "fat32",
@@ -328,6 +384,7 @@ def main() -> None:
     test_map_presenter_validates_and_normalises_fat_map()
     test_small_filesystems_use_square_allocation_blocks_not_row_stripes()
     test_map_presenter_handles_domain_and_swap_maps()
+    test_xfs_live_strokes_are_preview_then_authoritative()
     test_invalid_map_is_rejected_before_widget_state_changes()
     test_result_protocol_replaces_worker_output_text_matching()
     test_about_dialog_matches_the_standard_project_identity()

@@ -22,6 +22,17 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Reject tracked generated state
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked_generated=$(git ls-files | grep -E '(^|/)__pycache__/|\.py[co]$' || true)
+          if [ -n "$tracked_generated" ]; then
+            printf '%s\n' 'Tracked generated Python state is forbidden:' >&2
+            printf '%s\n' "$tracked_generated" >&2
+            exit 1
+          fi
+
       - name: Install build and test dependencies
         run: |
           sudo apt-get update
@@ -39,27 +50,18 @@ jobs:
             -DBUILD_TESTING=ON
           cmake --build build -j2
 
-      - name: Run native and filesystem safety tests
+      - name: Run complete native, filesystem, GUI and release test suite
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           PYTHONPATH: ${{ github.workspace }}/gui:${{ github.workspace }}/tests
           LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/build
-        run: ctest --test-dir build --output-on-failure -E '^linux-defragger-tests$'
+        run: ctest --test-dir build --output-on-failure
 
-      - name: Enforce architecture and licensing invariants
+      - name: Enforce remaining architecture and release invariants
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           PYTHONPATH: ${{ github.workspace }}/gui:${{ github.workspace }}/tests
           LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/build
         run: |
-          python3 -m compileall -q gui
-          python3 tests/test_spdx_licensing.py
-          python3 tests/test_no_external_fs_tools.py
-          python3 tests/test_architecture.py
           python3 tests/test_btrfs_architecture.py
-          python3 tests/test_analysis_plugins.py
-          python3 tests/test_worker_entrypoints.py
           python3 tests/test_release_gate.py
-
-      - name: Validate release packaging contract
-        run: ./tests/test_release_artifacts.sh

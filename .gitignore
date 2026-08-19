@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Python-generated state
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.pyright/
+
+# CMake/build output
+build*/
+CMakeCache.txt
+CMakeFiles/
+native-verify/
+release/
+
+# Generated release artefacts
+*.deb
+*.run
+*.zip
+RELEASE_SHA256SUMS.txt
+release-body.md
+
+# Local editor/OS noise
+*~
+.DS_Store

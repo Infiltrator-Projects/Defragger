@@ -522,9 +522,9 @@ static int commit_stage(const char *device_path, const char *journal_path, XfsJo
     ld_device_close(&target);
     return result;
 }
-static void emit_live_reset(const XfsCatalogue *catalogue) {
-    printf("@@LIVE_RESET {\"unit_size\":%u,\"filesystem_units\":%" PRIu64 ",\"used_ranges\":[",
-           catalogue->geometry.block_size, catalogue->geometry.dblocks);
+static void emit_live_reset(const XfsCatalogue *catalogue, const char *scope) {
+    printf("@@LIVE_RESET {\"scope\":\"%s\",\"unit_size\":%u,\"filesystem_units\":%" PRIu64 ",\"used_ranges\":[",
+           scope, catalogue->geometry.block_size, catalogue->geometry.dblocks);
     for (size_t index = 0; index < catalogue->used_ranges.count; ++index) {
         if (index != 0) putchar(',');
         uint64_t start = catalogue->used_ranges.items[index].start * catalogue->geometry.block_size;
@@ -600,6 +600,12 @@ static int build_and_commit(const char *device, const char *operation, const cha
     if (check_unchanged_target(device, &state, source.geometry.dblocks, error) != 0) goto precommit_fail;
     state.commit_offset = 0;
     if (journal_phase(journal_path, &state, "commit", error) != 0) goto precommit_fail;
+    /* Stage relocation strokes are a preview only.  Before any persistent
+     * write begins, restore the map to the source filesystem that is
+     * actually on disk.  Partial source commits are intentionally not
+     * presented as authoritative because XFS is not guaranteed to be
+     * self-consistent until the verified commit finishes. */
+    if (live_updates) emit_live_reset(&source, "source-authoritative");
     puts("The internally verified raw XFS working image is complete. Starting the persistent source commit."); fflush(stdout);
     if (commit_stage(device, journal_path, &state, &verified, 0, error) != 0) goto commit_fail;
     if (journal_phase(journal_path, &state, "verifying-source", error) != 0) goto commit_fail;
@@ -611,8 +617,8 @@ static int build_and_commit(const char *device, const char *operation, const cha
         if (*error == NULL) xfs_set_error(error, "committed XFS identity or active capacity changed");
         xfs_catalogue_free(&committed); goto commit_fail;
     }
+    if (live_updates) emit_live_reset(&committed, "verified-authoritative");
     xfs_catalogue_free(&committed);
-    if (live_updates) emit_live_reset(&verified);
     transaction_cleanup(journal_path, &state);
     printf("XFS %s completed with UUID and full device capacity preserved.\n",
            strcmp(operation, "growth-defrag") == 0 ? "Growth Defrag" : "Defragment");

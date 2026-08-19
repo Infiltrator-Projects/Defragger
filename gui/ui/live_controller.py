@@ -64,12 +64,25 @@ class LiveEventController:
             updater = LiveMapUpdater(map_data)
             if event.kind == "live-reset":
                 updater.reset(event.payload)
-                return LiveEventOutcome(
-                    consumed=True,
-                    status=(
+                scope = str(event.payload.get("scope", "")).lower()
+                if scope == "source-authoritative":
+                    status = (
+                        "Authoritative source allocation restored · persistent "
+                        "XFS commit is now in progress"
+                    )
+                elif scope == "verified-authoritative":
+                    status = (
+                        "Authoritative allocation map refreshed from the verified "
+                        "source filesystem"
+                    )
+                else:
+                    status = (
                         "Canonical filesystem layout initialised · live allocation "
                         "writes are now visible"
-                    ),
+                    )
+                return LiveEventOutcome(
+                    consumed=True,
+                    status=status,
                     map_changed=True,
                     draw_immediately=True,
                 )
@@ -84,14 +97,24 @@ class LiveEventController:
                     if summary.objects_done and summary.objects_total
                     else ""
                 )
-                return LiveEventOutcome(
-                    consumed=True,
-                    status=(
+                scope = str(event.payload.get("scope", "")).lower()
+                if scope == "stage-preview":
+                    status = (
+                        f"Staging preview · {display_name} pass "
+                        f"{summary.pass_number}{object_text} · "
+                        f"{human_bytes(summary.moved_total_bytes)} arranged · "
+                        "source filesystem unchanged"
+                    )
+                else:
+                    status = (
                         f"Live allocation update · {display_name} pass "
                         f"{summary.pass_number}{object_text} · "
                         f"{human_bytes(summary.moved_total_bytes)} relocated · "
                         "fragmentation recalculated at completion"
-                    ),
+                    )
+                return LiveEventOutcome(
+                    consumed=True,
+                    status=status,
                     map_changed=True,
                     draw_immediately=summary.sequence <= 1,
                 )
