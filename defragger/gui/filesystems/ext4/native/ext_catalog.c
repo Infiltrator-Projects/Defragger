@@ -162,7 +162,9 @@ int ext_scan_catalogue(const char *path, ExtGeometry *geometry,
         catalogue->inodes_scanned++;
         ExtBlockVec blocks = {0};
         char *local_error = NULL;
-        if (collect_inode_blocks(fs, ino, false, &blocks, &local_error) != 0) {
+        /* Fragmentation policy is about file/directory payload placement.
+           Extent-tree and indirect blocks are filesystem metadata and stay fixed. */
+        if (collect_inode_blocks(fs, ino, true, &blocks, &local_error) != 0) {
             catalogue->malformed_inodes++;
             free(local_error);
             block_free(&blocks);
@@ -352,10 +354,14 @@ int ext_catalog_plan(ext2_filsys fs, int raw_fd, sqlite3 *db,
         unsigned kind = (unsigned)inode.i_mode & LINUX_S_IFMT;
         if (inode.i_mode == 0 || inode.i_links_count == 0 ||
             (kind != LINUX_S_IFREG && kind != LINUX_S_IFDIR)) continue;
-        if (ino < EXT2_GOOD_OLD_FIRST_INO && ino != EXT2_ROOT_INO && ino != EXT2_JOURNAL_INO)
+        /* Reserved inodes, including the journal inode, are fixed filesystem
+           metadata. Only the root directory is a movable low-numbered object. */
+        if (ino < EXT2_GOOD_OLD_FIRST_INO && ino != EXT2_ROOT_INO)
             continue;
         ExtBlockVec blocks = {0};
-        if (collect_inode_blocks(fs, ino, false, &blocks, error) != 0) {
+        /* Plan only payload blocks. libext2fs owns the extent/indirect
+           metadata that describes those mappings and updates it in place. */
+        if (collect_inode_blocks(fs, ino, true, &blocks, error) != 0) {
             block_free(&blocks);
             ext2fs_close_inode_scan(scan);
             goto rollback;

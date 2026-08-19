@@ -45,6 +45,26 @@ static errcode_t high_alloc_block(ext2_filsys fs, blk64_t goal, blk64_t *ret) {
 }
 
 typedef struct {
+    blk64_t cursor;
+    blk64_t limit;
+    blk64_t stride;
+} FragmentAllocContext;
+
+static errcode_t fragmented_alloc_block(ext2_filsys fs, blk64_t goal, blk64_t *ret) {
+    (void)goal;
+    FragmentAllocContext *ctx = fs->priv_data;
+    while (ctx->cursor < ctx->limit) {
+        blk64_t candidate = ctx->cursor;
+        ctx->cursor += ctx->stride;
+        if (!ext2fs_test_block_bitmap2(fs->block_map, candidate)) {
+            *ret = candidate;
+            return 0;
+        }
+    }
+    return EXT2_ET_BLOCK_ALLOC_FAIL;
+}
+
+typedef struct {
     ext2_ino_t ino;
     void *buffer;
     errcode_t error;
@@ -144,6 +164,30 @@ static ext2_ino_t create_directory(ext2_filsys fs, ext2_ino_t parent,
     err = ext2fs_mkdir(fs, parent, ino, name);
     if (err) fail_ext("creating test directory", err);
     return ino;
+}
+
+static void require_deep_extent_tree(ext2_filsys fs, ext2_ino_t ino) {
+    ext2_extent_handle_t handle = NULL;
+    struct ext2fs_extent extent;
+    struct ext2fs_extent_info info;
+    errcode_t err = ext2fs_extent_open(fs, ino, &handle);
+    if (err) fail_ext("opening fragmented test extent tree", err);
+    err = ext2fs_extent_get(handle, EXT2_EXTENT_ROOT, &extent);
+    if (err) {
+        ext2fs_extent_free(handle);
+        fail_ext("reading fragmented test extent root", err);
+    }
+    err = ext2fs_extent_get_info(handle, &info);
+    if (err) {
+        ext2fs_extent_free(handle);
+        fail_ext("reading fragmented test extent depth", err);
+    }
+    if (info.max_depth <= 0) {
+        ext2fs_extent_free(handle);
+        fputs("fragmented EXT4 fixture did not create an external extent tree\n", stderr);
+        exit(1);
+    }
+    ext2fs_extent_free(handle);
 }
 
 
@@ -247,6 +291,22 @@ int main(int argc, char **argv) {
         snprintf(name, sizeof(name), "small-%03u.bin", index);
         create_file(fs, music, name, 1000U + index, (unsigned char)(index & 0xffU));
     }
+
+    /* Force a genuinely deep EXT4 extent tree. The previous fixture used
+       extents but was too contiguous to exercise the metadata-vs-payload
+       distinction seen on the 2 GiB Test Media profile. */
+    FragmentAllocContext fragmented = {
+        .cursor = 32768,
+        .limit = FILESYSTEM_BLOCKS - 4096,
+        .stride = 2,
+    };
+    fs->priv_data = &fragmented;
+    ext2fs_set_alloc_block_callback(fs, fragmented_alloc_block, NULL);
+    ext2_ino_t deep_extents = create_file(
+        fs, music, "deep-extents.bin", 8U * 1024U * 1024U, 'F');
+    ext2fs_set_alloc_block_callback(fs, NULL, NULL);
+    fs->priv_data = NULL;
+    require_deep_extent_tree(fs, deep_extents);
 
     /* Keep one referenced file allocation close to the filesystem end.  The
        volume still has ample total free space, but no payload-sized contiguous
