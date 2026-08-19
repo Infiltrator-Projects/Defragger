@@ -116,6 +116,7 @@ class _Volumes:
         self.current = SimpleNamespace(
             path=path,
             normalized_fstype="ext4",
+            display_fstype="ext4",
             mounted=False,
             image=image,
             readonly=False,
