@@ -6,18 +6,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = PROJECT_ROOT.parent
 
 
 def main() -> None:
-    gate = (ROOT / ".github" / "workflows" / "quality-gate.yml").read_text(encoding="utf-8")
-    release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    harness = (ROOT / "tests" / "run_tests.sh").read_text(encoding="utf-8")
-    local_run = (ROOT / "packaging" / "build-local-run.sh").read_text(encoding="utf-8")
-    source_zip = (ROOT / "packaging" / "build-source-zip.sh").read_text(encoding="utf-8")
-    cmake = (ROOT / "cmake" / "project.cmake").read_text(encoding="utf-8")
-    design = (ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
-    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    gate = (REPO_ROOT / ".github" / "workflows" / "quality-gate.yml").read_text(encoding="utf-8")
+    release = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    harness = (PROJECT_ROOT / "tests" / "run_tests.sh").read_text(encoding="utf-8")
+    local_run = (PROJECT_ROOT / "packaging" / "build-local-run.sh").read_text(encoding="utf-8")
+    source_zip = (PROJECT_ROOT / "packaging" / "build-source-zip.sh").read_text(encoding="utf-8")
+    cmake = (PROJECT_ROOT / "cmake" / "project.cmake").read_text(encoding="utf-8")
+    design = (PROJECT_ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
 
     for required in (
         "workflow_call:",
