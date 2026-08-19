@@ -93,7 +93,6 @@ jobs:
             "linux-defragger_${VERSION}_amd64.deb" \
             "linux-defragger-${VERSION}-local-folder.run" \
             "Defragger-${VERSION}.zip" \
-            "RELEASE_SHA256SUMS.txt" \
             --target "$GITHUB_SHA" \
             --title "Linux Defragger ${VERSION}" \
             --notes-file release-body.md
