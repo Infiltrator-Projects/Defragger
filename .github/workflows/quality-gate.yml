@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   cleanup-stale-branches:
-    runs-on: macos-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Delete every non-main branch
         shell: bash
