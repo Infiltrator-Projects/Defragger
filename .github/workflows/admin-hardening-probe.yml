@@ -46,7 +46,7 @@ jobs:
           JSON
 
       - name: Remove temporary probe branch
-        if: success()
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
