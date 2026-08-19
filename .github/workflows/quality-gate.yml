@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   cleanup-stale-branches:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Delete every non-main branch
         shell: bash
