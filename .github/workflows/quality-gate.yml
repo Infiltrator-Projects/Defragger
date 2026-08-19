@@ -9,18 +9,20 @@ permissions:
 
 jobs:
   cleanup-stale-branches:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Delete every non-main branch
-        shell: bash
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          mapfile -t branches < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100" --jq '.[].name')
-          for branch in "${branches[@]}"; do
-            if [ "$branch" != "main" ]; then
-              echo "Deleting stale branch: $branch"
-              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch}"
-            fi
-          done
+          $ErrorActionPreference = 'Stop'
+          $branches = gh api --paginate "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name'
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to list branches.' }
+          foreach ($branch in $branches) {
+            if ($branch -ne 'main') {
+              Write-Host "Deleting stale branch: $branch"
+              gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$branch"
+              if ($LASTEXITCODE -ne 0) { throw "Unable to delete branch: $branch" }
+            }
+          }
