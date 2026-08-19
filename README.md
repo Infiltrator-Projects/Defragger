@@ -3,7 +3,7 @@
 
 Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 
-The current software version is defined by [`VERSION`](VERSION). Installable builds are published on the repository's Releases page.
+The current software version is defined by [`defragger/VERSION`](defragger/VERSION). Installable builds are published on the repository's Releases page.
 
 > **Important:** defragmentation changes filesystem allocation metadata and data placement. Use verified backups and test media before using write-capable operations on important filesystems.
 
@@ -34,13 +34,13 @@ Unsupported on-disk layouts fail closed rather than being guessed. Exact writers
 
 Linux Defragger is intentionally filesystem-driver independent for placement work. The operating system still provides ordinary raw device I/O, but filesystem parsing, allocation planning, staging and metadata updates are owned by the project rather than delegated to the mounted kernel filesystem implementation.
 
-Each filesystem has one authoritative implementation under `gui/filesystems/<format>/`, with native C under `native/` where exact low-level analysis or mutation is implemented. Filesystem-neutral device safety, raw I/O, Stop handling and shared runtime support live under `src/core/`.
+Each filesystem has one authoritative implementation under `defragger/gui/filesystems/<format>/`, with native C under `native/` where exact low-level analysis or mutation is implemented. Filesystem-neutral device safety, raw I/O, Stop handling and shared runtime support live under `defragger/src/core/`.
 
 Persistent write-capable engines use verified staging and recovery state before authoritative source changes. The architecture and regression tests reject known external filesystem mutation/repair orchestration and duplicate implementation paths.
 
 The repository does not vendor third-party source trees. Shared first-party functionality is consumed through the pinned Infiltratr Common dependency, while required system libraries are supplied by the host distribution.
 
-For the detailed technical contract, see [`docs/DESIGN.md`](docs/DESIGN.md).
+For the detailed technical contract, see [`defragger/docs/DESIGN.md`](defragger/docs/DESIGN.md).
 
 ## Operations
 
@@ -63,9 +63,9 @@ Formatting utilities are permitted inside Test Media solely to manufacture hosti
 ## Build and test
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
-cmake --build build -j"$(nproc)"
-ctest --test-dir build --output-on-failure
+cmake -S defragger -B defragger/build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
+cmake --build defragger/build -j"$(nproc)"
+ctest --test-dir defragger/build --output-on-failure
 ```
 
 The permanent GitHub quality gate performs a warnings-as-errors C build and runs the complete native, filesystem, GUI, architecture, safety and release regression suite.
@@ -84,12 +84,7 @@ Release publication is gated: the release workflow only publishes the requested 
 
 ## Repository layout
 
-- `gui/filesystems/` — filesystem packages and native engines
-- `src/core/` — filesystem-neutral native core
-- `test_media/` — all-C sacrificial test-media application
-- `tests/` — regression, safety, architecture and filesystem tests
-- `packaging/` — `.deb`, native `.run` and source ZIP builders
-- `docs/DESIGN.md` — authoritative technical design
+The repository root is intentionally minimal. All implementation, native engines, CMake modules, tests, test-media code, packaging, design documentation and pinned shared dependency live under [`defragger/`](defragger/).
 
 ## Licence
 
