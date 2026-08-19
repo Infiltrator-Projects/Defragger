@@ -15,7 +15,7 @@ HASH_SUFFIXES = {".py", ".sh", ".ini", ".desktop", ".yml", ".yaml"}
 SLASH_SUFFIXES = {".c", ".h"}
 HTML_SUFFIXES = {".md"}
 XML_SUFFIXES = {".svg"}
-INLINE_EXEMPT = {Path("VERSION"), Path("pyrightconfig.json")}
+INLINE_EXEMPT = {Path("VERSION"), Path("tests/pyrightconfig.json")}
 SIDECAR_REQUIRED = {
     Path("tests/fixtures/affs-ffs-fragmented.adf.gz"),
     Path("tests/fixtures/affs-ofs-fragmented.adf.gz"),
@@ -45,7 +45,7 @@ def iter_first_party_files() -> list[Path]:
 def expected_prefix(path: Path) -> str | None:
     rel = path.relative_to(ROOT)
     name = path.name
-    if rel == Path(".gitmodules"):
+    if rel in {Path(".gitmodules"), Path(".gitignore")}:
         return "# " + IDENTIFIER
     if name == "CMakeLists.txt" or path.suffix == ".cmake":
         return "# " + IDENTIFIER

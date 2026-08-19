@@ -1,0 +1,27 @@
+{
+  "include": [
+    "../gui/core",
+    "../gui/filesystems/fat/common.py",
+    "../gui/filesystems/ext4/plugin.py",
+    "../gui/filesystems/ntfs/plugin.py",
+    "../gui/filesystems/exfat/plugin.py",
+    "../gui/filesystems/xfs/plugin.py",
+    "../gui/ui/command_models.py",
+    "../gui/ui/operation_coordinator.py",
+    "../gui/ui/operation_planner.py",
+    "../gui/ui/window_view.py"
+  ],
+  "exclude": [
+    "../build",
+    "../build-deb"
+  ],
+  "extraPaths": [
+    "../gui"
+  ],
+  "stubPath": "typings",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false,
+  "reportMissingTypeStubs": false
+}
