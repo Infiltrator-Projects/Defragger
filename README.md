@@ -1,13 +1,13 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Linux Defragger
 
-Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on an unmounted block device or image: they do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation utilities.
+Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 
-The project is deliberately modular. Each filesystem owns one authoritative implementation under `gui/filesystems/<format>/`, with native C beneath `native/` where mutation or exact low-level analysis is implemented. Filesystem-neutral raw I/O, staging, device safety and Stop handling live in `src/core/`.
+The current software version is defined by [`VERSION`](VERSION). Installable builds are published on the repository's Releases page.
 
-The authoritative current software version is the root [`VERSION`](VERSION) file. Published installable builds are available from the repository's **Latest Release**. This README intentionally does not embed a release number so it cannot become stale when a new version is published.
+> **Important:** defragmentation changes filesystem allocation metadata and data placement. Use verified backups and test media before using write-capable operations on important filesystems.
 
-## Current filesystem support
+## Filesystem support
 
 | Filesystem | Analyse / Map | Defragment | Growth Defrag | Recover |
 |---|---|---|---|---|
@@ -28,41 +28,39 @@ The authoritative current software version is the root [`VERSION`](VERSION) file
 | ZFS / OpenZFS member | Summary read-only analysis, native C | Not implemented | Not implemented | No |
 | Linux swap | Exact inactive / aggregate active read-only analysis, native C | Not applicable | Not applicable | No |
 
-Unsupported on-disk layouts fail closed rather than being guessed. The exact writers perform a final read-only rescan before reporting success.
+Unsupported on-disk layouts fail closed rather than being guessed. Exact writers perform a final read-only rescan before reporting success.
 
-## Raw userspace design
+## Design
 
-The writer engines use ordinary Linux raw block I/O but do not depend on Linux filesystem-driver support for physical placement. This is intentional: for example, an XFS target can be analysed and rewritten by the XFS engine without mounting XFS or asking the XFS kernel driver to relocate files.
+Linux Defragger is intentionally filesystem-driver independent for placement work. The operating system still provides ordinary raw device I/O, but filesystem parsing, allocation planning, staging and metadata updates are owned by the project rather than delegated to the mounted kernel filesystem implementation.
 
-Persistent staged writers build and verify a private working image before committing authoritative changes to the source. XFS, EXT, exFAT, HFS+/HFSX and Amiga OFS/FFS commit verified allocated/metadata ranges rather than rewriting free address space merely because the stage spans the full logical filesystem. Recovery re-verifies the persistent stage before resuming writes.
+Each filesystem has one authoritative implementation under `gui/filesystems/<format>/`, with native C under `native/` where exact low-level analysis or mutation is implemented. Filesystem-neutral device safety, raw I/O, Stop handling and shared runtime support live under `src/core/`.
 
-The production architecture test rejects known external filesystem mutation/repair command orchestration and loop/mount delegation.
+Persistent write-capable engines use verified staging and recovery state before authoritative source changes. The architecture and regression tests reject known external filesystem mutation/repair orchestration and duplicate implementation paths.
 
-## No bundled third-party source
+The repository does not vendor third-party source trees. Shared first-party functionality is consumed through the pinned Infiltratr Common dependency, while required system libraries are supplied by the host distribution.
 
-The source repository contains **no vendored third-party source tree**. Required libraries are supplied by the host distribution at build/runtime rather than copied into Linux Defragger. The project itself is licensed `GPL-3.0-or-later` and first-party source files carry SPDX identifiers.
+For the detailed technical contract, see [`docs/DESIGN.md`](docs/DESIGN.md).
 
-## Linux Defragger Test Media
+## Operations
 
-The package includes **Linux Defragger Test Media**, a separate all-C GTK application for building and verifying sacrificial filesystem test disks. It is not a window inside Linux Defragger and it does not use the Python GUI or the former Python field-test harness. Launch **Linux Defragger Test Media** from the desktop application menu; the executable is `linux-defragger-test-media`.
+Linux Defragger exposes three production operations:
 
-The GUI lists whole physical disks with model, serial, size and transport, marks the system/boot disk as protected, and enables destructive preparation for any sufficiently large writable non-system whole-disk target. This includes removable USB/MMC/SD media and dedicated secondary fixed disks such as SATA, SAS, NVMe, virtio and virtual test disks; transport type alone is not a reason to reject a target. Before changing a disk it shows the exact selected device in a destructive confirmation dialog, and the privileged C worker repeats the whole-disk, system-disk, read-only and size checks after privilege elevation.
+- **Defragment** — places supported movable allocations into the earliest legal canonical layout.
+- **Growth Defrag** — uses the same canonical placement model while reserving exactly 10% free space immediately after each regular file.
+- **Recover** — resumes or repairs supported interrupted persistent transactions when the filesystem-specific recovery contract permits it.
 
-The Test Media window is responsive rather than fixed around one desktop size. The filesystem table and live operation log share a draggable vertical splitter and grow with the window. Creator availability and operation result are separate columns so a reserved or unavailable creator is not confused with a formatting/verification failure. The header shows an at-a-glance readiness count, the progress bar reports completed filesystem slots, and each row exposes explanatory detail as a tooltip.
+Stop requests are honoured at filesystem-safe transaction boundaries rather than by abandoning an authoritative write mid-transaction.
 
-Creator states are intentionally explicit. **Ready** means the required creator is available on the current host or is supplied by Test Media itself. **Optional package missing** means Test Media knows the distribution package normally providing the creator. **No standard creator** means no supported creator/package path is claimed for that slot, so it remains reserved while the rest of the build continues. **Reserved / manual** is used where automatic creation is deliberately not attempted. Test Media never writes a fake filesystem signature merely to make a row appear successful.
+## Test Media
 
-The test layout contains 21 dedicated slots: FAT12, FAT16, FAT32, exFAT, NTFS, ext2, ext3, ext4, XFS, Btrfs, Amiga OFS, Amiga FFS, Amiga SFS/SFS2, Amiga PFS3, classic HFS, HFS+, Minix, UFS, ZFS, APFS and Swap. OFS and FFS are separate real test filesystems created as Amiga `DOS\\0` and `DOS\\1`. Their formatting, directory/file metadata construction, data-block allocation, deliberate fragmentation and post-defrag verification are all performed directly by first-party C against the raw partition; Test Media does not need the Linux AFFS kernel driver to mount either filesystem. The production Amiga parser independently traverses the generated structures, and the normal profile requires every retained target file to contain at least 100 physical fragments. SFS/SFS2 and PFS3 remain separate reserved roadmap slots because Linux Defragger does not yet implement those filesystem engines or creators. APFS likewise remains a real reserved partition rather than receiving a fake signature.
+The package includes **Linux Defragger Test Media**, a separate all-C GTK utility for preparing sacrificial test disks. It can use removable media or a dedicated secondary fixed disk, while protecting the system/boot disk and repeating destructive-target checks after privilege elevation.
 
-UFS test media is manufactured as a genuine little-endian UFS2/FFS image using the distribution `makefs` utility from a deterministic 200 MiB test tree. Before copying that image to the `LD_UFS` partition, and again after copying it, Test Media requires Linux Defragger's independent native UFS parser to recognise it as UFS2. The current production UFS analyser is summary-level and does not yet decode inode/block allocation deeply enough to prove an exact fragmentation count, so Test Media deliberately does **not** claim a specific UFS fragmentation level yet.
+The standard test layout provides dedicated slots for FAT12, FAT16, FAT32, exFAT, NTFS, ext2, ext3, ext4, XFS, Btrfs, Amiga OFS, Amiga FFS, Amiga SFS/SFS2, Amiga PFS3, classic HFS, HFS+, Minix, UFS, ZFS, APFS and Swap. Unsupported creator/engine combinations remain explicitly reserved rather than receiving fake filesystem signatures.
 
-Normal populated filesystems receive about 200 MiB of deterministic test data. FAT12 deliberately uses a smaller 4 MiB target and a scaled directory-fragmentation profile so the 64 MiB FAT12 test volume remains valid. Fragmentation generation, SHA-256 manifest creation, state recording and post-defrag verification are implemented in C. **Verify After Defrag** verifies OFS/FFS directly through the raw C engine; for the other previously populated filesystems it mounts/imports read-only where the host supports doing so and verifies retained file sizes, SHA-256 hashes and directory-entry counts. A host that cannot mount a filesystem reports it as unverified rather than corrupt. Host-side state is stored under `/var/tmp/linux-defragger-test-media/`.
+Formatting utilities are permitted inside Test Media solely to manufacture hostile test filesystems. Production analyser and writer engines remain subject to the raw-userspace/no-external-mutation rule.
 
-Formatting and mounting utilities such as `mkfs.fat`, `mkfs.xfs`, `hformat`, `makefs` and `zpool` are allowed here because this companion exists solely to manufacture hostile test media. The OFS and FFS formatter/population path is first-party raw C rather than an external filesystem utility. Linux Defragger's production analyser and writer engines remain subject to the no-mount/no-external-filesystem-mutation architecture rule.
-
-## Build
-
-A normal development build is:
+## Build and test
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
@@ -70,26 +68,31 @@ cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
 ```
 
-The native `.run` installer installs required build/runtime packages, compiles for the current machine using `-march=native -mtune=native`, builds a Debian package and installs it through `dpkg`.
+The permanent GitHub quality gate performs a warnings-as-errors C build and runs the complete native, filesystem, GUI, architecture, safety and release regression suite.
 
-## Release files
+## Release downloads
 
-Each numbered release uses the standard three-download model. For the version stored in `VERSION`, the project's verified release artefacts are:
+Each numbered release uses three project deliverables:
 
 | File | Purpose |
 |---|---|
 | `linux-defragger_${VERSION}_amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
-| `linux-defragger-${VERSION}-local-folder.run` | Hardware-optimised local compile-and-install program. |
+| `linux-defragger-${VERSION}-local-folder.run` | Hardware-optimised local compile-and-install program (`-march=native -mtune=native`). |
 | `Defragger-${VERSION}.zip` | Clean source archive built and tested from the exact release commit. |
 
-The generic package, native installer and clean source archive are built with `packaging/build-deb.sh`, `packaging/build-local-run.sh` and `packaging/build-source-zip.sh`. Release publication is deliberately manual and may only be dispatched from `main` after the reusable project quality gate passes. GitHub also displays automatic tag source links; the versioned `Defragger-${VERSION}.zip` release asset is the project's tested source deliverable.
+Release publication is gated: the release workflow only publishes the requested version after the reusable project quality gate succeeds. GitHub's automatic tag source links may also be displayed, but `Defragger-${VERSION}.zip` is the project's verified source deliverable.
 
-## Documentation
+## Repository layout
 
-`docs/DESIGN.md` is the single technical design document. Release history lives in Git tags/releases, and the executable test suite is the authority for regression status.
+- `gui/filesystems/` — filesystem packages and native engines
+- `src/core/` — filesystem-neutral native core
+- `test_media/` — all-C sacrificial test-media application
+- `tests/` — regression, safety, architecture and filesystem tests
+- `packaging/` — `.deb`, native `.run` and source ZIP builders
+- `docs/DESIGN.md` — authoritative technical design
 
 ## Licence
 
 Copyright © 2026 Shannon Smith.
 
-Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under the **GNU General Public License version 3 or, at your option, any later version** (`GPL-3.0-or-later`). The canonical licence text is the root `LICENSE` file.
+Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under the **GNU General Public License version 3 or, at your option, any later version** (`GPL-3.0-or-later`). The canonical licence text is [`LICENSE`](LICENSE).
