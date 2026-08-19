@@ -1,4 +1,4 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-[submodule "shared/infiltratr-common"]
-	path = shared/infiltratr-common
+[submodule "defragger/shared/infiltratr-common"]
+	path = defragger/shared/infiltratr-common
 	url = https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
