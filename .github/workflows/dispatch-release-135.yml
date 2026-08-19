@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: One-shot Defragger 1.8.0-135 release dispatch
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/dispatch-release-135.yml
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  dispatch:
+    if: github.head_ref == 'maintenance/release-dispatch-135-final'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPECTED_MAIN_SHA: 1d0b8eb9928285678cea6423737da2c4c3b09cee
+      RELEASE_TAG: v1.8.0-135
+    steps:
+      - name: Verify exact main and release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(gh api "/repos/${GITHUB_REPOSITORY}/branches/main" --jq '.commit.sha')"
+          test "$current" = "$EXPECTED_MAIN_SHA"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            target="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
+            test "$target" = "$EXPECTED_MAIN_SHA"
+            echo "$RELEASE_TAG already exists at the exact validated commit."
+          fi
+
+      - name: Dispatch canonical release workflow and wait for exact run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          before="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --event workflow_dispatch --limit 50 --json databaseId --jq '.[].databaseId' || true)"
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+
+          run_id=''
+          for _ in $(seq 1 40); do
+            while read -r candidate sha; do
+              [ -n "$candidate" ] || continue
+              [ "$sha" = "$EXPECTED_MAIN_SHA" ] || continue
+              if ! grep -qx "$candidate" <<<"$before"; then
+                run_id="$candidate"
+                break
+              fi
+            done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,headSha --jq '.[] | [.databaseId,.headSha] | @tsv')
+            [ -n "$run_id" ] && break
+            sleep 2
+          done
+
+          if [ -z "$run_id" ]; then
+            echo 'Could not identify the newly dispatched canonical release run.' >&2
+            exit 1
+          fi
+
+          echo "Watching canonical release run $run_id for $EXPECTED_MAIN_SHA"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Verify published tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
+          test "$target" = "$EXPECTED_MAIN_SHA"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+      - name: Remove temporary dispatch branch
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/heads/maintenance/release-dispatch-135-final"
