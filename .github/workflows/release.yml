@@ -3,11 +3,6 @@ name: Build and publish release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - .release-request
 
 permissions:
   contents: write
@@ -25,7 +20,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Verify release source and request
+      - name: Verify release source
         shell: bash
         run: |
           set -euo pipefail
@@ -34,13 +29,7 @@ jobs:
             exit 1
           fi
           VERSION=$(tr -d '\r\n' < VERSION)
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            REQUESTED=$(tr -d '\r\n' < .release-request)
-            if [ "$REQUESTED" != "$VERSION" ]; then
-              echo "Release request $REQUESTED does not match VERSION $VERSION." >&2
-              exit 1
-            fi
-          fi
+          test -n "$VERSION"
 
       - name: Install build dependencies
         run: |
