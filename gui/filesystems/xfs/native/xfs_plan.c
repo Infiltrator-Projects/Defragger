@@ -253,6 +253,18 @@ static int sqlite_fail(sqlite3 *db, char **error, const char *action) {
     return -1;
 }
 
+static int checkpoint_plan_db(sqlite3 *db, char **error) {
+    int log_frames = 0;
+    int checkpointed_frames = 0;
+    int rc = sqlite3_wal_checkpoint_v2(db, NULL, SQLITE_CHECKPOINT_PASSIVE,
+                                       &log_frames, &checkpointed_frames);
+    if (rc == SQLITE_OK) return 0;
+    xfs_set_error(error,
+                  "cannot checkpoint XFS plan (SQLite %d, %s): %s",
+                  rc, sqlite3_errstr(rc), sqlite3_errmsg(db));
+    return -1;
+}
+
 int xfs_open_plan_db(const char *path, bool create, sqlite3 **out, char **error) {
     *out = NULL;
     if (create) (void)unlink(path);
@@ -545,13 +557,16 @@ int xfs_permute_payloads(const char *stage, sqlite3 *db, uint32_t block_size,
     sqlite3_stmt *terminals = NULL;
     const char *terminal_sql =
         "SELECT b.target FROM blocks b LEFT JOIN blocks s ON s.old=b.target "
-        "WHERE b.old<>b.target AND s.old IS NULL ORDER BY b.target";
+        "WHERE b.old<>b.target AND s.old IS NULL AND b.target>? ORDER BY b.target";
+    sqlite3_int64 terminal_floor = -1;
     if (sqlite3_prepare_v2(db, terminal_sql, -1, &terminals, NULL) != SQLITE_OK) {
         close(fd);
         return sqlite_fail(db, error, "cannot find XFS terminal moves");
     }
+    sqlite3_bind_int64(terminals, 1, terminal_floor);
     while (sqlite3_step(terminals) == SQLITE_ROW) {
-        uint64_t free_block = (uint64_t)sqlite3_column_int64(terminals, 0);
+        terminal_floor = sqlite3_column_int64(terminals, 0);
+        uint64_t free_block = (uint64_t)terminal_floor;
         for (;;) {
             bool found = false;
             sqlite3_int64 old0 = 0;
@@ -571,9 +586,16 @@ int xfs_permute_payloads(const char *stage, sqlite3 *db, uint32_t block_size,
             free_block = old;
             if (placed % 8192U == 0) {
                 if (ld_stop_requested()) { sqlite3_finalize(terminals); close(fd); xfs_set_error(error, "stop requested before XFS source commit"); return -1; }
-                if (sqlite3_exec(db, "PRAGMA wal_checkpoint(PASSIVE)", NULL, NULL, NULL) != SQLITE_OK) {
-                    sqlite3_finalize(terminals); close(fd); return sqlite_fail(db, error, "cannot checkpoint XFS plan");
+                /* A WAL checkpoint cannot run while the terminal SELECT is active on
+                 * this connection.  Finalize it, checkpoint, then resume strictly
+                 * after the last terminal target already consumed. */
+                sqlite3_finalize(terminals);
+                terminals = NULL;
+                if (checkpoint_plan_db(db, error) != 0) { close(fd); return -1; }
+                if (sqlite3_prepare_v2(db, terminal_sql, -1, &terminals, NULL) != SQLITE_OK) {
+                    close(fd); return sqlite_fail(db, error, "cannot resume XFS terminal moves");
                 }
+                sqlite3_bind_int64(terminals, 1, terminal_floor);
                 printf("XFS placement: %" PRIu64 " of %" PRIu64 " blocks.\n", placed, move_count);
             }
         }
@@ -622,8 +644,14 @@ int xfs_permute_payloads(const char *stage, sqlite3 *db, uint32_t block_size,
             queue_live_move(live_updates, live_moves, &live_count, old, free_block,
                             block_size, placed, &live_sequence);
             free_block = old;
-            if (placed % 8192U == 0 && ld_stop_requested()) {
-                free(saved); close(fd); xfs_set_error(error, "stop requested before XFS source commit"); return -1;
+            if (placed % 8192U == 0) {
+                if (ld_stop_requested()) {
+                    free(saved); close(fd); xfs_set_error(error, "stop requested before XFS source commit"); return -1;
+                }
+                if (checkpoint_plan_db(db, error) != 0) {
+                    free(saved); close(fd); return -1;
+                }
+                printf("XFS placement: %" PRIu64 " of %" PRIu64 " blocks.\n", placed, move_count);
             }
         }
         free(saved);
