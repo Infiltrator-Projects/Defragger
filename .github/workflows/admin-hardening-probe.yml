@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: One-shot repository admin hardening probe
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/admin-hardening-probe.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: github.head_ref == 'maintenance/admin-hardening-probe'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable merged-branch cleanup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method PATCH "/repos/${GITHUB_REPOSITORY}" -F delete_branch_on_merge=true >/dev/null
+
+      - name: Protect main against force-push and deletion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method PUT "/repos/${GITHUB_REPOSITORY}/branches/main/protection" --input - <<'JSON'
+          {
+            "required_status_checks": null,
+            "enforce_admins": false,
+            "required_pull_request_reviews": null,
+            "restrictions": null,
+            "required_linear_history": false,
+            "allow_force_pushes": false,
+            "allow_deletions": false,
+            "block_creations": false,
+            "required_conversation_resolution": false,
+            "lock_branch": false,
+            "allow_fork_syncing": true
+          }
+          JSON
+
+      - name: Remove temporary probe branch
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/heads/maintenance/admin-hardening-probe"
