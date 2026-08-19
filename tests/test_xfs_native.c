@@ -127,6 +127,50 @@ static void test_payload_relocation(void) {
 }
 
 
+static void test_payload_checkpoint_boundary(void) {
+    enum { MOVE_COUNT = 9000, SOURCE_BASE = 10000 };
+    char image_template[] = "/tmp/linux-defragger-xfs-checkpoint-image-XXXXXX";
+    int image_fd = mkstemp(image_template);
+    CHECK(image_fd >= 0);
+    CHECK(ftruncate(image_fd, (off_t)((SOURCE_BASE + MOVE_COUNT) * 512U)) == 0);
+    CHECK(close(image_fd) == 0);
+
+    char plan_template[] = "/tmp/linux-defragger-xfs-checkpoint-plan-XXXXXX";
+    int plan_fd = mkstemp(plan_template);
+    CHECK(plan_fd >= 0);
+    CHECK(close(plan_fd) == 0);
+    CHECK(unlink(plan_template) == 0);
+
+    char *error = NULL;
+    sqlite3 *db = NULL;
+    CHECK(xfs_open_plan_db(plan_template, true, &db, &error) == 0);
+    CHECK(sqlite3_exec(db, "BEGIN IMMEDIATE", NULL, NULL, NULL) == SQLITE_OK);
+    sqlite3_stmt *insert = NULL;
+    CHECK(sqlite3_prepare_v2(
+              db,
+              "INSERT INTO blocks(old,target,inode,logical,unwritten) VALUES(?,?,?,?,0)",
+              -1, &insert, NULL) == SQLITE_OK);
+    for (sqlite3_int64 index = 0; index < MOVE_COUNT; ++index) {
+        sqlite3_bind_int64(insert, 1, SOURCE_BASE + index);
+        sqlite3_bind_int64(insert, 2, index);
+        sqlite3_bind_int64(insert, 3, 100U);
+        sqlite3_bind_int64(insert, 4, index);
+        CHECK(sqlite3_step(insert) == SQLITE_DONE);
+        CHECK(sqlite3_reset(insert) == SQLITE_OK);
+        CHECK(sqlite3_clear_bindings(insert) == SQLITE_OK);
+    }
+    CHECK(sqlite3_finalize(insert) == SQLITE_OK);
+    CHECK(sqlite3_exec(db, "COMMIT", NULL, NULL, NULL) == SQLITE_OK);
+
+    CHECK(xfs_permute_payloads(image_template, db, 512U, MOVE_COUNT, false, &error) == 0);
+    CHECK(error == NULL);
+    CHECK(sqlite3_close(db) == SQLITE_OK);
+    CHECK(unlink(image_template) == 0);
+    CHECK(unlink(plan_template) == 0);
+    xfs_clear_error(&error);
+}
+
+
 static void test_growth_metadata_boundary_slack(void) {
     XfsCatalogue catalogue;
     memset(&catalogue, 0, sizeof(catalogue));
@@ -189,8 +233,9 @@ int main(void) {
     test_crc32c();
     test_growth_planner();
     test_payload_relocation();
+    test_payload_checkpoint_boundary();
     test_growth_metadata_boundary_slack();
     test_writer_feature_gates();
-    puts("native XFS CRC, planner, metadata-boundary slack, relocation and feature-gate tests passed");
+    puts("native XFS CRC, planner, checkpoint, metadata-boundary slack, relocation and feature-gate tests passed");
     return 0;
 }
