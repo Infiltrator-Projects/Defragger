@@ -56,8 +56,8 @@ Filesystem-neutral C mechanics are implemented once:
 - generated version ownership.
 
 Generic C primitives that are also useful to other Infiltrator applications are
-not reimplemented here. Linux Defragger pins Infiltratr Common 1.5.0 at
-exact commit `a0e75ffbe4e038c74c8f1e3d589f2dae87b2b7bb` and currently consumes its core and POSIX provider
+not reimplemented here. Linux Defragger pins Infiltratr Common 1.6.0 at
+exact commit `7dc1195efd3f066e84c57520b44b2aa448847b90` and currently consumes its core and POSIX provider
 for strict integer parsing/range validation, bounded string operations, line-end
 trimming, bounded realpath handling, small sysfs scalar reads, prefix matching and
 saturating unit conversion. Defragger uses Common's checked and saturating uint64 arithmetic where the
