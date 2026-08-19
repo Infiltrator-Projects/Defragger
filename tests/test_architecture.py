@@ -201,12 +201,12 @@ def test_build_and_path_registry_install_native_workers() -> None:
 
 def test_infiltratr_common_integration() -> None:
     common = ROOT / "shared" / "infiltratr-common"
-    assert (common / "VERSION").read_text().strip() == "1.5.0"
+    assert (common / "VERSION").read_text().strip() == "1.6.0"
     gitmodules = (ROOT / ".gitmodules").read_text()
     assert "shared/infiltratr-common" in gitmodules
     assert "Infiltrator-Libraries.git" in gitmodules
     cmake = _cmake_source()
-    assert "a0e75ffbe4e038c74c8f1e3d589f2dae87b2b7bb" in cmake
+    assert "7dc1195efd3f066e84c57520b44b2aa448847b90" in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/core.c' in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/posix.c' in cmake
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
