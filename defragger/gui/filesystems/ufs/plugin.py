@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Linux Defragger
 # Author: Shannon Smith
-# Purpose: Thin GUI adapter for native C UFS1/UFS2 identification and summary mapping.
+# Purpose: Thin GUI adapter for native C UFS1/UFS2 read-only analysis.
 
 """Read-only UFS backend delegated entirely to the native C worker."""
 
@@ -27,7 +27,7 @@ INFO = BackendInfo(
     "Solaris/BSD UFS",
     ("ufs", "ufs1", "ufs2", "4.2bsd"),
     CAP_ANALYSE | CAP_MAP,
-    "summary",
+    "variant-dependent",
 )
 
 
@@ -79,8 +79,13 @@ class UfsBackend(FilesystemBackend):
             detail = completed.stderr.strip() or completed.stdout.strip()
             raise BackendError(detail or "native UFS mapper failed")
         payload = self._json_result(completed)
-        if payload.get("schema") != 1 or payload.get("map_accuracy") != "summary":
+        if payload.get("schema") != 1 or payload.get("map_accuracy") not in {
+            "summary",
+            "exact-allocation",
+        }:
             raise BackendError("native UFS mapper returned an invalid map contract")
+        if not isinstance(payload.get("cells"), list) or not isinstance(payload.get("details"), dict):
+            raise BackendError("native UFS mapper returned an incomplete map")
         return payload
 
 

@@ -22,8 +22,34 @@ typedef struct MinixSummary {
     bool little_endian;
 } MinixSummary;
 
+typedef struct MinixAnalysis {
+    MinixSummary summary;
+    uint64_t physical_bytes;
+    uint64_t filesystem_bytes;
+    uint64_t total_units;
+    uint64_t free_zones;
+    uint64_t used_zones;
+    uint64_t regular_files;
+    uint64_t directories;
+    uint64_t fragmented_files;
+    uint64_t fragmented_directories;
+} MinixAnalysis;
+
+typedef struct MinixMapCell {
+    uint64_t start;
+    uint64_t end;
+    uint64_t free_count;
+    uint64_t used_count;
+    uint64_t outside_count;
+    uint64_t fragmented_count;
+    uint64_t directory_count;
+} MinixMapCell;
+
 int minix_read_summary(const char *path, MinixSummary *summary,
                        char *error, size_t error_size);
+int minix_analyse(const char *path, MinixAnalysis *analysis,
+                  MinixMapCell *cells, uint64_t cell_count,
+                  char *error, size_t error_size);
 bool minix_probe(const char *path);
 const char *minix_variant_name(const MinixSummary *summary);
 const char *minix_byte_order_name(const MinixSummary *summary);
