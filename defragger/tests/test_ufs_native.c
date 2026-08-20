@@ -127,8 +127,8 @@ static void write_exact_superblock(int fd)
     put_le32(superblock + 52U, 1024U);
     put_le32(superblock + 56U, 8U);
     put_le32(superblock + 160U, 1024U);
-    put_le32(superblock + 188U, 64U);
-    put_le32(superblock + 192U, 128U);
+    put_le32(superblock + 184U, 64U);
+    put_le32(superblock + 188U, 128U);
     put_le64(superblock + 1016U, 5U);
     put_le64(superblock + 1032U, 0U);
     put_le64(superblock + 1080U, 240U);
