@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Linux Defragger
 # Author: Shannon Smith
-# Purpose: Thin GUI adapter for native C Minix identification and mapping.
+# Purpose: Thin GUI adapter for native C Minix exact read-only analysis.
 
 """Read-only Minix backend delegated entirely to the native C worker."""
 
@@ -27,7 +27,7 @@ INFO = BackendInfo(
     "Minix Filesystem",
     ("minix", "minix2", "minix3"),
     CAP_ANALYSE | CAP_MAP,
-    "summary",
+    "exact",
 )
 
 
@@ -79,8 +79,10 @@ class MinixBackend(FilesystemBackend):
             detail = completed.stderr.strip() or completed.stdout.strip()
             raise BackendError(detail or "native Minix mapper failed")
         payload = self._json_result(completed)
-        if payload.get("schema") != 1 or payload.get("map_accuracy") != "summary":
-            raise BackendError("native Minix mapper returned an invalid map contract")
+        if payload.get("schema") != 1 or payload.get("map_accuracy") != "exact":
+            raise BackendError("native Minix mapper returned an invalid exact-map contract")
+        if not isinstance(payload.get("cells"), list) or not isinstance(payload.get("details"), dict):
+            raise BackendError("native Minix mapper returned an incomplete exact map")
         return payload
 
 

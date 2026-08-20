@@ -8,8 +8,17 @@
 #include <string.h>
 #include <unistd.h>
 
-#define IMAGE_BYTES 4096U
+#define IMAGE_BYTES 65536U
 #define SUPER_OFFSET 1024U
+
+#define CHECK(expr)                                                           \
+    do {                                                                      \
+        if (!(expr)) {                                                        \
+            (void)fprintf(stderr, "CHECK failed at %s:%d: %s\n", __FILE__,   \
+                          __LINE__, #expr);                                   \
+            exit(EXIT_FAILURE);                                               \
+        }                                                                     \
+    } while (0)
 
 static void put16(uint8_t *p, uint16_t value, int little)
 {
@@ -113,6 +122,100 @@ static int expect_summary(const uint8_t image[IMAGE_BYTES],
     return 0;
 }
 
+static void set_little_bit(uint8_t *map, unsigned int bit)
+{
+    map[bit >> 3U] |= (uint8_t)(1U << (bit & 7U));
+}
+
+static void make_exact_v3(uint8_t image[IMAGE_BYTES])
+{
+    memset(image, 0, IMAGE_BYTES);
+    uint8_t *sb = image + SUPER_OFFSET;
+    put32(sb + 0U, 16U, 1);
+    put16(sb + 6U, 1U, 1);
+    put16(sb + 8U, 1U, 1);
+    put16(sb + 10U, 8U, 1);
+    put16(sb + 12U, 0U, 1);
+    put32(sb + 16U, 0x01000000U, 1);
+    put32(sb + 20U, 64U, 1);
+    put16(sb + 24U, 0x4d5aU, 1);
+    put16(sb + 28U, 1024U, 1);
+
+    uint8_t *imap = image + 2048U;
+    uint8_t *zmap = image + 3072U;
+    set_little_bit(imap, 0U);
+    set_little_bit(imap, 1U);
+    set_little_bit(imap, 2U);
+    set_little_bit(imap, 3U);
+    set_little_bit(zmap, 0U);
+
+    const unsigned int zones[] = {8U, 10U, 11U, 13U, 14U};
+    for (size_t index = 0U; index < sizeof(zones) / sizeof(zones[0]); ++index)
+        set_little_bit(zmap, zones[index] - 8U + 1U);
+
+    uint8_t *inodes = image + 4096U;
+    put16(inodes + 0U, 0040755U, 1);
+    put16(inodes + 2U, 1U, 1);
+    put32(inodes + 8U, 2048U, 1);
+    put32(inodes + 24U, 8U, 1);
+    put32(inodes + 28U, 10U, 1);
+
+    inodes += 64U;
+    put16(inodes + 0U, 0100644U, 1);
+    put16(inodes + 2U, 1U, 1);
+    put32(inodes + 8U, 2048U, 1);
+    put32(inodes + 24U, 11U, 1);
+    put32(inodes + 28U, 13U, 1);
+
+    inodes += 64U;
+    put16(inodes + 0U, 0100644U, 1);
+    put16(inodes + 2U, 1U, 1);
+    put32(inodes + 8U, 1024U, 1);
+    put32(inodes + 24U, 14U, 1);
+}
+
+static void test_exact_analysis(void)
+{
+    uint8_t image[IMAGE_BYTES];
+    make_exact_v3(image);
+
+    char path[64];
+    CHECK(write_image(image, path) == 0);
+    MinixAnalysis analysis;
+    MinixMapCell cells[8];
+    char error[160];
+    CHECK(minix_analyse(path, &analysis, cells, 8U, error, sizeof(error)) == 0);
+    CHECK(analysis.summary.version == 3U);
+    CHECK(analysis.free_zones == 51U);
+    CHECK(analysis.used_zones == 13U);
+    CHECK(analysis.regular_files == 2U);
+    CHECK(analysis.directories == 1U);
+    CHECK(analysis.fragmented_files == 1U);
+    CHECK(analysis.fragmented_directories == 1U);
+
+    uint64_t free_zones = 0U;
+    uint64_t used_zones = 0U;
+    uint64_t fragmented_zones = 0U;
+    uint64_t directory_zones = 0U;
+    for (size_t index = 0U; index < 8U; ++index) {
+        free_zones += cells[index].free_count;
+        used_zones += cells[index].used_count;
+        fragmented_zones += cells[index].fragmented_count;
+        directory_zones += cells[index].directory_count;
+    }
+    CHECK(free_zones == 51U);
+    CHECK(used_zones == 13U);
+    CHECK(fragmented_zones == 4U);
+    CHECK(directory_zones == 2U);
+
+    image[3072U] &= (uint8_t)~(1U << 4U); /* zone 11 becomes unallocated */
+    CHECK(unlink(path) == 0);
+    CHECK(write_image(image, path) == 0);
+    CHECK(minix_analyse(path, &analysis, NULL, 0U, error, sizeof(error)) != 0);
+    CHECK(strstr(error, "unallocated") != NULL);
+    CHECK(unlink(path) == 0);
+}
+
 int main(void)
 {
     uint8_t image[IMAGE_BYTES];
@@ -164,5 +267,7 @@ int main(void)
     }
     (void)unlink(path);
 
+    test_exact_analysis();
+    (void)puts("Minix summary and exact allocation/fragmentation tests passed");
     return 0;
 }

@@ -17,14 +17,16 @@ The current software version is defined by [`defragger/VERSION`](defragger/VERSI
 | ext2 / ext3 / ext4 | Exact | Native C staged writer | Native C, exact 10% reserve | Yes |
 | XFS v5 | Exact | Native C raw userspace writer | Native C, exact 10% reserve | Yes |
 | Amiga OFS / FFS | Exact | Native C | Native C, exact 10% reserve | Yes |
-| Amiga SFS / SFS2 | Not implemented | Not implemented | Not implemented | No |
+| Amiga SFS0 | Exact allocation, native C read-only | Not implemented | Not implemented | No |
+| Amiga SFS2 | Not implemented | Not implemented | Not implemented | No |
 | Amiga PFS3 | Not implemented | Not implemented | Not implemented | No |
 | HFS+ / HFSX | Exact | Native C, fail-closed preflight | Native C, exact 10% reserve | Yes |
 | Classic Macintosh HFS | Exact, native C read-only | Not implemented | Not implemented | No |
 | Btrfs | Exact read-only raw analysis | Not implemented | Not implemented | No |
 | APFS | Summary read-only analysis, native C | Not implemented | Not implemented | No |
-| Minix | Summary read-only analysis, native C | Not implemented | Not implemented | No |
-| UFS | Summary read-only analysis, native C | Not implemented | Not implemented | No |
+| Minix v1 / v2 / v3 | Exact read-only allocation and fragmentation analysis, native C | Not implemented | Not implemented | No |
+| UFS1 | Summary read-only analysis, native C | Not implemented | Not implemented | No |
+| UFS2 | Exact allocation read-only analysis, native C | Not implemented | Not implemented | No |
 | ZFS / OpenZFS member | Summary read-only analysis, native C | Not implemented | Not implemented | No |
 | Linux swap | Exact inactive / aggregate active read-only analysis, native C | Not applicable | Not applicable | No |
 
