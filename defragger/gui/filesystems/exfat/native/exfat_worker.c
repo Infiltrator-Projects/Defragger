@@ -638,6 +638,7 @@ int main(int argc, char **argv) {
         char *error = NULL; int status = analyse_json(device, &error); if (status != 0 && error != NULL) fprintf(stderr, "%s\n", error); free(error); return status == 0 ? 0 : 1;
     }
     if (strcmp(operation, "defrag") != 0 && strcmp(operation, "growth-defrag") != 0 && strcmp(operation, "recover") != 0) { usage(stderr); return 2; }
+    ld_runtime_require_write_audit_override();
     const char *confirm = NULL, *journal = NULL; bool write = false, live_updates = false; int growth_percent = 10;
     size_t ram_bytes = ld_default_ram_limit();
     size_t batch_clusters = 0U;

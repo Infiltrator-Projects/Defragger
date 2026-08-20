@@ -12,6 +12,7 @@ if(BUILD_TESTING AND TARGET linux-defragger-fat-worker)
         linux-defragger-fat-relayout
         PROPERTIES
             TIMEOUT 180
-            ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1"
+            ENVIRONMENT
+                "PYTHONDONTWRITEBYTECODE=1;LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES=I_ACCEPT_UNAUDITED_RAW_WRITES"
     )
 endif()

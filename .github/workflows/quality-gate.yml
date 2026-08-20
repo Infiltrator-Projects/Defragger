@@ -4,6 +4,7 @@ name: Project quality gate
 on:
   workflow_call:
   pull_request:
+  merge_group:
   push:
     branches:
       - main
@@ -13,9 +14,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: quality-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality-gate:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: defragger

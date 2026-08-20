@@ -948,6 +948,7 @@ int main(int argc, char **argv) {
     if (argc < 3 || (strcmp(argv[1], "defrag") != 0 && strcmp(argv[1], "growth-defrag") != 0 && strcmp(argv[1], "recover") != 0)) {
         usage(stderr); return 2;
     }
+    ld_runtime_require_write_audit_override();
     const char *operation = argv[1], *device = argv[2], *confirm = NULL, *journal = NULL;
     bool write = false, live_updates = false; int growth_percent = 10;
     uint64_t batch_blocks = 0;

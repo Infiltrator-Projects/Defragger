@@ -44,6 +44,7 @@ def main() -> None:
         "tests/test_gui_services.py",
         "tests/test_transactions.py",
         "tests/test_safety.py",
+        "tests/test_write_quarantine.py",
         "tests/test_xfs_writer.py",
         "verify_defragged_image.py",
         "verify_growth_defrag.py",
@@ -60,6 +61,9 @@ def main() -> None:
         "legacy root release marker must not be part of the release contract"
     )
     for required in (
+        "quarantine-notice:",
+        "if: ${{ false }}",
+        "AUDIT_STATUS.md",
         "quality-gate:",
         "uses: ./.github/workflows/quality-gate.yml",
         "needs: quality-gate",
