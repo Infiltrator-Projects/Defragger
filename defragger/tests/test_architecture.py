@@ -278,7 +278,7 @@ def test_write_quarantine_is_enforced_at_every_boundary() -> None:
         GUI / "filesystems" / "hfsplus" / "native" / "hfsplus_worker.c",
     )
     for source in writer_sources:
-        assert "ld_runtime_require_write_audit_override();" in source, (
+        assert "ld_runtime_require_write_audit_override();" in source.read_text(), (
             f"native writer bypasses audit quarantine: {source}"
         )
 
