@@ -3,6 +3,11 @@ name: Build and publish release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "defragger/VERSION"
 
 permissions:
   contents: write
