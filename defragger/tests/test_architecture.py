@@ -52,8 +52,8 @@ def test_top_level_cmake_owns_c_only_project_declaration() -> None:
 def test_plugin_discovery_and_native_worker_contracts() -> None:
     names = discover_plugin_names()
     registry = Registry()
-    assert len(names) == 16
-    assert len(registry.backends) == 16
+    assert len(names) == 17
+    assert len(registry.backends) == 17
     assert len(registry.ids) == len(registry.backends)
 
     operation_names = {item.value for item in Operation}
@@ -117,6 +117,7 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         "swap": {"swap_native.h", "swap_native.c", "swap_worker.c"},
         "ufs": {"ufs_native.h", "ufs_native.c", "ufs_worker.c"},
         "zfs": {"zfs_native.h", "zfs_native.c", "zfs_worker.c"},
+        "sfs": {"sfs_native.h", "sfs_native.c", "sfs_worker.c"},
         "hfs": {"analyser.c"},
     }
     for filesystem, native_files in required_native.items():
@@ -180,6 +181,7 @@ def test_build_and_path_registry_install_native_workers() -> None:
         ("linux-defragger-swap-worker", "swap"),
         ("linux-defragger-ufs-worker", "ufs"),
         ("linux-defragger-zfs-worker", "zfs"),
+        ("linux-defragger-sfs-worker", "sfs"),
     ):
         assert worker in cmake
         install_pattern = re.compile(

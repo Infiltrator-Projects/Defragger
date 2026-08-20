@@ -73,6 +73,11 @@ PROGRAMS: dict[str, ProgramPath] = {
         "/usr/lib/linux-defragger/filesystems/minix/linux-defragger-minix-worker",
         "../../build/linux-defragger-minix-worker"
     ),
+    "sfs-native": ProgramPath(
+        "sfs-native", "LINUX_DEFRAGGER_SFS_WORKER",
+        "/usr/lib/linux-defragger/filesystems/sfs/linux-defragger-sfs-worker",
+        "../../build/linux-defragger-sfs-worker"
+    ),
     "swap-native": ProgramPath(
         "swap-native", "LINUX_DEFRAGGER_SWAP_WORKER",
         "/usr/lib/linux-defragger/filesystems/swap/linux-defragger-swap-worker",

@@ -18,7 +18,7 @@ from backends.registry import Registry
 
 registry = Registry()
 manifest = registry.manifest()
-assert len(manifest) == 16
+assert len(manifest) == 17
 assert all(item["capabilities"] & 1 for item in manifest)
 assert all(item["capabilities"] & 2 for item in manifest)
 
