@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Linux Defragger
 
-> **Safety status:** write-capable operations are quarantined pending an independent filesystem-safety audit. Analyse/Map remains available. Version 1.8.0-138 is unreleased development and release publication is frozen. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
+> **Safety status:** Defragment, Growth Defrag, and Recover are quarantined pending an independent filesystem-safety audit. Analyse/Map remains available. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. Version 1.8.0-138 is unreleased development and release publication is frozen. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
 
 Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 

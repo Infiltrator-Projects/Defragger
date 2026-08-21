@@ -253,7 +253,7 @@ def test_core_remains_filesystem_neutral() -> None:
         assert f"{filesystem}_" not in combined
 
 
-def test_write_quarantine_is_enforced_at_every_boundary() -> None:
+def test_production_write_quarantine_is_enforced_at_every_boundary() -> None:
     runtime_header = (ROOT / "src" / "core" / "ld_runtime.h").read_text()
     runtime_source = (ROOT / "src" / "core" / "ld_runtime.c").read_text()
     engine = (GUI / "engine" / "cli.py").read_text()
@@ -268,7 +268,7 @@ def test_write_quarantine_is_enforced_at_every_boundary() -> None:
     assert "require_write_audit_override()" in engine
     assert "write_audit_override_enabled()" in planner
 
-    writer_sources = (
+    production_writer_sources = (
         GUI / "filesystems" / "fat" / "native" / "writer.c",
         GUI / "filesystems" / "ext4" / "native" / "ext_worker.c",
         GUI / "filesystems" / "ntfs" / "native" / "ntfs_worker.c",
@@ -277,9 +277,9 @@ def test_write_quarantine_is_enforced_at_every_boundary() -> None:
         GUI / "filesystems" / "affs" / "native" / "affs_worker.c",
         GUI / "filesystems" / "hfsplus" / "native" / "hfsplus_worker.c",
     )
-    for source in writer_sources:
+    for source in production_writer_sources:
         assert "ld_runtime_require_write_audit_override();" in source.read_text(), (
-            f"native writer bypasses audit quarantine: {source}"
+            f"production native writer bypasses audit quarantine: {source}"
         )
 
 
@@ -326,7 +326,7 @@ def main() -> None:
     test_build_and_path_registry_install_native_workers()
     test_infiltratr_common_integration()
     test_core_remains_filesystem_neutral()
-    test_write_quarantine_is_enforced_at_every_boundary()
+    test_production_write_quarantine_is_enforced_at_every_boundary()
     test_test_media_companion_is_all_c()
     test_version_and_registry_are_dynamic()
     print("current C-first single-plugin architecture tests passed")

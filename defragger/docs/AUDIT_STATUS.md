@@ -5,7 +5,9 @@ Status: **write operations quarantined**
 Effective date: 2026-08-21  
 Applies to: unreleased development version 1.8.0-138
 
-Analyse, Map, identification and other read-only operations remain available. Defragment, Growth Defrag and Recover are disabled by default in the GUI operation planner, the operation-engine boundary and every native write-capable worker.
+Analyse, Map, identification and other read-only operations remain available. Defragment, Growth Defrag and Recover are disabled by default in the GUI operation planner, the operation-engine boundary and all seven production filesystem mutation workers.
+
+Linux Defragger Test Media is outside this production-operation quarantine. It remains a deliberately destructive utility for manufacturing sacrificial filesystems. It retains independent system/boot-disk refusal, canonical-device matching and typed confirmation, but it must only be pointed at media whose complete erasure is acceptable.
 
 The quarantine exists because the repository's previous release process did not provide reliable exact-head validation or independent review for raw filesystem changes. It is a containment control, not a statement that every current engine is defective.
 

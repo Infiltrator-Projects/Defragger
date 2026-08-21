@@ -17,6 +17,9 @@ def main() -> None:
     local_run = (PROJECT_ROOT / "packaging" / "build-local-run.sh").read_text(encoding="utf-8")
     source_zip = (PROJECT_ROOT / "packaging" / "build-source-zip.sh").read_text(encoding="utf-8")
     cmake = (PROJECT_ROOT / "cmake" / "project.cmake").read_text(encoding="utf-8")
+    native_quarantine = (
+        PROJECT_ROOT / "tests" / "test_native_write_quarantine.cmake"
+    ).read_text(encoding="utf-8")
     design = (PROJECT_ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
     gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
 
@@ -33,6 +36,25 @@ def main() -> None:
     assert "-E '^linux-defragger-tests$'" not in gate, (
         "quality gate must not exclude the aggregate project test harness"
     )
+    for required in (
+        "linux-defragger-native-write-quarantine",
+        "test_native_write_quarantine.cmake",
+    ):
+        assert required in cmake, f"CMake lost executable quarantine coverage: {required}"
+    for required in (
+        "LD_FAT_WORKER",
+        "LD_EXT_WORKER",
+        "LD_NTFS_WORKER",
+        "LD_EXFAT_WORKER",
+        "LD_XFS_WORKER",
+        "LD_AFFS_WORKER",
+        "LD_HFSPLUS_WORKER",
+        "LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES",
+        "quarantined",
+    ):
+        assert required in native_quarantine, (
+            f"native executable quarantine test lost coverage: {required}"
+        )
 
     for required in (
         "tests/test_release_artifacts.sh",

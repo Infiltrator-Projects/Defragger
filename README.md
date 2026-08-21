@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Linux Defragger
 
-> **Safety status:** write-capable operations are quarantined pending an independent filesystem-safety audit. Analyse/Map remains available. Version 1.8.0-138 is unreleased development and release publication is frozen.
+> **Safety status:** Defragment, Growth Defrag, and Recover are quarantined pending an independent filesystem-safety audit. Analyse/Map remains available. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. Version 1.8.0-138 is unreleased development and release publication is frozen.
 
 The canonical project documentation and implementation are under [`defragger/`](defragger/):
 
