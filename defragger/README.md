@@ -1,9 +1,11 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Linux Defragger
 
+> **Safety status:** Defragment, Growth Defrag, and Recover are quarantined pending an independent filesystem-safety audit. Analyse/Map remains available. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. Version 1.8.0-138 is unreleased development and release publication is frozen. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
+
 Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 
-The current software version is defined by [`defragger/VERSION`](defragger/VERSION). Installable builds are published on the repository's Releases page.
+The current software version is defined by [`VERSION`](VERSION). Installable builds are published on the repository's Releases page.
 
 > **Important:** defragmentation changes filesystem allocation metadata and data placement. Use verified backups and test media before using write-capable operations on important filesystems.
 
@@ -42,7 +44,7 @@ Persistent write-capable engines use verified staging and recovery state before 
 
 The repository does not vendor third-party source trees. Shared first-party functionality is consumed through the pinned Infiltratr Common dependency, while required system libraries are supplied by the host distribution.
 
-For the detailed technical contract, see [`defragger/docs/DESIGN.md`](defragger/docs/DESIGN.md).
+For the detailed technical contract, see [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Operations
 
@@ -65,9 +67,9 @@ Formatting utilities are permitted inside Test Media solely to manufacture hosti
 ## Build and test
 
 ```bash
-cmake -S defragger -B defragger/build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
-cmake --build defragger/build -j"$(nproc)"
-ctest --test-dir defragger/build --output-on-failure
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
+cmake --build build -j"$(nproc)"
+ctest --test-dir build --output-on-failure
 ```
 
 The permanent GitHub quality gate performs a warnings-as-errors C build and runs the complete native, filesystem, GUI, architecture, safety and release regression suite.
@@ -86,7 +88,7 @@ Release publication is gated: the release workflow only publishes the requested 
 
 ## Repository layout
 
-The repository root is intentionally minimal. All implementation, native engines, CMake modules, tests, test-media code, packaging, design documentation and pinned shared dependency live under [`defragger/`](defragger/).
+This directory is the canonical project root. It contains the implementation, native engines, CMake modules, tests, test-media code, packaging, design documentation and pinned shared dependency.
 
 ## Licence
 

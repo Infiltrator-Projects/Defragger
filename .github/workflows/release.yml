@@ -8,7 +8,18 @@ permissions:
   contents: write
 
 jobs:
+  quarantine-notice:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Refuse publication while the safety audit is open
+        run: |
+          echo "Release publication is quarantined pending the independent filesystem-safety audit." >&2
+          echo "See defragger/docs/AUDIT_STATUS.md." >&2
+          exit 1
+
   quality-gate:
+    # Deliberate static freeze. Remove only in a reviewed audit-exit change.
+    if: ${{ false }}
     uses: ./.github/workflows/quality-gate.yml
 
   release:

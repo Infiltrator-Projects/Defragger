@@ -688,6 +688,7 @@ int main(int argc, char **argv) {
         usage(stderr);
         return 2;
     }
+    ld_runtime_require_write_audit_override();
     const char *confirm = NULL;
     const char *journal = NULL;
     unsigned growth_percent = 10U;

@@ -17,6 +17,20 @@ static int fail(const char *message) {
 }
 
 int main(void) {
+    if (unsetenv("LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES") != 0)
+        return fail("clear write-audit override");
+    if (ld_runtime_write_audit_override_enabled())
+        return fail("write-audit quarantine failed open");
+    if (setenv("LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES", "wrong", 1) != 0)
+        return fail("set incorrect write-audit override");
+    if (ld_runtime_write_audit_override_enabled())
+        return fail("write-audit quarantine accepted an incorrect token");
+    if (setenv("LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES",
+               "I_ACCEPT_UNAUDITED_RAW_WRITES", 1) != 0)
+        return fail("set write-audit override");
+    if (!ld_runtime_write_audit_override_enabled())
+        return fail("write-audit quarantine rejected the exact test override");
+
     uint8_t encoded[8] = {0};
     ld_write_le16(encoded, UINT16_C(0xa55a));
     ld_write_le32(encoded + 2, UINT32_C(0x89abcdef));

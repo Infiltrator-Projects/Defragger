@@ -909,6 +909,7 @@ int main(int argc, char **argv) {
     if (strcmp(operation, "defrag") != 0 && strcmp(operation, "growth-defrag") != 0 && strcmp(operation, "recover") != 0) {
         usage(stderr); return 2;
     }
+    ld_runtime_require_write_audit_override();
     const char *confirm = NULL, *journal = NULL; bool write = false, live_updates = false; int growth_percent = 10;
     for (int i = 3; i < argc; ++i) {
         if (strcmp(argv[i], "--write") == 0) write = true;
