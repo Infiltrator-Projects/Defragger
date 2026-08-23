@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Ensure release publication cannot bypass the permanent project quality gate."""
+"""Ensure release publication cannot bypass main-only CI or the safety quarantine."""
 
 from __future__ import annotations
 
@@ -25,7 +25,8 @@ def main() -> None:
 
     for required in (
         "workflow_call:",
-        "pull_request:",
+        "push:",
+        "- main",
         "LD_ENABLE_WERROR=ON",
         "git ls-files",
         "ctest --test-dir build --output-on-failure",
@@ -33,9 +34,13 @@ def main() -> None:
         "tests/test_release_gate.py",
     ):
         assert required in gate, f"quality gate lost required check: {required}"
+    assert "pull_request:" not in gate, "quality gate must not require PR branches"
+    assert "merge_group:" not in gate, "quality gate must not require merge branches"
+    assert '"c-first-*"' not in gate, "quality gate must run from main only"
     assert "-E '^linux-defragger-tests$'" not in gate, (
         "quality gate must not exclude the aggregate project test harness"
     )
+
     for required in (
         "linux-defragger-native-write-quarantine",
         "test_native_write_quarantine.cmake",
@@ -75,28 +80,36 @@ def main() -> None:
         assert required in harness, f"aggregate harness lost required regression: {required}"
 
     trigger_block = release.split("permissions:", 1)[0]
-    assert "workflow_dispatch:" in trigger_block
+    assert "workflow_run:" in trigger_block
+    assert 'workflows: ["Project quality gate"]' in trigger_block
+    assert "workflow_dispatch:" not in trigger_block, (
+        "release publication must not require manual approval"
+    )
     assert "\n  push:" not in trigger_block, (
-        "release publication must be an explicit manual dispatch, not a root marker push"
+        "release publication must wait for the completed main quality gate"
     )
     assert ".release-request" not in release, (
         "legacy root release marker must not be part of the release contract"
     )
     for required in (
+        "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.event == 'push'",
+        "github.event.workflow_run.head_branch == 'main'",
+        "startsWith(github.event.workflow_run.head_commit.message, 'Release ')",
         "quarantine-notice:",
         "if: ${{ false }}",
         "AUDIT_STATUS.md",
-        "quality-gate:",
-        "uses: ./.github/workflows/quality-gate.yml",
-        "needs: quality-gate",
-        'refs/heads/main',
+        "EXPECTED_SHA",
+        "origin/main",
         "packaging/build-source-zip.sh",
         'Defragger-${VERSION}.zip',
         "RELEASE_SHA256SUMS.txt",
+        "published releases are immutable",
         "gh release create",
     ):
         assert required in release, f"release workflow lost required contract: {required}"
-    assert release.index("needs: quality-gate") < release.index("gh release create")
+    assert "--clobber" not in release
+    assert "gh release edit" not in release
     assert "GitHub-generated source archive" not in release
 
     assert "__pycache__" in source_zip and ".pyc" in source_zip

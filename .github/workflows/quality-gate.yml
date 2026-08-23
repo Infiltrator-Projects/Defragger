@@ -3,19 +3,16 @@ name: Project quality gate
 
 on:
   workflow_call:
-  pull_request:
-  merge_group:
   push:
     branches:
       - main
-      - "c-first-*"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: quality-gate-${{ github.event.pull_request.number || github.ref }}
+  group: quality-gate-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,7 +23,7 @@ jobs:
       run:
         working-directory: defragger
     steps:
-      - name: Check out exact candidate
+      - name: Check out exact main candidate
         uses: actions/checkout@v4
         with:
           submodules: recursive
