@@ -1,13 +1,89 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Linux Defragger
 
-> **Safety status:** Defragment, Growth Defrag, and Recover are quarantined pending an independent filesystem-safety audit. Analyse/Map remains available. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. Version 1.8.0-138 is unreleased development and release publication is frozen.
+[![Project quality gate](https://github.com/The-First-Infiltrator/Defragger/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/The-First-Infiltrator/Defragger/actions/workflows/quality-gate.yml)
 
-The canonical project documentation and implementation are under [`defragger/`](defragger/):
+Linux Defragger is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-- [Project overview and build instructions](defragger/README.md)
-- [Current safety-audit status](defragger/docs/AUDIT_STATUS.md)
-- [Technical design](defragger/docs/DESIGN.md)
-- [Version](defragger/VERSION)
+**Current version:** 1.8.0-138, unreleased development  
+**Platform:** Linux  
+**Licence:** GPL-3.0-or-later
 
-The repository-level licence text is in [`LICENSE`](LICENSE).
+> **Safety status:** Defragment, Growth Defrag and Recover are quarantined pending an independent filesystem-safety audit. Analyse/Map remains available. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. Release publication remains frozen until the audit quarantine is explicitly cleared.
+
+## Capabilities
+
+The project contains native analysis support across FAT12/16/32, exFAT, NTFS, ext2/3/4, XFS v5, Amiga OFS/FFS/SFS variants, HFS/HFS+, Btrfs, APFS, Minix, UFS, ZFS/OpenZFS members and Linux swap, with write support implemented only where the filesystem-specific engine has an explicit contract.
+
+Production operations are:
+
+- **Analyse / Map** — read-only allocation and fragmentation analysis.
+- **Defragment** — canonical placement of supported movable allocations.
+- **Growth Defrag** — canonical placement with an exact 10% post-file reserve.
+- **Recover** — resume/repair of supported interrupted persistent transactions.
+
+Unsupported layouts fail closed rather than being guessed. Write-capable engines perform verified staging/recovery and a final read-only rescan before reporting success.
+
+## Architecture
+
+The canonical implementation lives under `defragger/`.
+
+Filesystem implementations are organised below `defragger/gui/filesystems/<format>/`, with native C under `native/` where exact low-level analysis or mutation is required. Filesystem-neutral device safety, raw I/O, Stop handling and shared runtime support live under `defragger/src/core/`.
+
+The operating system supplies raw block I/O, but filesystem parsing, placement planning, staging and metadata updates are owned by the project. Architecture and regression tests reject known external filesystem mutation/repair orchestration and duplicate implementation paths.
+
+Shared first-party primitives are consumed from the pinned Infiltratr Common dependency; filesystem-specific rules remain in Defragger.
+
+## Build and test
+
+From the canonical project directory:
+
+```bash
+cd defragger
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
+cmake --build build -j"$(nproc)"
+ctest --test-dir build --output-on-failure
+```
+
+The permanent GitHub quality gate performs a warnings-as-errors C build and runs the complete native, filesystem, GUI, architecture, safety and release regression suite.
+
+## Release assets
+
+When publication is not quarantined, a numbered release is designed to publish:
+
+| File | Purpose |
+| --- | --- |
+| `linux-defragger_<version>_amd64.deb` | Generic amd64 Debian package. |
+| `linux-defragger-<version>-local-folder.run` | Hardware-native local compile/install program. |
+| `Defragger-<version>.zip` | Tested source archive from the exact release commit. |
+| `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for published artifacts. |
+
+At present these artifacts are **not published** because the filesystem-safety quarantine is intentionally fail-closed.
+
+## Repository and release policy
+
+This repository uses `main` as its working branch. Development changes are made directly on `main`; the normal project workflow does not depend on PR, feature or release branches.
+
+Every push to `main` runs the project quality gate. Ordinary commits do not publish. A commit becomes release-eligible only when its subject begins `Release <version>` and the complete quality gate succeeds.
+
+The release workflow then checks the exact tested `main` commit. While the independent filesystem-safety audit remains open, publication deliberately stops at the quarantine gate. When that quarantine is eventually removed by an explicit audited code change, the publisher is designed to create a new immutable version tag and release only from the exact current tested `main` commit.
+
+Existing version tags and published releases are immutable and are never moved, replaced or edited in place. Manually runnable quality-gate helpers are diagnostic tools only and are not release-approval mechanisms.
+
+## Documentation
+
+- `defragger/README.md` — detailed project manual and filesystem-support matrix.
+- `defragger/docs/AUDIT_STATUS.md` — current safety-audit status.
+- `defragger/docs/DESIGN.md` — technical architecture and filesystem contracts.
+- `defragger/VERSION` — current source version.
+
+## Safety
+
+Defragmentation changes filesystem allocation metadata and data placement. Keep verified backups and use sacrificial/test media during development and validation. The **Linux Defragger Test Media** utility is intentionally destructive and must never be pointed at a system/boot disk or irreplaceable media.
+
+## Licence
+
+Copyright © 2026 Shannon Smith.
+
+Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under the GNU General Public License version 3 or, at your option, any later version (`GPL-3.0-or-later`). The canonical licence text is `LICENSE`.
