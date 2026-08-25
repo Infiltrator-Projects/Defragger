@@ -12,7 +12,6 @@ from pathlib import Path
 
 from backends import BackendError, Registry
 from core.devices import require_unmounted
-from core.write_policy import require_write_audit_override
 from version import VERSION
 
 from .dispatch import build_worker_command
@@ -42,7 +41,6 @@ def main(argv: list[str] | None = None) -> int:
         print("operation, device and --filesystem are required", file=sys.stderr)
         return 2
     try:
-        require_write_audit_override()
         require_unmounted(args.device)
         command = build_worker_command(
             registry,

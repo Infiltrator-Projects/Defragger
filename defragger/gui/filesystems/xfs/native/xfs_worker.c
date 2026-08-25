@@ -122,8 +122,8 @@ static int journal_save(const char *path, const XfsJournal *state, char **error)
     char *parent = ld_path_parent_directory(path);
     if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
     free(parent);
-    char *temporary = ld_path_append_suffix(path, ".tmp");
-    FILE *file = fopen(temporary, "w");
+    char *temporary = NULL;
+    FILE *file = ld_path_open_atomic_temp(path, &temporary);
     if (file == NULL) {
         xfs_set_error(error, "cannot create XFS transaction journal: %s", strerror(errno));
         free(temporary);
@@ -645,6 +645,13 @@ done:
 static int recover_transaction(const char *device, const char *journal_path, char **error) {
     XfsJournal state;
     if (journal_load(journal_path, &state, error) != 0) return 1;
+    if (!ld_path_is_derived_from(state.stage, journal_path, ".xfs-stage.img") ||
+        !ld_path_is_derived_from(state.plan, journal_path, ".xfs-plan.sqlite")) {
+        xfs_set_error(error,
+            "XFS recovery artifacts are not derived from the selected journal path");
+        journal_free(&state);
+        return 1;
+    }
     int result = 1;
     char *real = canonical_path(device, error), *identity = NULL;
     uint64_t size = 0;
@@ -714,7 +721,6 @@ int main(int argc, char **argv) {
     if (strcmp(operation, "defrag") != 0 && strcmp(operation, "growth-defrag") != 0 && strcmp(operation, "recover") != 0) {
         usage(stderr); return 2;
     }
-    ld_runtime_require_write_audit_override();
     const char *confirm = NULL, *journal = NULL;
     bool write = false, live_updates = false;
     int growth_percent = 10;

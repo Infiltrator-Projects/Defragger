@@ -269,7 +269,11 @@ int xfs_open_plan_db(const char *path, bool create, sqlite3 **out, char **error)
     *out = NULL;
     if (create) (void)unlink(path);
     sqlite3 *db = NULL;
-    if (sqlite3_open(path, &db) != SQLITE_OK) {
+    int flags = SQLITE_OPEN_READWRITE | (create ? SQLITE_OPEN_CREATE : 0);
+#ifdef SQLITE_OPEN_NOFOLLOW
+    flags |= SQLITE_OPEN_NOFOLLOW;
+#endif
+    if (sqlite3_open_v2(path, &db, flags, NULL) != SQLITE_OK) {
         if (db != NULL) xfs_set_error(error, "cannot open XFS plan database: %s", sqlite3_errmsg(db));
         else xfs_set_error(error, "cannot allocate XFS plan database");
         sqlite3_close(db);

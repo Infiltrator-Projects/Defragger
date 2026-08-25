@@ -16,7 +16,6 @@ trap 'rm -rf "$WORK"' EXIT
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH="$ROOT/gui"
 export LINUX_DEFRAGGER_BUILD_DIR="$BUILD_DIR"
-export LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES=I_ACCEPT_UNAUDITED_RAW_WRITES
 
 fail() {
     echo "TEST FAILURE: $*" >&2
@@ -47,7 +46,6 @@ python3 "$ROOT/tests/test_gui_services.py"
 python3 "$ROOT/tests/test_transactions.py"
 python3 "$ROOT/tests/test_range_helpers.py"
 python3 "$ROOT/tests/test_safety.py"
-python3 "$ROOT/tests/test_write_quarantine.py"
 python3 "$ROOT/tests/test_worker_entrypoints.py"
 LINUX_DEFRAGGER_BUILD_DIR="$BUILD_DIR" PYTHONPATH="$ROOT/gui:$ROOT/tests" python3 "$ROOT/tests/test_native_top3.py"
 LINUX_DEFRAGGER_BUILD_DIR="$BUILD_DIR" PYTHONPATH="$ROOT/gui:$ROOT/tests" python3 "$ROOT/tests/test_affs_native.py"

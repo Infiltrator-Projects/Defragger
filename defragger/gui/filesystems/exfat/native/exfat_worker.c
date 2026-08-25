@@ -98,8 +98,8 @@ static int journal_save(const char *path, const ExfatJournal *state, char **erro
     char *parent = ld_path_parent_directory(path);
     if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
     free(parent);
-    char *temporary = ld_path_append_suffix(path, ".tmp");
-    FILE *file = fopen(temporary, "w");
+    char *temporary = NULL;
+    FILE *file = ld_path_open_atomic_temp(path, &temporary);
     if (file == NULL) { exfat_set_error(error, "cannot create exFAT journal: %s", strerror(errno)); free(temporary); return -1; }
     fprintf(file, "%s\n", JOURNAL_MAGIC);
     fprintf(file, "device=%s\n", state->device);
@@ -603,6 +603,12 @@ static int recover_transaction(const char *device, const char *journal_path,
                                         &handled, error);
     if (handled) return modern;
     ExfatJournal state; if (journal_load(journal_path, &state, error) != 0) return 1;
+    if (!ld_path_is_derived_from(state.stage, journal_path, ".exfat-stage.img")) {
+        exfat_set_error(error,
+            "exFAT recovery stage is not derived from the selected journal path");
+        journal_free(&state);
+        return 1;
+    }
     int result = 1; char *real = canonical_path(device, error), *identity = NULL; uint64_t size = 0;
     if (real == NULL || target_identity(device, &identity, &size, error) != 0) goto done;
     if (strcmp(real, state.device) != 0 || strcmp(identity, state.target_identity) != 0 || size != state.physical_bytes) { exfat_set_error(error, "recovery journal belongs to a different exFAT target"); goto done; }
@@ -638,7 +644,6 @@ int main(int argc, char **argv) {
         char *error = NULL; int status = analyse_json(device, &error); if (status != 0 && error != NULL) fprintf(stderr, "%s\n", error); free(error); return status == 0 ? 0 : 1;
     }
     if (strcmp(operation, "defrag") != 0 && strcmp(operation, "growth-defrag") != 0 && strcmp(operation, "recover") != 0) { usage(stderr); return 2; }
-    ld_runtime_require_write_audit_override();
     const char *confirm = NULL, *journal = NULL; bool write = false, live_updates = false; int growth_percent = 10;
     size_t ram_bytes = ld_default_ram_limit();
     size_t batch_clusters = 0U;
@@ -659,6 +664,12 @@ int main(int argc, char **argv) {
     }
     if (strcmp(operation, "growth-defrag") == 0 && growth_percent != 10) {
         fprintf(stderr, "%s: Growth Defrag requires exactly 10%%\n", PROGRAM_NAME); return 2;
+    }
+    if (ld_path_is_mounted(device)) {
+        fprintf(stderr,
+            "%s: target is mounted; raw mutation and recovery require an unmounted filesystem\n",
+            PROGRAM_NAME);
+        return 1;
     }
     ld_stop_install_handlers(); char *error = NULL; int result = strcmp(operation, "recover") == 0
         ? recover_transaction(device, journal, ram_bytes, batch_clusters, live_updates, &error)

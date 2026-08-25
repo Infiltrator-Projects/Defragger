@@ -2,15 +2,12 @@
 #ifndef LD_RUNTIME_H
 #define LD_RUNTIME_H
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include "infiltratr/endian.h"
 
 void ld_runtime_set_program_name(const char *name);
-bool ld_runtime_write_audit_override_enabled(void);
-void ld_runtime_require_write_audit_override(void);
 
 _Noreturn void ld_die_errno(const char *what);
 _Noreturn void ld_die(const char *message);

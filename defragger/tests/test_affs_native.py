@@ -149,7 +149,8 @@ def make_defragged_source(work: Path, stem: str) -> Path:
 
 def test_recover_from_verified_bound_stage(work: Path) -> None:
     image = make_defragged_source(work, "recover")
-    stage = work / "recover.stage"
+    journal = work / "recover.journal"
+    stage = Path(str(journal) + ".affs-stage")
     shutil.copyfile(image, stage)
     expected = hashlib.sha256(stage.read_bytes()).digest()
     fields = transaction_fields(image)
@@ -166,7 +167,6 @@ def test_recover_from_verified_bound_stage(work: Path) -> None:
         stream.write(bytes([original[0] ^ 0xFF]))
         stream.flush()
         os.fsync(stream.fileno())
-    journal = work / "recover.journal"
     write_recovery_journal(journal, image, stage)
     completed = run("recover", image, "--write", "--confirm", image, "--journal", journal)
     assert '@@RESULT {"operation":"recover","status":"completed"' in completed.stdout
@@ -176,9 +176,9 @@ def test_recover_from_verified_bound_stage(work: Path) -> None:
 
 def test_corrupt_stage_is_never_committed(work: Path) -> None:
     image = make_defragged_source(work, "corrupt-source")
-    stage = work / "corrupt.stage"
-    shutil.copyfile(image, stage)
     journal = work / "corrupt.journal"
+    stage = Path(str(journal) + ".affs-stage")
+    shutil.copyfile(image, stage)
     write_recovery_journal(journal, image, stage)
     before = hashlib.sha256(image.read_bytes()).digest()
     fields = transaction_fields(stage)
@@ -210,9 +210,9 @@ def test_recovery_refuses_different_target(work: Path) -> None:
     other = fixture("affs-ffs-fragmented.adf.gz", work)
     other = other.rename(work / "identity-other.adf")
     mutate(other, "defrag")
-    stage = work / "identity.stage"
-    shutil.copyfile(original, stage)
     journal = work / "identity.journal"
+    stage = Path(str(journal) + ".affs-stage")
+    shutil.copyfile(original, stage)
     write_recovery_journal(journal, original, stage)
     before = hashlib.sha256(other.read_bytes()).digest()
     completed = run(
@@ -222,6 +222,23 @@ def test_recovery_refuses_different_target(work: Path) -> None:
     assert completed.returncode != 0
     assert "target path, identity or capacity changed" in completed.stderr
     assert hashlib.sha256(other.read_bytes()).digest() == before
+    assert journal.exists() and stage.exists()
+
+
+def test_recovery_refuses_unbound_stage_path(work: Path) -> None:
+    image = make_defragged_source(work, "unbound-source")
+    stage = work / "unbound-external.stage"
+    shutil.copyfile(image, stage)
+    journal = work / "unbound.journal"
+    write_recovery_journal(journal, image, stage)
+    before = hashlib.sha256(image.read_bytes()).digest()
+    completed = run(
+        "recover", image, "--write", "--confirm", image, "--journal", journal,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert "not derived from the selected journal path" in completed.stderr
+    assert hashlib.sha256(image.read_bytes()).digest() == before
     assert journal.exists() and stage.exists()
 
 
@@ -253,6 +270,7 @@ def main() -> None:
         test_recover_from_verified_bound_stage(work)
         test_corrupt_stage_is_never_committed(work)
         test_recovery_refuses_different_target(work)
+        test_recovery_refuses_unbound_stage_path(work)
         test_legacy_recovery_journal_fails_closed(work)
     print("native Amiga OFS/FFS Defrag/Growth Defrag/identity/integrity recovery tests passed")
 

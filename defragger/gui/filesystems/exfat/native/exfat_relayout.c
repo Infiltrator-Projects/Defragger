@@ -116,8 +116,8 @@ static int save_manifest(const char *journal_path,
     }
     free(parent);
 
-    char *temporary = ld_path_append_suffix(journal_path, ".tmp");
-    FILE *file = fopen(temporary, "w");
+    char *temporary = NULL;
+    FILE *file = ld_path_open_atomic_temp(journal_path, &temporary);
     if (file == NULL) {
         exfat_set_error(error, "cannot create exFAT relayout journal: %s",
                         strerror(errno));

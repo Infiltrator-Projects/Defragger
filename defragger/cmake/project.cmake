@@ -523,17 +523,6 @@ if(BUILD_TESTING)
     target_compile_options(linux-defragger-native-core-test PRIVATE ${LD_WARNING_FLAGS})
     target_link_libraries(linux-defragger-native-core-test PRIVATE linux-defragger-core)
     add_test(NAME linux-defragger-native-core COMMAND linux-defragger-native-core-test)
-    add_test(
-        NAME linux-defragger-native-write-quarantine
-        COMMAND "${CMAKE_COMMAND}"
-            "-DLD_FAT_WORKER=$<TARGET_FILE:linux-defragger-fat-worker>"
-            "-DLD_EXT_WORKER=$<TARGET_FILE:linux-defragger-ext-worker>"
-            "-DLD_NTFS_WORKER=$<TARGET_FILE:linux-defragger-ntfs-worker>"
-            "-DLD_EXFAT_WORKER=$<TARGET_FILE:linux-defragger-exfat-worker>"
-            "-DLD_XFS_WORKER=$<TARGET_FILE:linux-defragger-xfs-worker>"
-            "-DLD_AFFS_WORKER=$<TARGET_FILE:linux-defragger-affs-worker>"
-            "-DLD_HFSPLUS_WORKER=$<TARGET_FILE:linux-defragger-hfsplus-worker>"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_write_quarantine.cmake")
     add_executable(linux-defragger-fat-volume-test
         tests/test_fat_volume.c
         gui/filesystems/fat/native/fat_io.c

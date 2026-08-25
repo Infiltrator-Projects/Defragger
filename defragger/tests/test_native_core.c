@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "infiltratr/core.h"
 #include "ld_io.h"
+#include "ld_path.h"
 #include "ld_runtime.h"
 #include "ld_stop.h"
 
@@ -17,19 +18,46 @@ static int fail(const char *message) {
 }
 
 int main(void) {
-    if (unsetenv("LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES") != 0)
-        return fail("clear write-audit override");
-    if (ld_runtime_write_audit_override_enabled())
-        return fail("write-audit quarantine failed open");
-    if (setenv("LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES", "wrong", 1) != 0)
-        return fail("set incorrect write-audit override");
-    if (ld_runtime_write_audit_override_enabled())
-        return fail("write-audit quarantine accepted an incorrect token");
-    if (setenv("LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES",
-               "I_ACCEPT_UNAUDITED_RAW_WRITES", 1) != 0)
-        return fail("set write-audit override");
-    if (!ld_runtime_write_audit_override_enabled())
-        return fail("write-audit quarantine rejected the exact test override");
+    if (!ld_path_is_derived_from("/tmp/a.journal.ext-stage.img",
+                                 "/tmp/a.journal", ".ext-stage.img"))
+        return fail("derived recovery path");
+    if (ld_path_is_derived_from("/tmp/other.ext-stage.img",
+                                "/tmp/a.journal", ".ext-stage.img"))
+        return fail("unbound recovery path");
+
+    char victim_path[] = "/tmp/linux-defragger-core-victim.XXXXXX";
+    int victim_fd = mkstemp(victim_path);
+    if (victim_fd < 0) return fail("victim mkstemp");
+    const char victim_payload[] = "must-not-be-truncated";
+    if (write(victim_fd, victim_payload, sizeof(victim_payload)) !=
+        (ssize_t)sizeof(victim_payload))
+        return fail("victim write");
+    close(victim_fd);
+    char journal_path[] = "/tmp/linux-defragger-core-journal.XXXXXX";
+    int journal_fd = mkstemp(journal_path);
+    if (journal_fd < 0) return fail("journal mkstemp");
+    close(journal_fd);
+    unlink(journal_path);
+    char journal_link[128];
+    if (snprintf(journal_link, sizeof(journal_link), "%s.tmp", journal_path) < 0)
+        return fail("journal temp path");
+    if (symlink(victim_path, journal_link) != 0) return fail("journal temp symlink");
+    char *atomic_path = NULL;
+    FILE *atomic_file = ld_path_open_atomic_temp(journal_path, &atomic_path);
+    if (atomic_file == NULL || atomic_path == NULL) return fail("safe atomic journal temp");
+    if (fputs("new-journal\n", atomic_file) < 0 || fclose(atomic_file) != 0)
+        return fail("atomic journal write");
+    victim_fd = open(victim_path, O_RDONLY | O_CLOEXEC);
+    if (victim_fd < 0) return fail("victim reopen");
+    char victim_readback[sizeof(victim_payload)] = {0};
+    ssize_t victim_read = read(victim_fd, victim_readback, sizeof(victim_readback));
+    close(victim_fd);
+    if (victim_read != (ssize_t)sizeof(victim_payload) ||
+        memcmp(victim_readback, victim_payload, sizeof(victim_payload)) != 0)
+        return fail("atomic journal temp followed symlink");
+    unlink(atomic_path);
+    unlink(victim_path);
+    free(atomic_path);
 
     uint8_t encoded[8] = {0};
     ld_write_le16(encoded, UINT16_C(0xa55a));

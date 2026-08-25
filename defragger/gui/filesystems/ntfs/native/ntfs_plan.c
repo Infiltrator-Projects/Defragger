@@ -213,7 +213,11 @@ int ntfs_create_plan_db(const char *path, NtfsVolume *volume, NtfsLayout *layout
                         NtfsCatalogue *catalogue, const NtfsPlacementVec *placements,
                         bool growth, sqlite3 **db, char **error) {
     (void)unlink(path);
-    if (sqlite3_open_v2(path, db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK)
+    int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
+#ifdef SQLITE_OPEN_NOFOLLOW
+    flags |= SQLITE_OPEN_NOFOLLOW;
+#endif
+    if (sqlite3_open_v2(path, db, flags, NULL) != SQLITE_OK)
         return sql_error(*db, error, "opening NTFS plan database");
     if (sql_exec(*db,
                  "PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;"
@@ -327,7 +331,15 @@ fail:
     sqlite3_finalize(ins_meta);
     return -1;
 }
-int ntfs_open_plan_db(const char *path,sqlite3 **db,char **error){if(sqlite3_open_v2(path,db,SQLITE_OPEN_READWRITE,NULL)!=SQLITE_OK)return sql_error(*db,error,"opening NTFS plan database");return 0;}
+int ntfs_open_plan_db(const char *path, sqlite3 **db, char **error) {
+    int flags = SQLITE_OPEN_READWRITE;
+#ifdef SQLITE_OPEN_NOFOLLOW
+    flags |= SQLITE_OPEN_NOFOLLOW;
+#endif
+    if (sqlite3_open_v2(path, db, flags, NULL) != SQLITE_OK)
+        return sql_error(*db, error, "opening NTFS plan database");
+    return 0;
+}
 uint64_t ntfs_plan_move_count(sqlite3 *db,char **error){sqlite3_stmt *s=NULL;if(sqlite3_prepare_v2(db,"SELECT COUNT(*) FROM blocks WHERE old<>target",-1,&s,NULL)!=SQLITE_OK){sql_error(db,error,"reading NTFS move count");return UINT64_MAX;}uint64_t n=sqlite3_step(s)==SQLITE_ROW?(uint64_t)sqlite3_column_int64(s,0):UINT64_MAX;sqlite3_finalize(s);return n;}
 
 static int copy_cluster(int fd,uint32_t size,uint64_t source,uint64_t target,char **error){uint8_t *buffer=ld_xmalloc(size);ssize_t got=ld_pread_full(fd,buffer,size,source*size);if(got<0||(size_t)got!=size){free(buffer);ntfs_set_error(error,"short NTFS source-cluster read");return -1;}ssize_t wrote=ld_pwrite_full(fd,buffer,size,target*size);free(buffer);if(wrote<0||(size_t)wrote!=size){ntfs_set_error(error,"short NTFS target-cluster write");return -1;}return 0;}
@@ -749,4 +761,3 @@ done:
     ntfs_close_volume(&volume);
     return result;
 }
-

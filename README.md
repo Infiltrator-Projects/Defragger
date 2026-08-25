@@ -6,11 +6,13 @@
 
 Linux Defragger is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-139, unreleased development
-**Platform:** Linux  
+**Current version:** 1.8.0-139
+
+**Platform:** Linux
+
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** Defragment, Growth Defrag and Recover are quarantined pending an independent filesystem-safety audit. Analyse/Map remains available. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. Release publication remains frozen until the audit quarantine is explicitly cleared.
+> **Safety status:** The version 1.8.0-139 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
 
 ## Capabilities
 
@@ -50,7 +52,7 @@ The permanent GitHub quality gate performs a warnings-as-errors C build and runs
 
 ## Release assets
 
-When publication is not quarantined, a numbered release is designed to publish:
+A numbered release publishes:
 
 | File | Purpose |
 | --- | --- |
@@ -59,15 +61,13 @@ When publication is not quarantined, a numbered release is designed to publish:
 | `Defragger-<version>.zip` | Tested source archive from the exact release commit. |
 | `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for published artifacts. |
 
-At present these artifacts are **not published** because the filesystem-safety quarantine is intentionally fail-closed.
-
 ## Repository and release policy
 
 This repository uses `main` as its working branch. Development changes are made directly on `main`; the normal project workflow does not depend on PR, feature or release branches.
 
 Every push to `main` runs the project quality gate. Ordinary commits do not publish. A commit becomes release-eligible only when its subject begins `Release <version>` and the complete quality gate succeeds.
 
-The release workflow then checks the exact tested `main` commit. While the independent filesystem-safety audit remains open, publication deliberately stops at the quarantine gate. When that quarantine is eventually removed by an explicit audited code change, the publisher is designed to create a new immutable version tag and release only from the exact current tested `main` commit.
+The release workflow checks the exact tested `main` commit, confirms that `main` is permanently protected by the `quality-gate` status check, and creates a new immutable version tag and release only from that exact current tested commit.
 
 Existing version tags and published releases are immutable and are never moved, replaced or edited in place. Manually runnable quality-gate helpers are diagnostic tools only and are not release-approval mechanisms.
 

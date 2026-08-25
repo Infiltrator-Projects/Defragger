@@ -251,8 +251,12 @@ int ext_open_plan_db(const char *path, bool create, sqlite3 **db, char **error) 
         if (snprintf(wal, sizeof(wal), "%s-wal", path) > 0) (void)unlink(wal);
         if (snprintf(shm, sizeof(shm), "%s-shm", path) > 0) (void)unlink(shm);
     }
-    int code = sqlite3_open_v2(path, db,
-        create ? (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) : SQLITE_OPEN_READWRITE, NULL);
+    int flags = create ? (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
+                       : SQLITE_OPEN_READWRITE;
+#ifdef SQLITE_OPEN_NOFOLLOW
+    flags |= SQLITE_OPEN_NOFOLLOW;
+#endif
+    int code = sqlite3_open_v2(path, db, flags, NULL);
     if (code != SQLITE_OK) {
         ext_set_error(error, "opening EXT plan database %s: %s", path,
                       *db != NULL ? sqlite3_errmsg(*db) : "SQLite error");

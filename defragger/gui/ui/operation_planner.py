@@ -14,11 +14,6 @@ from backends.base import (
     CAP_RECOVER,
 )
 from core.operations import build_standard_arguments
-from core.write_policy import (
-    WRITE_QUARANTINE_MESSAGE,
-    write_audit_override_enabled,
-)
-
 from .backend_catalog import BackendCatalog
 from .devices import Volume
 
@@ -96,11 +91,6 @@ def prepare_mutation(
     if required is None:
         raise OperationValidationError(
             "Unknown operation", f"Linux Defragger does not recognise {operation!r}."
-        )
-    if not write_audit_override_enabled():
-        raise OperationValidationError(
-            "Write operations quarantined",
-            WRITE_QUARANTINE_MESSAGE,
         )
     if not (volume.capabilities & required):
         raise OperationValidationError(
@@ -192,7 +182,6 @@ def control_state(
     can_write = (
         enabled
         and mutation_backend
-        and write_audit_override_enabled()
         and not mounted
         and not bool(volume and volume.readonly)
     )
@@ -235,7 +224,6 @@ def operation_tooltips(
     filesystem = volume.normalized_fstype.upper()
     manifests = catalog.operations_for(volume.normalized_fstype)
     result: dict[str, str] = {}
-    quarantined = not write_audit_override_enabled()
     for operation, label in (
         ("defrag", "Defragment"),
         ("growth-defrag", "Growth Defrag"),
@@ -250,7 +238,5 @@ def operation_tooltips(
             continue
         description = str(manifest.get("description") or label)
         warning = str(manifest.get("warning") or "").strip()
-        if quarantined:
-            warning = WRITE_QUARANTINE_MESSAGE
         result[operation] = description + (f"\n\n{warning}" if warning else "")
     return result

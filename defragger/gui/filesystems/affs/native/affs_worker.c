@@ -116,8 +116,8 @@ static int journal_save(const char *path, const AffsJournal *state, char **error
         return -1;
     }
     free(parent);
-    char *temporary = ld_path_append_suffix(path, ".tmp");
-    FILE *file = fopen(temporary, "w");
+    char *temporary = NULL;
+    FILE *file = ld_path_open_atomic_temp(path, &temporary);
     if (file == NULL) {
         affs_set_error(error, "cannot create Amiga recovery journal: %s", strerror(errno));
         free(temporary);
@@ -536,6 +536,12 @@ static int handle_recovery(const char *device, const char *journal,
                            bool live, char **error) {
     AffsJournal state;
     if (journal_load(journal, &state, error) != 0) return 1;
+    if (!ld_path_is_derived_from(state.stage, journal, ".affs-stage")) {
+        affs_set_error(error,
+            "Amiga recovery stage is not derived from the selected journal path");
+        journal_free(&state);
+        return 1;
+    }
     if (!valid_operation(state.operation) || !valid_phase(state.phase)) {
         affs_set_error(error, "Amiga recovery journal contains an unsupported operation or phase");
         journal_free(&state);
@@ -645,7 +651,6 @@ int main(int argc, char **argv) {
         usage(stderr);
         return 2;
     }
-    ld_runtime_require_write_audit_override();
     const char *confirm = NULL;
     const char *journal = NULL;
     unsigned growth_percent = 10U;
@@ -678,6 +683,11 @@ int main(int argc, char **argv) {
     if (growth && growth_percent != 10U) {
         fprintf(stderr, "Amiga Growth Defrag requires exactly 10 percent reserve\n");
         return 2;
+    }
+    if (ld_path_is_mounted(device)) {
+        fprintf(stderr,
+            "Amiga target is mounted; raw mutation and recovery require an unmounted filesystem\n");
+        return 1;
     }
 
     ld_stop_clear();

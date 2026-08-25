@@ -79,10 +79,8 @@ static JournalStage parse_stage_value(const char *text) {
 }
 
 void relocation_journal_write(const char *path, const RelocationJournal *j) {
-    size_t tmpn = strlen(path) + 5;
-    char *tmp = ld_xmalloc(tmpn);
-    snprintf(tmp, tmpn, "%s.tmp", path);
-    FILE *fp = fopen(tmp, "w");
+    char *tmp = NULL;
+    FILE *fp = ld_path_open_atomic_temp(path, &tmp);
     if (fp == NULL) ld_die_errno("create relocation journal");
     fprintf(fp, "%s\n", RELOCATION_JOURNAL_MAGIC);
     fprintf(fp, "device=%s\n", j->device_path);
@@ -221,4 +219,3 @@ void journal_remove(const char *path) {
 bool path_exists(const char *path) {
     return access(path, F_OK) == 0;
 }
-

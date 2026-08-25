@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import tempfile
 import threading
@@ -12,10 +11,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GUI = ROOT / "gui"
-os.environ.setdefault(
-    "LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES",
-    "I_ACCEPT_UNAUDITED_RAW_WRITES",
-)
 if str(GUI) not in sys.path:
     sys.path.insert(0, str(GUI))
 

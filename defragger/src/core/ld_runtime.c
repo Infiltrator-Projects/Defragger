@@ -7,28 +7,10 @@
 #include <string.h>
 
 static const char *g_program_name = "linux-defragger";
-static const char *const g_write_audit_override_env =
-    "LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES";
-static const char *const g_write_audit_override_token =
-    "I_ACCEPT_UNAUDITED_RAW_WRITES";
 
 void ld_runtime_set_program_name(const char *name) {
     if (name != NULL && *name != '\0') g_program_name = name;
 }
-
-bool ld_runtime_write_audit_override_enabled(void) {
-    const char *value = getenv(g_write_audit_override_env);
-    return value != NULL && strcmp(value, g_write_audit_override_token) == 0;
-}
-
-void ld_runtime_require_write_audit_override(void) {
-    if (ld_runtime_write_audit_override_enabled()) return;
-    ld_die(
-        "write-capable operations are quarantined pending an independent "
-        "filesystem-safety audit; Analyse/Map remains available. See "
-        "docs/AUDIT_STATUS.md before using disposable test media");
-}
-
 
 _Noreturn void ld_die_errno(const char *what) {
     fprintf(stderr, "%s: %s: %s\n", g_program_name, what, strerror(errno));

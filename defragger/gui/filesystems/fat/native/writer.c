@@ -2047,7 +2047,6 @@ int main(int argc, char **argv) {
 
     bool mutating = strcmp(command, "defrag") == 0 ||
                     strcmp(command, "growth-defrag") == 0 || strcmp(command, "recover") == 0;
-    if (mutating) ld_runtime_require_write_audit_override();
     if (mutating && (!write_flag || confirm == NULL || strcmp(confirm, device_path) != 0)) {
         ld_die("writes require both --write and --confirm with the exact DEVICE path");
     }

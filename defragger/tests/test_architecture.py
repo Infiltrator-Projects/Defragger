@@ -277,34 +277,80 @@ def test_core_remains_filesystem_neutral() -> None:
         assert f"{filesystem}_" not in combined
 
 
-def test_production_write_quarantine_is_enforced_at_every_boundary() -> None:
+def test_production_write_safety_is_enforced_at_every_boundary() -> None:
     runtime_header = (ROOT / "src" / "core" / "ld_runtime.h").read_text()
     runtime_source = (ROOT / "src" / "core" / "ld_runtime.c").read_text()
     engine = (GUI / "engine" / "cli.py").read_text()
     planner = (GUI / "ui" / "operation_planner.py").read_text()
-    for required in (
-        "ld_runtime_write_audit_override_enabled",
-        "ld_runtime_require_write_audit_override",
-    ):
-        assert required in runtime_header
-        assert required in runtime_source
-    assert "I_ACCEPT_UNAUDITED_RAW_WRITES" in runtime_source
-    assert "require_write_audit_override()" in engine
-    assert "write_audit_override_enabled()" in planner
+    combined_policy = "\n".join((runtime_header, runtime_source, engine, planner))
+    assert "UNAUDITED_RAW_WRITES" not in combined_policy
+    assert "require_unmounted(args.device)" in engine
+    assert "if volume.mounted:" in planner
 
-    production_writer_sources = (
-        GUI / "filesystems" / "fat" / "native" / "writer.c",
-        GUI / "filesystems" / "ext4" / "native" / "ext_worker.c",
-        GUI / "filesystems" / "ntfs" / "native" / "ntfs_worker.c",
-        GUI / "filesystems" / "exfat" / "native" / "exfat_worker.c",
-        GUI / "filesystems" / "xfs" / "native" / "xfs_worker.c",
-        GUI / "filesystems" / "affs" / "native" / "affs_worker.c",
-        GUI / "filesystems" / "hfsplus" / "native" / "hfsplus_worker.c",
-    )
-    for source in production_writer_sources:
-        assert "ld_runtime_require_write_audit_override();" in source.read_text(), (
-            f"production native writer bypasses audit quarantine: {source}"
+    native = GUI / "filesystems"
+    workers = {
+        "fat": native / "fat" / "native" / "writer.c",
+        "ext": native / "ext4" / "native" / "ext_worker.c",
+        "ntfs": native / "ntfs" / "native" / "ntfs_worker.c",
+        "exfat": native / "exfat" / "native" / "exfat_worker.c",
+        "xfs": native / "xfs" / "native" / "xfs_worker.c",
+        "affs": native / "affs" / "native" / "affs_worker.c",
+        "hfsplus": native / "hfsplus" / "native" / "hfsplus_worker.c",
+    }
+    sources = {name: path.read_text() for name, path in workers.items()}
+    for name, source in sources.items():
+        assert "--write" in source and "--confirm" in source, (
+            f"{name} lost explicit mutation confirmation"
         )
+        assert "ld_runtime_require_write_audit_override" not in source
+
+    assert "ld_device_open(device_path, mutating)" in sources["fat"]
+    assert sources["ext"].count("ld_path_is_mounted(device)") >= 2
+    assert sources["ntfs"].count("ld_path_is_mounted(device)") >= 2
+    assert "ld_path_is_mounted(device)" in sources["exfat"]
+    assert "ld_device_number_is_mounted(status.st_rdev)" in sources["xfs"]
+    assert "ld_path_is_mounted(device)" in sources["affs"]
+    assert "ld_path_is_mounted(device)" in sources["hfsplus"]
+
+    recovery_bindings = {
+        "ext": (".ext-stage.img", ".ext-plan.sqlite"),
+        "ntfs": (".ntfs-stage.img", ".ntfs-plan.sqlite"),
+        "exfat": (".exfat-stage.img",),
+        "xfs": (".xfs-stage.img", ".xfs-plan.sqlite"),
+        "affs": (".affs-stage",),
+        "hfsplus": (".hfsplus-stage",),
+    }
+    for name, suffixes in recovery_bindings.items():
+        assert "ld_path_is_derived_from" in sources[name]
+        for suffix in suffixes:
+            assert suffix in sources[name], f"{name} lost {suffix} recovery binding"
+
+    journal_sources = {
+        "fat": native / "fat" / "native" / "fat_journal.c",
+        "ext": workers["ext"],
+        "ntfs": workers["ntfs"],
+        "exfat": workers["exfat"],
+        "xfs": workers["xfs"],
+        "affs": workers["affs"],
+        "hfsplus": workers["hfsplus"],
+    }
+    for name, path in journal_sources.items():
+        assert "ld_path_open_atomic_temp" in path.read_text(), (
+            f"{name} journal temp creation lost exclusive no-follow handling"
+        )
+    assert "ld_path_open_atomic_temp" in (
+        native / "exfat" / "native" / "exfat_relayout.c"
+    ).read_text()
+
+    for path in (
+        native / "ext4" / "native" / "ext_catalog.c",
+        native / "ntfs" / "native" / "ntfs_plan.c",
+        native / "xfs" / "native" / "xfs_plan.c",
+    ):
+        assert "SQLITE_OPEN_NOFOLLOW" in path.read_text(), (
+            f"{path.relative_to(ROOT)} lost SQLite symlink refusal"
+        )
+    assert "an unfinished NTFS journal exists; run Recover first" in sources["ntfs"]
 
 
 def test_version_and_registry_are_dynamic() -> None:
@@ -350,7 +396,7 @@ def main() -> None:
     test_build_and_path_registry_install_native_workers()
     test_infiltratr_common_integration()
     test_core_remains_filesystem_neutral()
-    test_production_write_quarantine_is_enforced_at_every_boundary()
+    test_production_write_safety_is_enforced_at_every_boundary()
     test_test_media_companion_is_all_c()
     test_version_and_registry_are_dynamic()
     print("current C-first single-plugin architecture tests passed")

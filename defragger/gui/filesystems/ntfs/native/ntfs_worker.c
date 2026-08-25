@@ -103,8 +103,8 @@ static int journal_save(const char *path, const NtfsJournal *state, char **error
     char *parent = ld_path_parent_directory(path);
     if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
     free(parent);
-    char *temporary = ld_path_append_suffix(path, ".tmp");
-    FILE *file = fopen(temporary, "w");
+    char *temporary = NULL;
+    FILE *file = ld_path_open_atomic_temp(path, &temporary);
     if (file == NULL) {
         ntfs_set_error(error, "cannot create NTFS journal: %s", strerror(errno));
         free(temporary); return -1;
@@ -678,6 +678,11 @@ done:
 
 static int build_and_commit(const char *device, const char *operation, const char *journal_path,
                             bool live_updates, char **error) {
+    if (ld_path_is_mounted(device)) {
+        ntfs_set_error(error,
+            "NTFS target is mounted; raw mutation requires an unmounted filesystem");
+        return 1;
+    }
     int result = 1; char *real = NULL, *identity = NULL; uint64_t physical_bytes = 0;
     NtfsVolume source; NtfsLayout source_layout; NtfsCatalogue source_catalogue;
     memset(&source, 0, sizeof(source)); source.fd = -1; memset(&source_layout, 0, sizeof(source_layout)); memset(&source_catalogue, 0, sizeof(source_catalogue));
@@ -783,8 +788,20 @@ done:
 }
 
 static int recover_transaction(const char *device, const char *journal_path, char **error) {
+    if (ld_path_is_mounted(device)) {
+        ntfs_set_error(error,
+            "NTFS target is mounted; raw recovery requires an unmounted filesystem");
+        return 1;
+    }
     NtfsJournal state;
     if (journal_load(journal_path, &state, error) != 0) return 1;
+    if (!ld_path_is_derived_from(state.stage, journal_path, ".ntfs-stage.img") ||
+        !ld_path_is_derived_from(state.plan, journal_path, ".ntfs-plan.sqlite")) {
+        ntfs_set_error(error,
+            "NTFS recovery artifacts are not derived from the selected journal path");
+        journal_free(&state);
+        return 1;
+    }
     int result = 1; char *real = canonical_path(device, error), *identity = NULL; uint64_t size = 0;
     if (real == NULL || target_identity(device, &identity, &size, error) != 0) goto done;
     if (strcmp(real, state.device) != 0 || strcmp(identity, state.target_identity) != 0 || size != state.physical_bytes) {
@@ -909,7 +926,6 @@ int main(int argc, char **argv) {
     if (strcmp(operation, "defrag") != 0 && strcmp(operation, "growth-defrag") != 0 && strcmp(operation, "recover") != 0) {
         usage(stderr); return 2;
     }
-    ld_runtime_require_write_audit_override();
     const char *confirm = NULL, *journal = NULL; bool write = false, live_updates = false; int growth_percent = 10;
     for (int i = 3; i < argc; ++i) {
         if (strcmp(argv[i], "--write") == 0) write = true;
@@ -930,7 +946,10 @@ int main(int argc, char **argv) {
     ld_stop_install_handlers();
     char *error = NULL; int result;
     if (strcmp(operation, "recover") == 0) result = recover_transaction(device, journal, &error);
-    else result = build_and_commit(device, operation, journal, live_updates, &error);
+    else if (access(journal, F_OK) == 0) {
+        ntfs_set_error(&error, "an unfinished NTFS journal exists; run Recover first");
+        result = 1;
+    } else result = build_and_commit(device, operation, journal, live_updates, &error);
     if (result != 0 && result != 130) {
         const char *message = error == NULL ? "native NTFS operation failed" : error;
         fprintf(stderr, "%s\n", message); emit_result(operation, "failed", message);

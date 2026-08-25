@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Ensure release publication cannot bypass main-only CI or the safety quarantine."""
+"""Ensure release publication cannot bypass main-only CI or the completed audit."""
 
 from __future__ import annotations
 
@@ -17,10 +17,8 @@ def main() -> None:
     local_run = (PROJECT_ROOT / "packaging" / "build-local-run.sh").read_text(encoding="utf-8")
     source_zip = (PROJECT_ROOT / "packaging" / "build-source-zip.sh").read_text(encoding="utf-8")
     cmake = (PROJECT_ROOT / "cmake" / "project.cmake").read_text(encoding="utf-8")
-    native_quarantine = (
-        PROJECT_ROOT / "tests" / "test_native_write_quarantine.cmake"
-    ).read_text(encoding="utf-8")
     design = (PROJECT_ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
+    audit = (PROJECT_ROOT / "docs" / "AUDIT_STATUS.md").read_text(encoding="utf-8")
     gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
 
     for required in (
@@ -42,26 +40,6 @@ def main() -> None:
     )
 
     for required in (
-        "linux-defragger-native-write-quarantine",
-        "test_native_write_quarantine.cmake",
-    ):
-        assert required in cmake, f"CMake lost executable quarantine coverage: {required}"
-    for required in (
-        "LD_FAT_WORKER",
-        "LD_EXT_WORKER",
-        "LD_NTFS_WORKER",
-        "LD_EXFAT_WORKER",
-        "LD_XFS_WORKER",
-        "LD_AFFS_WORKER",
-        "LD_HFSPLUS_WORKER",
-        "LINUX_DEFRAGGER_ENABLE_UNAUDITED_WRITES",
-        "quarantined",
-    ):
-        assert required in native_quarantine, (
-            f"native executable quarantine test lost coverage: {required}"
-        )
-
-    for required in (
         "tests/test_release_artifacts.sh",
         "tests/run_typecheck.sh",
         "tests/test_spdx_licensing.py",
@@ -71,7 +49,9 @@ def main() -> None:
         "tests/test_gui_services.py",
         "tests/test_transactions.py",
         "tests/test_safety.py",
-        "tests/test_write_quarantine.py",
+        "tests/test_native_top3.py",
+        "tests/test_affs_native.py",
+        "tests/test_hfsplus_native.py",
         "tests/test_xfs_writer.py",
         "verify_defragged_image.py",
         "verify_growth_defrag.py",
@@ -96,18 +76,22 @@ def main() -> None:
         "github.event.workflow_run.event == 'push'",
         "github.event.workflow_run.head_branch == 'main'",
         "startsWith(github.event.workflow_run.head_commit.message, 'Release ')",
-        "quarantine-notice:",
-        "if: ${{ false }}",
-        "AUDIT_STATUS.md",
+        "Verify permanent main quality-gate protection",
+        '"repos/${GITHUB_REPOSITORY}/rules/branches/main"',
+        '"required_status_checks"',
+        '"quality-gate"',
         "EXPECTED_SHA",
         "origin/main",
         "packaging/build-source-zip.sh",
         'Defragger-${VERSION}.zip',
         "RELEASE_SHA256SUMS.txt",
+        "Status: **complete**",
         "published releases are immutable",
         "gh release create",
     ):
         assert required in release, f"release workflow lost required contract: {required}"
+    assert "quarantine-notice:" not in release
+    assert "if: ${{ false }}" not in release
     assert "--clobber" not in release
     assert "gh release edit" not in release
     assert "GitHub-generated source archive" not in release
@@ -137,6 +121,21 @@ def main() -> None:
         assert f"Infiltratr Common {stale_version}" not in design
     assert "Infiltratr Common 1.15.0" in design
     assert "d623410f55a071020539fae3f47682896473bd6f" in design
+
+    for required in (
+        "Status: **complete**",
+        "FAT12/FAT16/FAT32",
+        "EXT2/EXT3/EXT4",
+        "NTFS",
+        "exFAT",
+        "XFS",
+        "Amiga OFS/FFS",
+        "HFS+/HFSX",
+        "Project quality gate",
+        "protected main",
+        "explicit release decision",
+    ):
+        assert required in audit, f"completed safety audit lost evidence: {required}"
 
     print("release quality-gate contract passed")
 

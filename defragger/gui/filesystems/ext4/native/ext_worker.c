@@ -107,8 +107,8 @@ static int journal_save(const char *path, const ExtJournal *state, char **error)
     char *parent = ld_path_parent_directory(path);
     if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
     free(parent);
-    char *temporary = ld_path_append_suffix(path, ".tmp");
-    FILE *file = fopen(temporary, "w");
+    char *temporary = NULL;
+    FILE *file = ld_path_open_atomic_temp(path, &temporary);
     if (file == NULL) { ext_set_error(error, "cannot create EXT journal: %s", strerror(errno)); free(temporary); return -1; }
     fprintf(file, "%s\n", JOURNAL_MAGIC);
     fprintf(file, "device=%s\n", state->device);
@@ -832,6 +832,13 @@ static int recover(const char *device, const char *journal_path, char **error) {
     if (ld_path_is_mounted(device)) { ext_set_error(error, "refusing EXT recovery while the block device is mounted"); return 1; }
     ExtJournal state;
     if (journal_load(journal_path, &state, error) != 0) return 1;
+    if (!ld_path_is_derived_from(state.stage, journal_path, ".ext-stage.img") ||
+        !ld_path_is_derived_from(state.plan, journal_path, ".ext-plan.sqlite")) {
+        ext_set_error(error,
+            "EXT recovery artifacts are not derived from the selected journal path");
+        journal_free(&state);
+        return 1;
+    }
     char *real = canonical_path(device, error); if (real == NULL) { journal_free(&state); return 1; }
     char *identity = NULL; uint64_t size = 0;
     if (target_identity(device, &identity, &size, error) != 0) { free(real); journal_free(&state); return 1; }
@@ -948,7 +955,6 @@ int main(int argc, char **argv) {
     if (argc < 3 || (strcmp(argv[1], "defrag") != 0 && strcmp(argv[1], "growth-defrag") != 0 && strcmp(argv[1], "recover") != 0)) {
         usage(stderr); return 2;
     }
-    ld_runtime_require_write_audit_override();
     const char *operation = argv[1], *device = argv[2], *confirm = NULL, *journal = NULL;
     bool write = false, live_updates = false; int growth_percent = 10;
     uint64_t batch_blocks = 0;

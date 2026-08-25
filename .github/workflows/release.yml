@@ -14,23 +14,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  quarantine-notice:
+  release:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       startsWith(github.event.workflow_run.head_commit.message, 'Release ')
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Refuse publication while the safety audit is open
-        run: |
-          echo "Release publication is quarantined pending the independent filesystem-safety audit." >&2
-          echo "See defragger/docs/AUDIT_STATUS.md." >&2
-          exit 1
-
-  release:
-    # Deliberate static freeze. Remove only in a reviewed audit-exit change.
-    if: ${{ false }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -58,6 +47,7 @@ jobs:
           test "$main_commit" = "$EXPECTED_SHA"
           VERSION=$(tr -d '\r\n' < VERSION)
           test -n "$VERSION"
+          grep -Fq 'Status: **complete**' docs/AUDIT_STATUS.md
           subject=$(git log -1 --format=%s "$head_commit")
           if [[ "$subject" != "Release ${VERSION}" && "$subject" != "Release ${VERSION}:"* ]]; then
             echo "Release commit subject must begin with Release ${VERSION}." >&2
@@ -70,6 +60,22 @@ jobs:
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists; published releases are immutable." >&2
+            exit 1
+          fi
+
+      - name: Verify permanent main quality-gate protection
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/${GITHUB_REPOSITORY}/rules/branches/main" | jq -e '
+            any(.[];
+              .type == "required_status_checks" and
+              any(.parameters.required_status_checks[]?;
+                .context == "quality-gate"))
+          ' >/dev/null; then
+            echo "main is not protected by the permanent quality-gate status check." >&2
             exit 1
           fi
 

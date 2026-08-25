@@ -217,7 +217,8 @@ def test_recover_from_verified_bound_stage(work: Path) -> None:
     image = work / "recover.img"
     make(image)
     mutate(image, "defrag", live=False)
-    stage = work / "recover.stage"
+    journal = work / "recover.journal"
+    stage = Path(str(journal) + ".hfsplus-stage")
     shutil.copyfile(image, stage)
     total, extents = fixture.parse_file_extents(image)[16]
     assert total and len(extents) == 1
@@ -227,7 +228,6 @@ def test_recover_from_verified_bound_stage(work: Path) -> None:
         stream.write(b"X" * fixture.BS)
         stream.flush()
         os.fsync(stream.fileno())
-    journal = work / "recover.journal"
     write_recovery_journal(journal, image, stage)
     completed = run("recover", image, "--write", "--confirm", image, "--journal", journal)
     assert '@@RESULT {"operation":"recover","status":"completed"' in completed.stdout
@@ -239,9 +239,9 @@ def test_corrupt_stage_is_never_committed(work: Path) -> None:
     image = work / "stage-source.img"
     make(image)
     mutate(image, "defrag", live=False)
-    stage = work / "corrupt.stage"
-    shutil.copyfile(image, stage)
     journal = work / "corrupt.journal"
+    stage = Path(str(journal) + ".hfsplus-stage")
+    shutil.copyfile(image, stage)
     write_recovery_journal(journal, image, stage)
     before = hashlib.sha256(image.read_bytes()).digest()
     _, extents = fixture.parse_file_extents(stage)[16]
@@ -264,9 +264,9 @@ def test_recovery_refuses_different_target(work: Path) -> None:
     make(original)
     make(other)
     mutate(original, "defrag", live=False)
-    stage = work / "identity.stage"
-    shutil.copyfile(original, stage)
     journal = work / "identity.journal"
+    stage = Path(str(journal) + ".hfsplus-stage")
+    shutil.copyfile(original, stage)
     write_recovery_journal(journal, original, stage)
     before = hashlib.sha256(other.read_bytes()).digest()
     completed = run(
@@ -276,6 +276,25 @@ def test_recovery_refuses_different_target(work: Path) -> None:
     assert completed.returncode != 0
     assert "target path, identity or capacity changed" in completed.stderr
     assert hashlib.sha256(other.read_bytes()).digest() == before
+    assert journal.exists() and stage.exists()
+
+
+def test_recovery_refuses_unbound_stage_path(work: Path) -> None:
+    image = work / "unbound-source.img"
+    make(image)
+    mutate(image, "defrag", live=False)
+    stage = work / "unbound-external.stage"
+    shutil.copyfile(image, stage)
+    journal = work / "unbound.journal"
+    write_recovery_journal(journal, image, stage)
+    before = hashlib.sha256(image.read_bytes()).digest()
+    completed = run(
+        "recover", image, "--write", "--confirm", image, "--journal", journal,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert "not derived from the selected journal path" in completed.stderr
+    assert hashlib.sha256(image.read_bytes()).digest() == before
     assert journal.exists() and stage.exists()
 
 
@@ -313,6 +332,7 @@ def main() -> None:
         test_recover_from_verified_bound_stage(work)
         test_corrupt_stage_is_never_committed(work)
         test_recovery_refuses_different_target(work)
+        test_recovery_refuses_unbound_stage_path(work)
         test_legacy_recovery_journal_fails_closed(work)
     print("native HFS+/HFSX Defrag/Growth Defrag/identity/integrity recovery tests passed")
 
