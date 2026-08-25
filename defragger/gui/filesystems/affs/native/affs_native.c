@@ -2,9 +2,13 @@
 #define _FILE_OFFSET_BITS 64
 #include "affs_native.h"
 
+#include "infiltratr/endian.h"
+#include "infiltratr/posix_io.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,15 +29,11 @@
 #define AFFS_IO_BATCH_BYTES ((size_t)AFFS_IO_BATCH_BLOCKS * BS)
 
 static uint32_t be32(const unsigned char *p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | p[3];
+    return infiltratr_load_be32(p);
 }
 
 static void put32(unsigned char *p, uint32_t x) {
-    p[0] = (unsigned char)(x >> 24);
-    p[1] = (unsigned char)(x >> 16);
-    p[2] = (unsigned char)(x >> 8);
-    p[3] = (unsigned char)x;
+    infiltratr_store_be32(p, x);
 }
 
 static uint32_t lng(const unsigned char *b, int i) {
@@ -82,33 +82,15 @@ static int fpush(AffsFileVec *a, AffsFile x) {
 }
 
 static ssize_t pread_full_local(int fd, void *buffer, size_t length, uint64_t offset) {
-    unsigned char *cursor = buffer;
-    size_t done = 0U;
-    while (done < length) {
-        ssize_t got = pread(fd, cursor + done, length - done, (off_t)(offset + done));
-        if (got < 0) {
-            if (errno == EINTR) continue;
-            return -1;
-        }
-        if (got == 0) break;
-        done += (size_t)got;
-    }
-    return (ssize_t)done;
+    if (length > (size_t)SSIZE_MAX) { errno = EOVERFLOW; return -1; }
+    return infiltratr_pread_full(fd, buffer, length, offset) == 0
+        ? (ssize_t)length : -1;
 }
 
 static ssize_t pwrite_full_local(int fd, const void *buffer, size_t length, uint64_t offset) {
-    const unsigned char *cursor = buffer;
-    size_t done = 0U;
-    while (done < length) {
-        ssize_t put = pwrite(fd, cursor + done, length - done, (off_t)(offset + done));
-        if (put < 0) {
-            if (errno == EINTR) continue;
-            return -1;
-        }
-        if (put == 0) break;
-        done += (size_t)put;
-    }
-    return (ssize_t)done;
+    if (length > (size_t)SSIZE_MAX) { errno = EOVERFLOW; return -1; }
+    return infiltratr_pwrite_full(fd, buffer, length, offset) == 0
+        ? (ssize_t)length : -1;
 }
 
 static int rd(int fd, uint32_t n, unsigned char b[BS], char **e) {

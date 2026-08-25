@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "infiltratr/endian.h"
+
 void ld_runtime_set_program_name(const char *name);
 bool ld_runtime_write_audit_override_enabled(void);
 void ld_runtime_require_write_audit_override(void);
@@ -21,25 +23,20 @@ char *ld_xstrdup(const char *text);
 char *ld_xstrndup(const char *text, size_t length);
 
 static inline uint16_t ld_read_le16(const uint8_t *p) {
-    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+    return infiltratr_load_le16(p);
 }
 
 static inline uint32_t ld_read_le32(const uint8_t *p) {
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
-           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+    return infiltratr_load_le32(p);
 }
 
 
 static inline void ld_write_le16(uint8_t *p, uint16_t value) {
-    p[0] = (uint8_t)(value & UINT16_C(0x00ff));
-    p[1] = (uint8_t)((value >> 8) & UINT16_C(0x00ff));
+    infiltratr_store_le16(p, value);
 }
 
 static inline void ld_write_le32(uint8_t *p, uint32_t value) {
-    p[0] = (uint8_t)(value & UINT32_C(0x000000ff));
-    p[1] = (uint8_t)((value >> 8) & UINT32_C(0x000000ff));
-    p[2] = (uint8_t)((value >> 16) & UINT32_C(0x000000ff));
-    p[3] = (uint8_t)((value >> 24) & UINT32_C(0x000000ff));
+    infiltratr_store_le32(p, value);
 }
 
 

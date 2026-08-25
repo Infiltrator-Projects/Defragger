@@ -3,7 +3,7 @@
 
 Status: **write operations quarantined**  
 Effective date: 2026-08-21  
-Applies to: unreleased development version 1.8.0-138
+Applies to: unreleased development version 1.8.0-139
 
 Analyse, Map, identification and other read-only operations remain available. Defragment, Growth Defrag and Recover are disabled by default in the GUI operation planner, the operation-engine boundary and all seven production filesystem mutation workers.
 
@@ -23,7 +23,7 @@ Setting the variable acknowledges only that the target is disposable. It does no
 
 ## Release status
 
-The release workflow is statically disabled while this audit is open. Version 1.8.0-138 must not be tagged or published by bypassing that workflow.
+The release workflow is statically disabled while this audit is open. Version 1.8.0-139 must not be tagged or published by bypassing that workflow.
 
 ## Exit criteria
 
@@ -34,4 +34,4 @@ The quarantine and release freeze may be removed only by a reviewed change that 
 3. disposable-image mutation, remount/reopen and payload verification;
 4. interrupted-operation and recovery verification;
 5. protected-main settings requiring the permanent quality gate; and
-6. an explicit release decision for version 1.8.0-138.
+6. an explicit release decision for version 1.8.0-139.

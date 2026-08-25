@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "btrfs_native.h"
 
+#include "infiltratr/endian.h"
+#include "infiltratr/posix_io.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/fs.h>
@@ -161,18 +164,17 @@ static void set_error(char *error, size_t error_size, const char *format, ...)
 
 static uint16_t le16(const uint8_t *data)
 {
-    return (uint16_t)((uint16_t)data[0] | ((uint16_t)data[1] << 8U));
+    return infiltratr_load_le16(data);
 }
 
 static uint32_t le32(const uint8_t *data)
 {
-    return (uint32_t)data[0] | ((uint32_t)data[1] << 8U) |
-           ((uint32_t)data[2] << 16U) | ((uint32_t)data[3] << 24U);
+    return infiltratr_load_le32(data);
 }
 
 static uint64_t le64(const uint8_t *data)
 {
-    return (uint64_t)le32(data) | ((uint64_t)le32(data + 4U) << 32U);
+    return infiltratr_load_le64(data);
 }
 
 static int open_reader(const char *path, Reader *reader, char *error, size_t error_size)
@@ -226,22 +228,9 @@ static int read_exact(const Reader *reader, uint64_t offset, void *buffer, size_
         set_error(error, error_size, "Btrfs read lies outside the device");
         return -1;
     }
-    uint8_t *cursor = buffer;
-    size_t done = 0U;
-    while (done < length) {
-        const ssize_t count = pread(reader->fd, cursor + done, length - done,
-                                    (off_t)(offset + (uint64_t)done));
-        if (count < 0) {
-            if (errno == EINTR)
-                continue;
-            set_error(error, error_size, "cannot read Btrfs metadata: %s", strerror(errno));
-            return -1;
-        }
-        if (count == 0) {
-            set_error(error, error_size, "truncated Btrfs metadata read");
-            return -1;
-        }
-        done += (size_t)count;
+    if (infiltratr_pread_full(reader->fd, buffer, length, offset) != 0) {
+        set_error(error, error_size, "cannot read Btrfs metadata: %s", strerror(errno));
+        return -1;
     }
     return 0;
 }

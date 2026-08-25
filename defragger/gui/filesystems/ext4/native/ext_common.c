@@ -3,6 +3,8 @@
 
 #include "ld_runtime.h"
 
+#include "infiltratr/posix_io.h"
+
 #include <com_err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -121,12 +123,12 @@ int ext_read_geometry(const char *path, ExtGeometry *geometry, char **error) {
         return -1;
     }
     uint8_t sb[1024];
-    ssize_t got = pread(fd, sb, sizeof(sb), 1024);
+    int got = infiltratr_pread_full(fd, sb, sizeof(sb), 1024U);
     int saved = errno;
     (void)close(fd);
-    if (got != (ssize_t)sizeof(sb)) {
+    if (got != 0) {
         ext_set_error(error, "cannot read EXT superblock from %s: %s", path,
-                      got < 0 ? strerror(saved) : "short read");
+                      strerror(saved));
         return -1;
     }
     if (ld_read_le16(sb + 56) != EXT2_SUPER_MAGIC) {

@@ -3,6 +3,8 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 
+#include "infiltratr/endian.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -106,8 +108,7 @@ typedef struct {
 } SemanticVec;
 
 static uint32_t le32(const uint8_t *p) {
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
-           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+    return infiltratr_load_le32(p);
 }
 
 static void *grow_array(void *items, size_t *capacity, size_t count, size_t width) {

@@ -15,10 +15,10 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/shared/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.6.0")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.6.0")
+set(INFILTRATR_COMMON_TAG "v1.15.0")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.15.0")
 set(INFILTRATR_COMMON_EXPECTED_COMMIT
-    "7dc1195efd3f066e84c57520b44b2aa448847b90")
+    "d623410f55a071020539fae3f47682896473bd6f")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LD_GIT_EXECUTABLE git REQUIRED)
@@ -114,21 +114,18 @@ if(LD_ENABLE_SANITIZERS)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
-# Infiltratr Common owns generic parsing/string/path/sysfs primitives. Defragger
-# deliberately links only the core and POSIX provider; application-specific raw
-# storage, staging, Stop and filesystem transaction mechanics remain local.
-set(INFILTRATR_COMMON_WARNING_FLAGS -Wall -Wextra -Wpedantic -Wshadow -Wformat=2)
-if(LD_ENABLE_WERROR)
-    list(APPEND INFILTRATR_COMMON_WARNING_FLAGS -Werror)
-endif()
-add_library(infiltratr-common STATIC
-    "${INFILTRATR_COMMON_DIR}/src/core.c"
-    "${INFILTRATR_COMMON_DIR}/src/posix.c")
-target_include_directories(infiltratr-common PUBLIC
-    "${INFILTRATR_COMMON_DIR}/include")
-target_compile_options(infiltratr-common PRIVATE ${INFILTRATR_COMMON_WARNING_FLAGS})
-target_compile_definitions(infiltratr-common PRIVATE _FILE_OFFSET_BITS=64 _GNU_SOURCE)
-target_link_libraries(infiltratr-common PUBLIC m)
+# Infiltratr Common owns generic parsing, arithmetic, byte-order, exact-I/O,
+# string, path and sysfs primitives. Consume its authoritative package target
+# so every source dependency and transitive platform library remains defined by
+# Common itself. Application-specific device safety, staging, Stop and
+# filesystem transaction mechanics remain local to Defragger.
+set(INFILTRATR_COMMON_BUILD_TESTS OFF)
+set(INFILTRATR_COMMON_BUILD_SHARED OFF)
+set(INFILTRATR_COMMON_WARNINGS_AS_ERRORS "${LD_ENABLE_WERROR}")
+add_subdirectory(
+    "${INFILTRATR_COMMON_DIR}"
+    "${CMAKE_CURRENT_BINARY_DIR}/infiltratr-common"
+    EXCLUDE_FROM_ALL)
 
 add_library(linux-defragger-core STATIC
     src/core/ld_runtime.c
@@ -141,7 +138,7 @@ target_include_directories(linux-defragger-core PUBLIC
     "${LD_GENERATED_DIR}")
 target_compile_options(linux-defragger-core PRIVATE ${LD_WARNING_FLAGS})
 target_compile_definitions(linux-defragger-core PUBLIC _FILE_OFFSET_BITS=64 _GNU_SOURCE)
-target_link_libraries(linux-defragger-core PUBLIC infiltratr-common)
+target_link_libraries(linux-defragger-core PUBLIC InfiltratrCommon::Common)
 
 # FAT remains native C, but it is a private implementation detail of the
 # authoritative gui/filesystems/fat plugin.  There is deliberately no second
@@ -403,6 +400,7 @@ add_executable(linux-defragger-hfs-analyser gui/filesystems/hfs/native/analyser.
 target_compile_options(linux-defragger-hfs-analyser PRIVATE ${LD_WARNING_FLAGS})
 target_compile_definitions(linux-defragger-hfs-analyser PRIVATE
     _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-hfs-analyser PRIVATE InfiltratrCommon::Common)
 set_target_properties(linux-defragger-hfs-analyser PROPERTIES OUTPUT_NAME hfs_analyser)
 
 install(TARGETS linux-defragger-affs-worker

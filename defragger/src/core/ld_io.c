@@ -2,44 +2,30 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 
+#include "infiltratr/posix_io.h"
+
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
 ssize_t ld_pread_full(int fd, void *buffer, size_t length, uint64_t offset) {
-    uint8_t *cursor = buffer;
-    size_t completed = 0;
-    while (completed < length) {
-        ssize_t count = pread(fd, cursor + completed, length - completed,
-                              (off_t)(offset + completed));
-        if (count < 0) {
-            if (errno == EINTR) continue;
-            return -1;
-        }
-        if (count == 0) break;
-        completed += (size_t)count;
+    if (length > (size_t)SSIZE_MAX) {
+        errno = EOVERFLOW;
+        return -1;
     }
-    return (ssize_t)completed;
+    return infiltratr_pread_full(fd, buffer, length, offset) == 0
+        ? (ssize_t)length : -1;
 }
 
 ssize_t ld_pwrite_full(int fd, const void *buffer, size_t length, uint64_t offset) {
-    const uint8_t *cursor = buffer;
-    size_t completed = 0;
-    while (completed < length) {
-        ssize_t count = pwrite(fd, cursor + completed, length - completed,
-                               (off_t)(offset + completed));
-        if (count < 0) {
-            if (errno == EINTR) continue;
-            return -1;
-        }
-        if (count == 0) {
-            errno = EIO;
-            return -1;
-        }
-        completed += (size_t)count;
+    if (length > (size_t)SSIZE_MAX) {
+        errno = EOVERFLOW;
+        return -1;
     }
-    return (ssize_t)completed;
+    return infiltratr_pwrite_full(fd, buffer, length, offset) == 0
+        ? (ssize_t)length : -1;
 }
 
 void ld_pread_exact(int fd, void *buffer, size_t length, uint64_t offset, const char *what) {

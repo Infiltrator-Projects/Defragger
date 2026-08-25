@@ -6,7 +6,7 @@
 
 Linux Defragger is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-138, unreleased development  
+**Current version:** 1.8.0-139, unreleased development
 **Platform:** Linux  
 **Licence:** GPL-3.0-or-later
 

@@ -11,6 +11,9 @@
 
 #define _FILE_OFFSET_BITS 64
 
+#include "infiltratr/endian.h"
+#include "infiltratr/posix_io.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -88,33 +91,17 @@ typedef struct {
 
 static uint16_t be16(const uint8_t *p)
 {
-    return (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
+    return infiltratr_load_be16(p);
 }
 
 static uint32_t be32(const uint8_t *p)
 {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    return infiltratr_load_be32(p);
 }
 
 static int read_exact(int fd, uint64_t offset, void *buffer, size_t length)
 {
-    uint8_t *out = (uint8_t *)buffer;
-    size_t done = 0U;
-
-    while (done < length) {
-        ssize_t got = pread(fd, out + done, length - done,
-                            (off_t)(offset + (uint64_t)done));
-        if (got < 0) {
-            if (errno == EINTR)
-                continue;
-            return -1;
-        }
-        if (got == 0)
-            return -1;
-        done += (size_t)got;
-    }
-    return 0;
+    return infiltratr_pread_full(fd, buffer, length, offset);
 }
 
 static uint64_t extent_capacity_bytes(const hfs_volume *volume,

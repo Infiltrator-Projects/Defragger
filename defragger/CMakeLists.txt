@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 project(linux_defragger VERSION 1.8.0 LANGUAGES C)
 
 # Keep the established project/build graph isolated from filesystem-specific

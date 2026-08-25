@@ -42,9 +42,9 @@ def _cmake_source() -> str:
 def test_top_level_cmake_owns_c_only_project_declaration() -> None:
     root_cmake = (ROOT / "CMakeLists.txt").read_text()
     project_fragment = (ROOT / "cmake" / "project.cmake").read_text()
-    assert root_cmake.count("cmake_minimum_required(VERSION 3.16)") == 1
+    assert root_cmake.count("cmake_minimum_required(VERSION 3.20)") == 1
     assert root_cmake.count("project(linux_defragger VERSION 1.8.0 LANGUAGES C)") == 1
-    assert root_cmake.index("cmake_minimum_required(VERSION 3.16)") < root_cmake.index("project(linux_defragger VERSION 1.8.0 LANGUAGES C)")
+    assert root_cmake.index("cmake_minimum_required(VERSION 3.20)") < root_cmake.index("project(linux_defragger VERSION 1.8.0 LANGUAGES C)")
     assert "cmake_minimum_required(" not in project_fragment
     assert "project(" not in project_fragment
 
@@ -203,14 +203,18 @@ def test_build_and_path_registry_install_native_workers() -> None:
 
 def test_infiltratr_common_integration() -> None:
     common = ROOT / "shared" / "infiltratr-common"
-    assert (common / "VERSION").read_text().strip() == "1.6.0"
+    assert (common / "VERSION").read_text().strip() == "1.15.0"
     gitmodules = (ROOT / ".gitmodules").read_text()
     assert "shared/infiltratr-common" in gitmodules
     assert "Infiltrator-Libraries.git" in gitmodules
     cmake = _cmake_source()
-    assert "7dc1195efd3f066e84c57520b44b2aa448847b90" in cmake
-    assert '${INFILTRATR_COMMON_DIR}/src/core.c' in cmake
-    assert '${INFILTRATR_COMMON_DIR}/src/posix.c' in cmake
+    assert "d623410f55a071020539fae3f47682896473bd6f" in cmake
+    assert "add_subdirectory(" in cmake
+    assert "InfiltratrCommon::Common" in cmake
+    assert "set(INFILTRATR_COMMON_BUILD_TESTS OFF)" in cmake
+    assert "set(INFILTRATR_COMMON_BUILD_SHARED OFF)" in cmake
+    assert '${INFILTRATR_COMMON_DIR}/src/core.c' not in cmake
+    assert '${INFILTRATR_COMMON_DIR}/src/posix.c' not in cmake
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
     assert "infiltratr_realpath_copy" in device
     assert "infiltratr_read_u64_file" in device
@@ -229,6 +233,26 @@ def test_infiltratr_common_integration() -> None:
     assert "infiltratr_u64_add_checked" in production_c
     assert "infiltratr_u64_add_saturating" in production_c
     assert "ld_u64_add" not in production_c
+    io = (ROOT / "src" / "core" / "ld_io.c").read_text()
+    assert "infiltratr_pread_full" in io
+    assert "infiltratr_pwrite_full" in io
+    assert re.search(r"(?<![A-Za-z0-9_])pread\s*\(", production_c) is None
+    assert re.search(r"(?<![A-Za-z0-9_])pwrite\s*\(", production_c) is None
+    endian_consumers = (
+        ROOT / "src" / "core" / "ld_runtime.h",
+        GUI / "filesystems" / "affs" / "native" / "affs_native.c",
+        GUI / "filesystems" / "btrfs" / "native" / "btrfs_native.c",
+        GUI / "filesystems" / "exfat" / "native" / "exfat_common.c",
+        GUI / "filesystems" / "hfs" / "native" / "analyser.c",
+        GUI / "filesystems" / "hfsplus" / "native" / "hfsplus_native.c",
+        GUI / "filesystems" / "sfs" / "native" / "sfs_native.c",
+        GUI / "filesystems" / "swap" / "native" / "swap_native.c",
+        GUI / "filesystems" / "xfs" / "native" / "xfs_common.c",
+    )
+    for path in endian_consumers:
+        assert "infiltratr_load_" in path.read_text(), (
+            f"{path.relative_to(ROOT)} bypasses Common endian access"
+        )
     for filesystem, worker in (("ext4", "ext_worker.c"), ("ntfs", "ntfs_worker.c"),
                                ("exfat", "exfat_worker.c"), ("xfs", "xfs_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()

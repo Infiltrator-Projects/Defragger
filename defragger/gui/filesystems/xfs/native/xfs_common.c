@@ -2,6 +2,8 @@
 #include "xfs_native.h"
 #include "ld_runtime.h"
 
+#include "infiltratr/endian.h"
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,33 +30,27 @@ static int extent_compare(const void *left0, const void *right0) {
 }
 
 uint16_t xfs_be16(const uint8_t *p) {
-    return (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
+    return infiltratr_load_be16(p);
 }
 
 uint32_t xfs_be32(const uint8_t *p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    return infiltratr_load_be32(p);
 }
 
 uint64_t xfs_be64(const uint8_t *p) {
-    return ((uint64_t)xfs_be32(p) << 32) | (uint64_t)xfs_be32(p + 4);
+    return infiltratr_load_be64(p);
 }
 
 void xfs_put_be16(uint8_t *p, uint16_t value) {
-    p[0] = (uint8_t)(value >> 8);
-    p[1] = (uint8_t)value;
+    infiltratr_store_be16(p, value);
 }
 
 void xfs_put_be32(uint8_t *p, uint32_t value) {
-    p[0] = (uint8_t)(value >> 24);
-    p[1] = (uint8_t)(value >> 16);
-    p[2] = (uint8_t)(value >> 8);
-    p[3] = (uint8_t)value;
+    infiltratr_store_be32(p, value);
 }
 
 void xfs_put_be64(uint8_t *p, uint64_t value) {
-    xfs_put_be32(p, (uint32_t)(value >> 32));
-    xfs_put_be32(p + 4, (uint32_t)value);
+    infiltratr_store_be64(p, value);
 }
 
 uint32_t xfs_crc32c_intermediate(const uint8_t *data, size_t length, uint32_t seed) {
@@ -88,10 +84,7 @@ uint32_t xfs_crc_field(const uint8_t *data, size_t length, size_t field) {
 
 void xfs_write_crc_le(uint8_t *data, size_t length, size_t field) {
     uint32_t crc = xfs_crc_field(data, length, field);
-    data[field] = (uint8_t)crc;
-    data[field + 1] = (uint8_t)(crc >> 8);
-    data[field + 2] = (uint8_t)(crc >> 16);
-    data[field + 3] = (uint8_t)(crc >> 24);
+    infiltratr_store_le32(data + field, crc);
 }
 
 void xfs_set_error(char **error, const char *format, ...) {

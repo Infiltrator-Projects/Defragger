@@ -3,6 +3,7 @@
 #include "version.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/endian.h"
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_path.h"
@@ -47,12 +48,11 @@ typedef struct {
 } HfsPlusJournal;
 
 static uint16_t be16(const unsigned char *p) {
-    return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
+    return infiltratr_load_be16(p);
 }
 
 static uint32_t be32(const unsigned char *p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    return infiltratr_load_be32(p);
 }
 
 static void usage(FILE *stream) {

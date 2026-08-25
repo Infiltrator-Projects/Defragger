@@ -56,14 +56,15 @@ Filesystem-neutral C mechanics are implemented once:
 - generated version ownership.
 
 Generic C primitives that are also useful to other Infiltrator applications are
-not reimplemented here. Linux Defragger pins Infiltratr Common 1.6.0 at
-exact commit `7dc1195efd3f066e84c57520b44b2aa448847b90` and currently consumes its core and POSIX provider
-for strict integer parsing/range validation, bounded string operations, line-end
-trimming, bounded realpath handling, small sysfs scalar reads, prefix matching and
-saturating unit conversion. Defragger uses Common's checked and saturating uint64 arithmetic where the
-required contract matches. Raw `pread`/`pwrite` loops, device safety and Stop state
-remain local, while each filesystem engine owns its journalled staging/transaction
-mechanics because those semantics are application-specific.
+not reimplemented here. Linux Defragger pins Infiltratr Common 1.15.0 at
+exact commit `d623410f55a071020539fae3f47682896473bd6f` and links the canonical
+`InfiltratrCommon::Common` CMake target. Common owns strict integer parsing and
+range validation, bounded strings, line-end trimming, checked and saturating
+arithmetic, endian byte access, exact interruption-safe positioned I/O, bounded
+realpath handling, small sysfs scalar reads and prefix matching. Device safety,
+raw-storage policy, Stop state and each filesystem's journalled staging and
+transaction mechanics remain local because those semantics are
+application-specific.
 
 This directory contains no filesystem registration or dispatch logic.
 

@@ -2,6 +2,9 @@
 #define _FILE_OFFSET_BITS 64
 #include "hfsplus_native.h"
 
+#include "infiltratr/endian.h"
+#include "infiltratr/posix_io.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -57,25 +60,23 @@ typedef struct {
 } OverflowVec;
 
 static uint16_t be16(const unsigned char *p) {
-    return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
+    return infiltratr_load_be16(p);
 }
 
 static uint32_t be32(const unsigned char *p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    return infiltratr_load_be32(p);
 }
 
 static uint64_t be64(const unsigned char *p) {
-    return ((uint64_t)be32(p) << 32) | be32(p + 4);
+    return infiltratr_load_be64(p);
 }
 
 static uint32_t le32(const unsigned char *p) {
-    return ((uint32_t)p[3] << 24) | ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[1] << 8) | (uint32_t)p[0];
+    return infiltratr_load_le32(p);
 }
 
 static uint64_t le64(const unsigned char *p) {
-    return ((uint64_t)le32(p + 4) << 32) | le32(p);
+    return infiltratr_load_le64(p);
 }
 
 static uint32_t journal_checksum(const unsigned char *data, size_t length) {
@@ -87,10 +88,7 @@ static uint32_t journal_checksum(const unsigned char *data, size_t length) {
 
 
 static void put32(unsigned char *p, uint32_t value) {
-    p[0] = (unsigned char)(value >> 24);
-    p[1] = (unsigned char)(value >> 16);
-    p[2] = (unsigned char)(value >> 8);
-    p[3] = (unsigned char)value;
+    infiltratr_store_be32(p, value);
 }
 
 void hfsplus_set_error(char **error, const char *fmt, ...) {
@@ -105,33 +103,17 @@ void hfsplus_set_error(char **error, const char *fmt, ...) {
 }
 
 static int read_exact(int fd, uint64_t offset, void *buffer, size_t length, char **error) {
-    unsigned char *out = buffer;
-    size_t done = 0;
-    while (done < length) {
-        ssize_t n = pread(fd, out + done, length - done, (off_t)(offset + done));
-        if (n <= 0) {
-            hfsplus_set_error(error, "cannot read HFS+ data at offset %" PRIu64 ": %s",
-                              offset + done, n < 0 ? strerror(errno) : "short read");
-            return -1;
-        }
-        done += (size_t)n;
-    }
-    return 0;
+    if (infiltratr_pread_full(fd, buffer, length, offset) == 0) return 0;
+    hfsplus_set_error(error, "cannot read HFS+ data at offset %" PRIu64 ": %s",
+                      offset, strerror(errno));
+    return -1;
 }
 
 static int write_exact(int fd, uint64_t offset, const void *buffer, size_t length, char **error) {
-    const unsigned char *in = buffer;
-    size_t done = 0;
-    while (done < length) {
-        ssize_t n = pwrite(fd, in + done, length - done, (off_t)(offset + done));
-        if (n <= 0) {
-            hfsplus_set_error(error, "cannot write HFS+ data at offset %" PRIu64 ": %s",
-                              offset + done, n < 0 ? strerror(errno) : "short write");
-            return -1;
-        }
-        done += (size_t)n;
-    }
-    return 0;
+    if (infiltratr_pwrite_full(fd, buffer, length, offset) == 0) return 0;
+    hfsplus_set_error(error, "cannot write HFS+ data at offset %" PRIu64 ": %s",
+                      offset, strerror(errno));
+    return -1;
 }
 
 static int fork_push_extent(HfsPlusFork *fork, HfsPlusExtent extent) {

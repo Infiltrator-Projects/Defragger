@@ -3,6 +3,8 @@
 
 #include "ld_io.h"
 
+#include "infiltratr/endian.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -41,18 +43,12 @@ static void ld_swap_errno_error(char *error, size_t error_size,
 
 static uint32_t ld_swap_u32le(const unsigned char *p)
 {
-    return (uint32_t)p[0] |
-           ((uint32_t)p[1] << 8) |
-           ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
+    return infiltratr_load_le32(p);
 }
 
 static uint32_t ld_swap_u32be(const unsigned char *p)
 {
-    return ((uint32_t)p[0] << 24) |
-           ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) |
-           (uint32_t)p[3];
+    return infiltratr_load_be32(p);
 }
 
 static uint32_t ld_swap_u32(const unsigned char *p, bool little_endian)

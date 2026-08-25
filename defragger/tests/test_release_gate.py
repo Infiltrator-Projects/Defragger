@@ -117,11 +117,11 @@ def main() -> None:
     assert "*.py[cod]" in gitignore
 
     common_contract = (
-        ('COMMON_TAG="v1.6.0"', 'INFILTRATR_COMMON_TAG "v1.6.0"'),
-        ('COMMON_VERSION="1.6.0"', 'INFILTRATR_COMMON_EXPECTED_VERSION "1.6.0"'),
+        ('COMMON_TAG="v1.15.0"', 'INFILTRATR_COMMON_TAG "v1.15.0"'),
+        ('COMMON_VERSION="1.15.0"', 'INFILTRATR_COMMON_EXPECTED_VERSION "1.15.0"'),
         (
-            'COMMON_COMMIT="7dc1195efd3f066e84c57520b44b2aa448847b90"',
-            '7dc1195efd3f066e84c57520b44b2aa448847b90',
+            'COMMON_COMMIT="d623410f55a071020539fae3f47682896473bd6f"',
+            'd623410f55a071020539fae3f47682896473bd6f',
         ),
     )
     for local_required, cmake_required in common_contract:
@@ -131,11 +131,12 @@ def main() -> None:
         assert cmake_required in cmake, (
             f"CMake lost matching Common release contract: {cmake_required}"
         )
-    assert "v1.5.0" not in local_run
-    assert 'COMMON_VERSION="1.5.0"' not in local_run
-    assert "Infiltratr Common 1.6.0" in design
-    assert "7dc1195efd3f066e84c57520b44b2aa448847b90" in design
-    assert "Infiltratr Common 1.5.0" not in design
+    for stale_version in ("1.5.0", "1.6.0"):
+        assert f"v{stale_version}" not in local_run
+        assert f'COMMON_VERSION="{stale_version}"' not in local_run
+        assert f"Infiltratr Common {stale_version}" not in design
+    assert "Infiltratr Common 1.15.0" in design
+    assert "d623410f55a071020539fae3f47682896473bd6f" in design
 
     print("release quality-gate contract passed")
 

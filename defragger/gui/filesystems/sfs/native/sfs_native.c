@@ -2,6 +2,8 @@
 #include "sfs_native.h"
 #include "ld_io.h"
 
+#include "infiltratr/endian.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/fs.h>
@@ -26,11 +28,10 @@ static void set_error(char *error, size_t size, const char *text) {
     if (error != NULL && size != 0U) (void)snprintf(error, size, "%s", text);
 }
 static uint16_t be16(const uint8_t *p) {
-    return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
+    return infiltratr_load_be16(p);
 }
 static uint32_t be32(const uint8_t *p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    return infiltratr_load_be32(p);
 }
 static int size_bytes(int fd, const char *path, uint64_t *bytes) {
     struct stat st;

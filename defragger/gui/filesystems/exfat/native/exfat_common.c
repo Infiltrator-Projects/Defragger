@@ -5,6 +5,8 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 
+#include "infiltratr/endian.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -15,12 +17,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static uint16_t read_le16(const uint8_t *p) { return (uint16_t)p[0] | (uint16_t)((uint16_t)p[1] << 8); }
-static uint32_t read_le32(const uint8_t *p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
-static uint64_t read_le64(const uint8_t *p) { return (uint64_t)read_le32(p) | ((uint64_t)read_le32(p + 4) << 32); }
+static uint16_t read_le16(const uint8_t *p) { return infiltratr_load_le16(p); }
+static uint32_t read_le32(const uint8_t *p) { return infiltratr_load_le32(p); }
+static uint64_t read_le64(const uint8_t *p) { return infiltratr_load_le64(p); }
 void exfat_set_error(char **error, const char *format, ...) { if (error == NULL || *error != NULL) return; va_list ap; va_start(ap, format); va_list copy; va_copy(copy, ap); int n=vsnprintf(NULL,0,format,copy); va_end(copy); if(n<0){va_end(ap);return;} *error=ld_xmalloc((size_t)n+1U); (void)vsnprintf(*error,(size_t)n+1U,format,ap); va_end(ap); }
 uint16_t exfat_u16(const void *data,size_t off){return read_le16((const uint8_t*)data+off);} uint32_t exfat_u32(const void *data,size_t off){return read_le32((const uint8_t*)data+off);} uint64_t exfat_u64(const void *data,size_t off){return read_le64((const uint8_t*)data+off);}
-void exfat_put_u16(void *data,size_t off,uint16_t v){uint8_t*p=(uint8_t*)data+off;p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);} void exfat_put_u32(void *data,size_t off,uint32_t v){uint8_t*p=(uint8_t*)data+off;p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);p[2]=(uint8_t)(v>>16);p[3]=(uint8_t)(v>>24);}
+void exfat_put_u16(void *data,size_t off,uint16_t v){infiltratr_store_le16((uint8_t*)data+off,v);} void exfat_put_u32(void *data,size_t off,uint32_t v){infiltratr_store_le32((uint8_t*)data+off,v);}
 uint16_t exfat_entry_checksum(const uint8_t *data,size_t bytes){uint16_t c=0;for(size_t i=0;i<bytes;++i){if(i==2U||i==3U)continue;c=(uint16_t)((c>>1)|((c&1U)<<15));c=(uint16_t)(c+data[i]);}return c;}
 uint32_t exfat_table_checksum(const uint8_t *data,size_t bytes){uint32_t c=0;for(size_t i=0;i<bytes;++i)c=((c&1U)<<31)+(c>>1)+data[i];return c;}
 uint32_t exfat_boot_checksum(const uint8_t *region,uint32_t bps){uint32_t c=0;uint64_t limit=(uint64_t)bps*11U;for(uint64_t i=0;i<limit;++i){if(i==106U||i==107U||i==112U)continue;c=((c&1U)<<31)+(c>>1)+region[i];}return c;}
