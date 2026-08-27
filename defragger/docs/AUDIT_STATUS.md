@@ -5,7 +5,7 @@ Status: **complete**
 
 Completed: 2026-08-25
 
-Applies to: release version 1.8.0-139
+Applies to: release version 1.8.0-140
 
 The production write quarantine has been removed. Analyse, Map, Defragment,
 Growth Defrag and Recover are available according to each filesystem plugin's
@@ -71,9 +71,9 @@ requires a successful push-triggered Project quality gate for the exact current
 API, rejects an existing tag/release and publishes immutable assets only from
 that exact commit.
 
-Shannon Smith gave the explicit release decision for version 1.8.0-139 on
+Shannon Smith gave the explicit release decision for version 1.8.0-140 on
 2026-08-25. Publication remains contingent on the exact-head Project quality
-gate succeeding for the `Release 1.8.0-139` commit.
+gate succeeding for the `Release 1.8.0-140` commit.
 
 Linux Defragger Test Media is outside the production-operation audit. It is a
 deliberately destructive filesystem-manufacturing utility with independent
