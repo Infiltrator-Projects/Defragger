@@ -31,7 +31,7 @@ except (ImportError, ValueError) as exc:
     )
     raise SystemExit(1) from exc
 
-from version import VERSION
+from version import BUILD_LABEL, VERSION
 from backends.base import CAP_DEFRAG, CAP_GROWTH_DEFRAG, CAP_RECOVER
 
 from .command_runner import CommandRunner
@@ -79,6 +79,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self,
             gui_version=VERSION,
             engine_version=self.engine_version,
+            build_label=BUILD_LABEL,
         )
         self.live_events = LiveEventController()
         self.runner = CommandRunner(

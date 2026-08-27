@@ -74,11 +74,13 @@ class WindowView:
         *,
         gui_version: str,
         engine_version: str,
+        build_label: str,
     ) -> None:
         self.window = window
         self.controller = controller
         self.gui_version = gui_version
         self.engine_version = engine_version
+        self.build_label = build_label
         self._build()
         self._load_css()
 
@@ -398,7 +400,7 @@ class WindowView:
         dialog.set_program_name(APP_NAME)
         dialog.set_version(self.gui_version)
         dialog.set_logo_icon_name(APP_ICON_NAME)
-        dialog.set_comments(ABOUT_COMMENTS)
+        dialog.set_comments(f"{ABOUT_COMMENTS}\n\nBuild: {self.build_label}")
         dialog.set_authors(["Shannon Smith — Author and project maintainer"])
         dialog.set_website(PROJECT_URL)
         dialog.set_website_label("Website")

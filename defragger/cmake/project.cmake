@@ -68,6 +68,17 @@ option(LD_ENABLE_SANITIZERS "Enable address and undefined-behaviour sanitizers" 
 option(LD_GENERIC_AMD64 "Build for the baseline x86-64 instruction set" OFF)
 option(LD_NATIVE_OPTIMIZATION "Optimise native code for this build machine" OFF)
 
+if(LD_GENERIC_AMD64)
+    set(LINUX_DEFRAGGER_BUILD_PROFILE "generic")
+    set(LINUX_DEFRAGGER_BUILD_LABEL "Generic / APT package")
+elseif(LD_NATIVE_OPTIMIZATION)
+    set(LINUX_DEFRAGGER_BUILD_PROFILE "native")
+    set(LINUX_DEFRAGGER_BUILD_LABEL "Native / local machine compile")
+else()
+    set(LINUX_DEFRAGGER_BUILD_PROFILE "source")
+    set(LINUX_DEFRAGGER_BUILD_LABEL "Source / development build")
+endif()
+
 if(LD_GENERIC_AMD64 AND LD_NATIVE_OPTIMIZATION)
     message(FATAL_ERROR
         "LD_GENERIC_AMD64 and LD_NATIVE_OPTIMIZATION are mutually exclusive")
