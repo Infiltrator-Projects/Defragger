@@ -14,7 +14,7 @@ find_package(Threads REQUIRED)
 set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/shared/infiltratr-common")
 set(INFILTRATR_COMMON_URL
-    "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
+    "https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git")
 set(INFILTRATR_COMMON_TAG "v1.15.4")
 set(INFILTRATR_COMMON_EXPECTED_VERSION "1.15.4")
 set(INFILTRATR_COMMON_EXPECTED_COMMIT

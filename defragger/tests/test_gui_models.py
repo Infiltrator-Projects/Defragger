@@ -365,7 +365,7 @@ def test_about_dialog_matches_the_standard_project_identity() -> None:
     for required in (
         'APP_ICON_NAME = "io.github.linuxdefragger"',
         'COPYRIGHT = "Copyright © 2026 Shannon Smith"',
-        'PROJECT_URL = "https://github.com/The-First-Infiltrator/Defragger"',
+        'PROJECT_URL = "https://github.com/Infiltrator-Projects/Defragger"',
         "dialog.set_logo_icon_name(APP_ICON_NAME)",
         "Build: {self.build_label}",
         "Shannon Smith — Author and project maintainer",

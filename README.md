@@ -2,7 +2,7 @@
 
 # Linux Defragger
 
-[![Project quality gate](https://github.com/The-First-Infiltrator/Defragger/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/The-First-Infiltrator/Defragger/actions/workflows/quality-gate.yml)
+[![Project quality gate](https://github.com/Infiltrator-Projects/Defragger/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/Infiltrator-Projects/Defragger/actions/workflows/quality-gate.yml)
 
 Linux Defragger is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
