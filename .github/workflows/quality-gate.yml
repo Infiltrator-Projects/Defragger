@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   quality-gate:
-    runs-on: ubuntu-24.04
+    runs-on: linux-native
     timeout-minutes: 45
     defaults:
       run:
@@ -40,6 +40,7 @@ jobs:
           fi
 
       - name: Install build and test dependencies
+        if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
