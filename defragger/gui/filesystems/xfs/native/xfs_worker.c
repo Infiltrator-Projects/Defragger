@@ -223,8 +223,6 @@ static void unlink_if_exists(const char *path) {
                 PROGRAM_NAME, path, strerror(failure));
 }
 
-static void transaction_cleanup
-
 static void transaction_cleanup(const char *journal, const XfsJournal *state) {
     if (state != NULL) {
         unlink_if_exists(state->stage);
