@@ -2,6 +2,7 @@
 #include "ntfs_native.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/arithmetic.h"
 #include "ld_runtime.h"
 
 #include <ctype.h>
@@ -25,21 +26,20 @@ typedef struct {
 static ObjectState *object_get(ObjectVec *vec, uint64_t record) {
     for (size_t index = 0; index < vec->count; ++index)
         if (vec->items[index].record == record) return &vec->items[index];
-    if (vec->count == vec->capacity) {
-        size_t next = vec->capacity == 0 ? 32U : vec->capacity * 2U;
-        vec->items = ld_xrealloc(vec->items, next * sizeof(*vec->items));
-        vec->capacity = next;
-    }
+    if (vec->count == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&vec->items, &vec->capacity,
+                                  sizeof(*vec->items), vec->count + 1U, 32U))
+        ld_die("cannot grow NTFS object catalogue");
     ObjectState *item = &vec->items[vec->count++];
     memset(item, 0, sizeof(*item)); item->record = record; return item;
 }
 
 static NtfsStream *stream_push(NtfsCatalogue *catalogue) {
-    if (catalogue->count == catalogue->capacity) {
-        size_t next = catalogue->capacity == 0 ? 64U : catalogue->capacity * 2U;
-        catalogue->items = ld_xrealloc(catalogue->items, next * sizeof(*catalogue->items));
-        catalogue->capacity = next;
-    }
+    if (catalogue->count == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&catalogue->items, &catalogue->capacity,
+                                  sizeof(*catalogue->items),
+                                  catalogue->count + 1U, 64U))
+        ld_die("cannot grow NTFS stream catalogue");
     NtfsStream *stream = &catalogue->items[catalogue->count++];
     memset(stream, 0, sizeof(*stream)); return stream;
 }

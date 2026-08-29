@@ -158,6 +158,16 @@ static int save_manifest(const char *journal_path,
     return 0;
 }
 
+static int remove_manifest(const char *journal_path, char **error) {
+    const int failure = infiltratr_unlink_durable(journal_path, true);
+    if (failure != 0) {
+        exfat_set_error(error, "cannot durably remove exFAT relayout journal: %s",
+                        strerror(failure));
+        return -1;
+    }
+    return 0;
+}
+
 static bool parse_u64_text(const char *text, uint64_t *value) {
     return infiltratr_parse_u64(text, 10U, value);
 }
@@ -1052,8 +1062,13 @@ int exfat_relayout_in_place(const char *device, const char *journal_path,
         return EXFAT_RELAYOUT_FAILED;
     }
     if (ld_stop_requested()) {
-        unlink(journal_path);
-        ld_path_fsync_parent(journal_path);
+        if (remove_manifest(journal_path, error) != 0) {
+            free(buffer);
+            manifest_free(&manifest);
+            exfat_close_volume(&volume);
+            exfat_catalogue_free(&catalogue);
+            return EXFAT_RELAYOUT_FAILED;
+        }
         fprintf(stderr,
                 "exFAT relayout stopped safely before source placement; the original filesystem is unchanged.\n");
         free(buffer);
@@ -1090,8 +1105,13 @@ int exfat_relayout_in_place(const char *device, const char *journal_path,
             exfat_catalogue_free(&catalogue);
             return EXFAT_RELAYOUT_FAILED;
         }
-        unlink(journal_path);
-        ld_path_fsync_parent(journal_path);
+        if (remove_manifest(journal_path, error) != 0) {
+            free(buffer);
+            manifest_free(&manifest);
+            exfat_close_volume(&volume);
+            exfat_catalogue_free(&catalogue);
+            return EXFAT_RELAYOUT_FAILED;
+        }
         fprintf(stderr,
                 "exFAT relayout stopped safely; the original allocation layout was restored.\n");
         free(buffer);
@@ -1119,8 +1139,10 @@ int exfat_relayout_in_place(const char *device, const char *journal_path,
         manifest_free(&manifest);
         return EXFAT_RELAYOUT_FAILED;
     }
-    unlink(journal_path);
-    ld_path_fsync_parent(journal_path);
+    if (remove_manifest(journal_path, error) != 0) {
+        manifest_free(&manifest);
+        return EXFAT_RELAYOUT_FAILED;
+    }
     stats->objects_repositioned = manifest.record_count;
     stats->completed = true;
     printf("exFAT unified workspace layout: %zu objects, %zu clusters, two direct data passes plus one metadata commit.\n",
@@ -1279,8 +1301,10 @@ int exfat_relayout_recover(const char *device, const char *journal_path,
         manifest_free(&manifest);
         return 1;
     }
-    unlink(journal_path);
-    ld_path_fsync_parent(journal_path);
+    if (remove_manifest(journal_path, error) != 0) {
+        manifest_free(&manifest);
+        return 1;
+    }
     puts("exFAT relayout recovery completed successfully.");
     manifest_free(&manifest);
     return 0;

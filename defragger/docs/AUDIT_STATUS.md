@@ -54,11 +54,22 @@ Recover.
 
 ## Shared Common dependency
 
-Defragger consumes Infiltratr Common 1.15.0 at exact commit
-`d623410f55a071020539fae3f47682896473bd6f`. On 2026-08-25 that commit was the
-head of Common `main`, and its `VERSION` file was 1.15.0. CMake and the local
-installer both verify the version and commit rather than accepting an
-unconstrained checkout.
+The audited 1.8.0-140 release consumed Infiltratr Common 1.15.0 at exact commit
+`d623410f55a071020539fae3f47682896473bd6f`.
+
+On 2026-08-29 the post-audit `main` integration was advanced to Infiltratr
+Common 1.15.4 at exact commit
+`046406bea2aefa539c74e1038b6c20825eca8af7`. CMake, the gitlink and the local
+compiler/installer all verify that same version and commit rather than accepting
+an unconstrained checkout.
+
+The consolidation moves generic exact numeric parsing, production endian
+decoding, checked geometric allocation growth, atomic recovery-state
+publication and durable recovery-state removal into Common. Filesystem record
+formats, validation, transaction stages, geometry, relocation policy and the
+strict FAT/exFAT destructive CLI quantity grammars remain Defragger-owned.
+Recovery paths retain byte-exact persisted path values; only generic mechanics
+are shared.
 
 ## Release controls and decision
 

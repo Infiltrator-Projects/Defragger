@@ -3,6 +3,7 @@
 #include "ld_runtime.h"
 
 #include "infiltratr/endian.h"
+#include "infiltratr/arithmetic.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -114,12 +115,9 @@ void xfs_clear_error(char **error) {
 }
 
 static void *grow(void *items, size_t *capacity, size_t count, size_t item_size) {
-    if (count < *capacity) return items;
-    size_t next = *capacity == 0 ? 16U : *capacity * 2U;
-    if (next < count + 1U) next = count + 1U;
-    if (item_size != 0 && next > SIZE_MAX / item_size) ld_die("XFS native vector is too large");
-    items = ld_xrealloc(items, next * item_size);
-    *capacity = next;
+    if (count == SIZE_MAX ||
+        !infiltratr_array_reserve(&items, capacity, item_size, count + 1U, 16U))
+        ld_die("XFS native vector is too large");
     return items;
 }
 

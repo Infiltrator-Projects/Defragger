@@ -13,6 +13,7 @@
 
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "infiltratr/arithmetic.h"
 
 typedef struct {
     uint64_t disk_offset;
@@ -30,15 +31,10 @@ static void extent_list_push(
     IoExtentList *list,
     IoExtent extent
 ) {
-    if (list->length == list->capacity) {
-        size_t new_capacity =
-            list->capacity == 0 ? 16 : list->capacity * 2;
-        list->items = ld_xrealloc(
-            list->items,
-            new_capacity * sizeof(*list->items)
-        );
-        list->capacity = new_capacity;
-    }
+    if (list->length == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&list->items, &list->capacity,
+                                  sizeof(*list->items), list->length + 1U, 16U))
+        ld_die("cannot grow FAT I/O extent list");
     list->items[list->length++] = extent;
 }
 
