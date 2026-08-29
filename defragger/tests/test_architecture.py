@@ -341,10 +341,10 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
         "hfsplus": workers["hfsplus"],
     }
     for name, path in journal_sources.items():
-        assert "ld_path_open_atomic_temp" in path.read_text(), (
-            f"{name} journal temp creation lost exclusive no-follow handling"
+        assert "infiltratr_atomic_file_write" in path.read_text(), (
+            f"{name} journal lost Common durable atomic-file handling"
         )
-    assert "ld_path_open_atomic_temp" in (
+    assert "infiltratr_atomic_file_write" in (
         native / "exfat" / "native" / "exfat_relayout.c"
     ).read_text()
 
