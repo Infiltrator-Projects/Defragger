@@ -14,6 +14,9 @@
 #include "ld_runtime.h"
 #include "ld_path.h"
 #include "infiltratr/core.h"
+#include "infiltratr/arithmetic.h"
+#include "infiltratr/posix.h"
+#include "infiltratr/token.h"
 #include "fat_journal.h"
 
 void journal_free(Journal *j) {
@@ -30,13 +33,18 @@ void relocation_journal_free(RelocationJournal *j) {
 }
 
 void relocation_journal_add_move(RelocationJournal *j, RelocationMove move) {
-    j->moves = ld_xrealloc(j->moves, (j->move_count + 1) * sizeof(*j->moves));
+    if (!infiltratr_array_reserve((void **)&j->moves, &j->move_capacity,
+                                  sizeof(*j->moves), j->move_count + 1U, 64U))
+        ld_die("cannot grow FAT relocation move list");
     j->moves[j->move_count++] = move;
 }
 
 void relocation_journal_add_dir_patch(RelocationJournal *j, RelocationDirPatch patch) {
-    j->dir_patches = ld_xrealloc(j->dir_patches,
-                              (j->dir_patch_count + 1) * sizeof(*j->dir_patches));
+    if (!infiltratr_array_reserve((void **)&j->dir_patches,
+                                  &j->dir_patch_capacity,
+                                  sizeof(*j->dir_patches),
+                                  j->dir_patch_count + 1U, 64U))
+        ld_die("cannot grow FAT relocation directory-patch list");
     j->dir_patches[j->dir_patch_count++] = patch;
 }
 
@@ -78,34 +86,50 @@ static JournalStage parse_stage_value(const char *text) {
     return (JournalStage)value;
 }
 
-void relocation_journal_write(const char *path, const RelocationJournal *j) {
-    char *tmp = NULL;
-    FILE *fp = ld_path_open_atomic_temp(path, &tmp);
-    if (fp == NULL) ld_die_errno("create relocation journal");
-    fprintf(fp, "%s\n", RELOCATION_JOURNAL_MAGIC);
-    fprintf(fp, "device=%s\n", j->device_path);
-    fprintf(fp, "volume_id=%08" PRIx32 "\n", j->volume_id);
-    fprintf(fp, "stage=%d\n", (int)j->stage);
-    fprintf(fp, "root_old=%" PRIu32 "\n", j->root_old);
-    fprintf(fp, "root_new=%" PRIu32 "\n", j->root_new);
-    fprintf(fp, "move_count=%zu\n", j->move_count);
+static bool parse_csv_u64(const char *text, uint64_t *values, size_t count) {
+    const char *cursor = text;
+    for (size_t index = 0U; index < count; ++index) {
+        if (!infiltratr_parse_u64_token(&cursor, 10U, &values[index]))
+            return false;
+        if (index + 1U < count) {
+            if (*cursor != ',') return false;
+            cursor++;
+        }
+    }
+    return *cursor == '\0';
+}
+
+static bool relocation_journal_write_stream(FILE *file, const void *user_data) {
+    const RelocationJournal *j = user_data;
+    fprintf(file, "%s\n", RELOCATION_JOURNAL_MAGIC);
+    fprintf(file, "device=%s\n", j->device_path);
+    fprintf(file, "volume_id=%08" PRIx32 "\n", j->volume_id);
+    fprintf(file, "stage=%d\n", (int)j->stage);
+    fprintf(file, "root_old=%" PRIu32 "\n", j->root_old);
+    fprintf(file, "root_new=%" PRIu32 "\n", j->root_new);
+    fprintf(file, "move_count=%zu\n", j->move_count);
     for (size_t i = 0; i < j->move_count; i++) {
         const RelocationMove *m = &j->moves[i];
-        fprintf(fp, "move=%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 "\n",
+        fprintf(file, "move=%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 "\n",
                 m->source, m->destination, m->next, m->predecessor);
     }
-    fprintf(fp, "dir_patch_count=%zu\n", j->dir_patch_count);
+    fprintf(file, "dir_patch_count=%zu\n", j->dir_patch_count);
     for (size_t i = 0; i < j->dir_patch_count; i++) {
         const RelocationDirPatch *p = &j->dir_patches[i];
-        fprintf(fp, "dir_patch=%" PRIu64 ",%" PRIu32 ",%" PRIu32 "\n",
+        fprintf(file, "dir_patch=%" PRIu64 ",%" PRIu32 ",%" PRIu32 "\n",
                 p->offset, p->old_target, p->new_target);
     }
-    if (fflush(fp) != 0) ld_die_errno("flush relocation journal");
-    if (fsync(fileno(fp)) != 0) ld_die_errno("fsync relocation journal");
-    if (fclose(fp) != 0) ld_die_errno("close relocation journal");
-    if (rename(tmp, path) != 0) ld_die_errno("install relocation journal");
-    ld_path_fsync_parent(path);
-    free(tmp);
+    return !ferror(file);
+}
+
+void relocation_journal_write(const char *path, const RelocationJournal *j) {
+    const int failure = infiltratr_atomic_file_write(
+        path, INFILTRATR_ATOMIC_FILE_PRIVATE,
+        relocation_journal_write_stream, j);
+    if (failure != 0) {
+        errno = failure;
+        ld_die_errno("write relocation journal");
+    }
 }
 
 bool journal_has_magic(const char *path, const char *magic) {
@@ -144,9 +168,29 @@ Journal journal_read(const char *path) {
         else if (strcmp(line, "dest_start") == 0) j.dest_start = parse_u32_value(eq, 10U, "dest_start");
         else if (strcmp(line, "count") == 0) expected_count = parse_size_value(eq, "count");
         else if (strcmp(line, "source") == 0) {
-            char *save = NULL;
-            for (char *tok = strtok_r(eq, ",", &save); tok != NULL; tok = strtok_r(NULL, ",", &save)) {
-                u32vec_push(&j.source, parse_u32_value(tok, 10U, "source cluster"));
+            const char *cursor = eq;
+            if (*cursor == '\0') {
+                journal_free(&j);
+                ld_die("invalid FAT journal source cluster list");
+            }
+            for (;;) {
+                uint64_t value = 0U;
+                if (!infiltratr_parse_u64_token(&cursor, 10U, &value) ||
+                    value > UINT32_MAX) {
+                    journal_free(&j);
+                    ld_die("invalid FAT journal source cluster list");
+                }
+                u32vec_push(&j.source, (uint32_t)value);
+                if (*cursor == '\0') break;
+                if (*cursor != ',') {
+                    journal_free(&j);
+                    ld_die("invalid FAT journal source cluster list");
+                }
+                cursor++;
+                if (*cursor == '\0') {
+                    journal_free(&j);
+                    ld_die("invalid FAT journal source cluster list");
+                }
             }
         }
     }
@@ -184,20 +228,32 @@ RelocationJournal relocation_journal_read(const char *path) {
         else if (strcmp(line, "dir_patch_count") == 0) {
             expected_patches = parse_size_value(eq, "dir_patch_count");
         } else if (strcmp(line, "move") == 0) {
-            RelocationMove m = {0};
-            if (sscanf(eq, "%" SCNu32 ",%" SCNu32 ",%" SCNu32 ",%" SCNu32,
-                       &m.source, &m.destination, &m.next, &m.predecessor) != 4) {
+            uint64_t fields[4] = {0};
+            if (!parse_csv_u64(eq, fields, 4U) ||
+                fields[0] > UINT32_MAX || fields[1] > UINT32_MAX ||
+                fields[2] > UINT32_MAX || fields[3] > UINT32_MAX) {
                 relocation_journal_free(&j);
                 ld_die("invalid relocation journal move record");
             }
+            RelocationMove m = {
+                .source = (uint32_t)fields[0],
+                .destination = (uint32_t)fields[1],
+                .next = (uint32_t)fields[2],
+                .predecessor = (uint32_t)fields[3],
+            };
             relocation_journal_add_move(&j, m);
         } else if (strcmp(line, "dir_patch") == 0) {
-            RelocationDirPatch p = {0};
-            if (sscanf(eq, "%" SCNu64 ",%" SCNu32 ",%" SCNu32,
-                       &p.offset, &p.old_target, &p.new_target) != 3) {
+            uint64_t fields[3] = {0};
+            if (!parse_csv_u64(eq, fields, 3U) ||
+                fields[1] > UINT32_MAX || fields[2] > UINT32_MAX) {
                 relocation_journal_free(&j);
                 ld_die("invalid relocation journal directory patch");
             }
+            RelocationDirPatch p = {
+                .offset = fields[0],
+                .old_target = (uint32_t)fields[1],
+                .new_target = (uint32_t)fields[2],
+            };
             relocation_journal_add_dir_patch(&j, p);
         }
     }
@@ -212,8 +268,11 @@ RelocationJournal relocation_journal_read(const char *path) {
 }
 
 void journal_remove(const char *path) {
-    if (unlink(path) != 0 && errno != ENOENT) ld_die_errno("remove journal");
-    ld_path_fsync_parent(path);
+    const int failure = infiltratr_unlink_durable(path, true);
+    if (failure != 0) {
+        errno = failure;
+        ld_die_errno("durably remove journal");
+    }
 }
 
 bool path_exists(const char *path) {

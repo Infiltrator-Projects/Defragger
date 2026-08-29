@@ -13,6 +13,7 @@
 
 #include "infiltratr/endian.h"
 #include "infiltratr/core.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/posix_io.h"
 
 #include <errno.h>
@@ -252,21 +253,13 @@ static size_t record_key_skip(const uint8_t *record, size_t record_length)
 
 static int overflow_append(hfs_volume *volume, const hfs_overflow_record *record)
 {
-    hfs_overflow_record *grown;
-    size_t next;
     if (volume->overflow_count >= HFS_MAX_OVERFLOW_RECORDS)
         return -1;
-    if (volume->overflow_count == volume->overflow_capacity) {
-        next = volume->overflow_capacity ? volume->overflow_capacity * 2U : 256U;
-        if (next > HFS_MAX_OVERFLOW_RECORDS)
-            next = HFS_MAX_OVERFLOW_RECORDS;
-        grown = (hfs_overflow_record *)realloc(volume->overflow,
-                                               next * sizeof(*grown));
-        if (!grown)
-            return -1;
-        volume->overflow = grown;
-        volume->overflow_capacity = next;
-    }
+    if (!infiltratr_array_reserve((void **)&volume->overflow,
+                                  &volume->overflow_capacity,
+                                  sizeof(*volume->overflow),
+                                  volume->overflow_count + 1U, 256U))
+        return -1;
     volume->overflow[volume->overflow_count++] = *record;
     return 0;
 }
@@ -386,18 +379,11 @@ static int extend_special_file(hfs_volume *volume, hfs_fork_map *fork,
 
 static int result_append_extent(hfs_scan_result *result, hfs_extent extent)
 {
-    hfs_extent *grown;
-    size_t next;
-    if (result->fragmented_extent_count == result->fragmented_extent_capacity) {
-        next = result->fragmented_extent_capacity ?
-               result->fragmented_extent_capacity * 2U : 128U;
-        grown = (hfs_extent *)realloc(result->fragmented_extents,
-                                      next * sizeof(*grown));
-        if (!grown)
-            return -1;
-        result->fragmented_extents = grown;
-        result->fragmented_extent_capacity = next;
-    }
+    if (!infiltratr_array_reserve((void **)&result->fragmented_extents,
+                                  &result->fragmented_extent_capacity,
+                                  sizeof(*result->fragmented_extents),
+                                  result->fragmented_extent_count + 1U, 128U))
+        return -1;
     result->fragmented_extents[result->fragmented_extent_count++] = extent;
     return 0;
 }

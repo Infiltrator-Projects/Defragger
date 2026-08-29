@@ -50,8 +50,10 @@ typedef struct {
     uint32_t root_new;
     RelocationMove *moves;
     size_t move_count;
+    size_t move_capacity;
     RelocationDirPatch *dir_patches;
     size_t dir_patch_count;
+    size_t dir_patch_capacity;
 } RelocationJournal;
 
 void journal_free(Journal *journal);
