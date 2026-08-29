@@ -3,6 +3,7 @@
 #include "hfsplus_native.h"
 
 #include "infiltratr/endian.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/posix_io.h"
 
 #include <errno.h>
@@ -118,13 +119,10 @@ static int write_exact(int fd, uint64_t offset, const void *buffer, size_t lengt
 
 static int fork_push_extent(HfsPlusFork *fork, HfsPlusExtent extent) {
     if (!extent.count) return 0;
-    if (fork->extent_count == fork->extent_capacity) {
-        size_t capacity = fork->extent_capacity ? fork->extent_capacity * 2U : 8U;
-        void *next = realloc(fork->extents, capacity * sizeof(*fork->extents));
-        if (!next) return -1;
-        fork->extents = next;
-        fork->extent_capacity = capacity;
-    }
+    if (fork->extent_count == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&fork->extents, &fork->extent_capacity,
+                                  sizeof(*fork->extents), fork->extent_count + 1U, 8U))
+        return -1;
     fork->extents[fork->extent_count++] = extent;
     return 0;
 }
@@ -208,25 +206,19 @@ static int fork_write(const HfsPlusVolume *v, const HfsPlusFork *f, uint64_t off
 }
 
 static int overflow_push(OverflowVec *vec, OverflowRecord item) {
-    if (vec->count == vec->capacity) {
-        size_t capacity = vec->capacity ? vec->capacity * 2U : 32U;
-        void *next = realloc(vec->items, capacity * sizeof(*vec->items));
-        if (!next) return -1;
-        vec->items = next;
-        vec->capacity = capacity;
-    }
+    if (vec->count == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&vec->items, &vec->capacity,
+                                  sizeof(*vec->items), vec->count + 1U, 32U))
+        return -1;
     vec->items[vec->count++] = item;
     return 0;
 }
 
 static int file_push(HfsPlusFileVec *vec, HfsPlusFile item) {
-    if (vec->count == vec->capacity) {
-        size_t capacity = vec->capacity ? vec->capacity * 2U : 64U;
-        void *next = realloc(vec->items, capacity * sizeof(*vec->items));
-        if (!next) return -1;
-        vec->items = next;
-        vec->capacity = capacity;
-    }
+    if (vec->count == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&vec->items, &vec->capacity,
+                                  sizeof(*vec->items), vec->count + 1U, 64U))
+        return -1;
     vec->items[vec->count++] = item;
     return 0;
 }

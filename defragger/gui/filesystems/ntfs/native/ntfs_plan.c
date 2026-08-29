@@ -4,6 +4,7 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "ld_stop.h"
+#include "infiltratr/arithmetic.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -31,9 +32,9 @@ static int sql_exec(sqlite3 *db, const char *sql, char **error) {
     char *message=NULL; int code=sqlite3_exec(db,sql,NULL,NULL,&message);
     if(code!=SQLITE_OK){ntfs_set_error(error,"NTFS plan database: %s",message?message:sqlite3_errmsg(db));sqlite3_free(message);return -1;}return 0;
 }
-static void placement_push(NtfsPlacementVec *vec,NtfsPlacement item){if(vec->count==vec->capacity){size_t n=vec->capacity?vec->capacity*2U:32U;vec->items=ld_xrealloc(vec->items,n*sizeof(*vec->items));vec->capacity=n;}vec->items[vec->count++]=item;}
+static void placement_push(NtfsPlacementVec *vec,NtfsPlacement item){if(vec->count==SIZE_MAX||!infiltratr_array_reserve((void**)&vec->items,&vec->capacity,sizeof(*vec->items),vec->count+1U,32U))ld_die("cannot grow NTFS placement list");vec->items[vec->count++]=item;}
 void ntfs_placements_free(NtfsPlacementVec *p){if(!p)return;free(p->items);memset(p,0,sizeof(*p));}
-static void free_push(FreeVec *vec,uint64_t start,uint64_t length){if(!length)return;if(vec->count==vec->capacity){size_t n=vec->capacity?vec->capacity*2U:32U;vec->items=ld_xrealloc(vec->items,n*sizeof(*vec->items));vec->capacity=n;}vec->items[vec->count++]=(FreeRun){start,length};}
+static void free_push(FreeVec *vec,uint64_t start,uint64_t length){if(!length)return;if(vec->count==SIZE_MAX||!infiltratr_array_reserve((void**)&vec->items,&vec->capacity,sizeof(*vec->items),vec->count+1U,32U))ld_die("cannot grow NTFS free-run list");vec->items[vec->count++]=(FreeRun){start,length};}
 static int cmp_plan_item(const void *left,const void *right){const PlanItem *a=left,*b=right;if(a->stream->directory!=b->stream->directory)return a->stream->directory?-1:1;int name=strcasecmp(a->stream->file_name,b->stream->file_name);if(name)return name;if(a->stream->record_number<b->stream->record_number)return -1;if(a->stream->record_number>b->stream->record_number)return 1;if(a->stream->attribute_offset<b->stream->attribute_offset)return -1;if(a->stream->attribute_offset>b->stream->attribute_offset)return 1;return 0;}
 static uint64_t stream_span(const NtfsStream *s,bool growth){uint64_t reserve=growth&&s->attribute_type==NTFS_ATTR_DATA?(s->clusters*10U+99U)/100U:0U;return s->clusters+reserve;}
 static void set_stream_free(NtfsLayout *layout,const NtfsStream *s){for(size_t r=0;r<s->runs.count;++r){NtfsRun run=s->runs.items[r];if(run.sparse)continue;for(uint64_t c=0;c<run.length;++c)ntfs_bitmap_set(layout,run.lcn+c,false);}}

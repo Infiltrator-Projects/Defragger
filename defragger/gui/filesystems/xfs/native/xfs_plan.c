@@ -3,6 +3,7 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "ld_stop.h"
+#include "infiltratr/arithmetic.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -14,11 +15,9 @@
 #include <unistd.h>
 
 static void *vector_grow(void *items, size_t *capacity, size_t count, size_t item_size) {
-    if (count < *capacity) return items;
-    size_t next = *capacity == 0 ? 16U : *capacity * 2U;
-    if (next > SIZE_MAX / item_size) ld_die("XFS plan vector overflow");
-    items = ld_xrealloc(items, next * item_size);
-    *capacity = next;
+    if (count == SIZE_MAX ||
+        !infiltratr_array_reserve(&items, capacity, item_size, count + 1U, 16U))
+        ld_die("XFS plan vector growth failed");
     return items;
 }
 

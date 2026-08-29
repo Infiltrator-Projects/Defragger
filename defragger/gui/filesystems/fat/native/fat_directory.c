@@ -17,6 +17,7 @@
 
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "infiltratr/arithmetic.h"
 
 #define FAT_PROGRAM_NAME "linux-defragger-fat-worker"
 #define MAX_RECURSION_DEPTH 128U
@@ -30,11 +31,10 @@ typedef struct {
 } LfnState;
 
 static void dirreflist_push(DirRefList *list, DirRef ref) {
-    if (list->len == list->cap) {
-        size_t new_cap = list->cap == 0 ? 128 : list->cap * 2;
-        list->v = ld_xrealloc(list->v, new_cap * sizeof(*list->v));
-        list->cap = new_cap;
-    }
+    if (list->len == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&list->v, &list->cap, sizeof(*list->v),
+                                  list->len + 1U, 128U))
+        ld_die("cannot grow FAT directory-reference list");
     list->v[list->len++] = ref;
 }
 
@@ -44,11 +44,10 @@ void dirreflist_free(DirRefList *list) {
 }
 
 static void filelist_push(FileList *list, FileRecord record) {
-    if (list->len == list->cap) {
-        size_t new_cap = list->cap == 0 ? 128 : list->cap * 2;
-        list->v = ld_xrealloc(list->v, new_cap * sizeof(*list->v));
-        list->cap = new_cap;
-    }
+    if (list->len == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&list->v, &list->cap, sizeof(*list->v),
+                                  list->len + 1U, 128U))
+        ld_die("cannot grow FAT file list");
     list->v[list->len++] = record;
 }
 

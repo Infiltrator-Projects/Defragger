@@ -13,18 +13,15 @@
 
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "infiltratr/arithmetic.h"
 
 #define PROGRAM_NAME "linux-defragger-fat-worker"
 
 void u32vec_push(U32Vec *vector, uint32_t value) {
-    if (vector->len == vector->cap) {
-        size_t new_cap = vector->cap == 0 ? 16 : vector->cap * 2;
-        vector->v = ld_xrealloc(
-            vector->v,
-            new_cap * sizeof(*vector->v)
-        );
-        vector->cap = new_cap;
-    }
+    if (vector->len == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&vector->v, &vector->cap,
+                                  sizeof(*vector->v), vector->len + 1U, 16U))
+        ld_die("cannot grow FAT cluster vector");
     vector->v[vector->len++] = value;
 }
 

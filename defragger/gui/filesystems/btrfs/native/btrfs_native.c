@@ -2,6 +2,7 @@
 #include "btrfs_native.h"
 
 #include "infiltratr/endian.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/posix_io.h"
 
 #include <errno.h>
@@ -238,20 +239,14 @@ static int read_exact(const Reader *reader, uint64_t offset, void *buffer, size_
 static int grow_array(void **items, size_t *capacity, size_t count, size_t item_size,
                       char *error, size_t error_size)
 {
-    if (count < *capacity)
-        return 0;
-    size_t next = *capacity == 0U ? 16U : *capacity * 2U;
-    if (next < *capacity || next > SIZE_MAX / item_size) {
+    if (count == SIZE_MAX) {
         set_error(error, error_size, "Btrfs metadata collection is too large");
         return -1;
     }
-    void *replacement = realloc(*items, next * item_size);
-    if (replacement == NULL) {
-        set_error(error, error_size, "out of memory analysing Btrfs metadata");
+    if (!infiltratr_array_reserve(items, capacity, item_size, count + 1U, 16U)) {
+        set_error(error, error_size, "out of memory or size range analysing Btrfs metadata");
         return -1;
     }
-    *items = replacement;
-    *capacity = next;
     return 0;
 }
 

@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "ld_runtime.h"
+#include "infiltratr/arithmetic.h"
 #include "fat_relayout.h"
 
 static uint32_t chain_min_cluster(const U32Vec *chain) {
@@ -18,11 +19,10 @@ static uint32_t chain_min_cluster(const U32Vec *chain) {
 }
 
 static void relayout_object_list_push(FatRelayoutObjectList *list, FatRelayoutObject object) {
-    if (list->len == list->cap) {
-        size_t new_cap = list->cap == 0 ? 128 : list->cap * 2;
-        list->v = ld_xrealloc(list->v, new_cap * sizeof(*list->v));
-        list->cap = new_cap;
-    }
+    if (list->len == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&list->v, &list->cap, sizeof(*list->v),
+                                  list->len + 1U, 128U))
+        ld_die("cannot grow FAT relayout object list");
     list->v[list->len++] = object;
 }
 

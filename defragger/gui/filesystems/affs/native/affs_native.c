@@ -3,6 +3,7 @@
 #include "affs_native.h"
 
 #include "infiltratr/endian.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/posix_io.h"
 
 #include <errno.h>
@@ -58,25 +59,19 @@ void affs_set_error(char **e, const char *fmt, ...) {
 }
 
 static int push(AffsU32Vec *a, uint32_t x) {
-    if (a->n == a->cap) {
-        size_t c = a->cap ? a->cap * 2U : 16U;
-        void *p = realloc(a->v, c * sizeof(*a->v));
-        if (!p) return -1;
-        a->v = p;
-        a->cap = c;
-    }
+    if (a->n == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&a->v, &a->cap, sizeof(*a->v),
+                                  a->n + 1U, 16U))
+        return -1;
     a->v[a->n++] = x;
     return 0;
 }
 
 static int fpush(AffsFileVec *a, AffsFile x) {
-    if (a->n == a->cap) {
-        size_t c = a->cap ? a->cap * 2U : 32U;
-        void *p = realloc(a->v, c * sizeof(*a->v));
-        if (!p) return -1;
-        a->v = p;
-        a->cap = c;
-    }
+    if (a->n == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&a->v, &a->cap, sizeof(*a->v),
+                                  a->n + 1U, 32U))
+        return -1;
     a->v[a->n++] = x;
     return 0;
 }
