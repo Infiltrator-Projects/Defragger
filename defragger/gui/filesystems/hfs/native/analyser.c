@@ -12,6 +12,7 @@
 #define _FILE_OFFSET_BITS 64
 
 #include "infiltratr/endian.h"
+#include "infiltratr/core.h"
 #include "infiltratr/posix_io.h"
 
 #include <errno.h>
@@ -729,16 +730,8 @@ static int identify_json(const char *device)
 
 static int parse_cells(const char *text, uint64_t *cells)
 {
-    unsigned long long value;
-    char *end = NULL;
-    if (!text || !*text)
-        return -1;
-    errno = 0;
-    value = strtoull(text, &end, 10);
-    if (errno || end == text || *end != '\0' || value == 0ULL)
-        return -1;
-    *cells = (uint64_t)value;
-    return 0;
+    return infiltratr_parse_u64_range(text, 10U, 1U, UINT64_MAX, cells)
+        ? 0 : -1;
 }
 
 static int map_json(const char *device, uint64_t requested_cells)

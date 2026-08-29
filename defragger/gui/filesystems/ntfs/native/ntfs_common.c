@@ -2,6 +2,8 @@
 #include "ntfs_native.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/arithmetic.h"
+#include "infiltratr/endian.h"
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
@@ -35,26 +37,23 @@ void ntfs_set_error(char **error, const char *format, ...) {
 
 uint16_t ntfs_u16(const void *data, size_t offset) {
     const uint8_t *p = data;
-    return (uint16_t)p[offset] | ((uint16_t)p[offset + 1U] << 8);
+    return infiltratr_load_le16(p + offset);
 }
 uint32_t ntfs_u32(const void *data, size_t offset) {
     const uint8_t *p = data;
-    return (uint32_t)p[offset] | ((uint32_t)p[offset + 1U] << 8) |
-           ((uint32_t)p[offset + 2U] << 16) | ((uint32_t)p[offset + 3U] << 24);
+    return infiltratr_load_le32(p + offset);
 }
 uint64_t ntfs_u64(const void *data, size_t offset) {
     const uint8_t *p = data;
-    uint64_t value = 0;
-    for (unsigned index = 0; index < 8U; ++index)
-        value |= (uint64_t)p[offset + index] << (index * 8U);
-    return value;
+    return infiltratr_load_le64(p + offset);
 }
 void ntfs_put_u16(void *data, size_t offset, uint16_t value) {
-    uint8_t *p = data; p[offset] = (uint8_t)value; p[offset + 1U] = (uint8_t)(value >> 8);
+    uint8_t *p = data;
+    infiltratr_store_le16(p + offset, value);
 }
 void ntfs_put_u64(void *data, size_t offset, uint64_t value) {
     uint8_t *p = data;
-    for (unsigned index = 0; index < 8U; ++index) p[offset + index] = (uint8_t)(value >> (index * 8U));
+    infiltratr_store_le64(p + offset, value);
 }
 
 void ntfs_runs_free(NtfsRunVec *runs) {
@@ -78,11 +77,9 @@ int ntfs_runs_push(NtfsRunVec *runs, uint64_t lcn, uint64_t length, bool sparse)
             return 0;
         }
     }
-    if (runs->count == runs->capacity) {
-        size_t next = runs->capacity == 0 ? 8U : runs->capacity * 2U;
-        runs->items = ld_xrealloc(runs->items, next * sizeof(*runs->items));
-        runs->capacity = next;
-    }
+    if (!infiltratr_array_reserve((void **)&runs->items, &runs->capacity,
+                                  sizeof(*runs->items), runs->count + 1U, 8U))
+        ld_die("cannot grow NTFS run list");
     runs->items[runs->count++] = (NtfsRun){.lcn=lcn,.length=length,.sparse=sparse};
     return 0;
 }
@@ -330,7 +327,9 @@ void ntfs_attributes_free(NtfsAttributeVec *attributes) {
     free(attributes->items); memset(attributes,0,sizeof(*attributes));
 }
 static NtfsAttribute *attr_push(NtfsAttributeVec *vec) {
-    if(vec->count==vec->capacity){size_t next=vec->capacity?vec->capacity*2U:8U;vec->items=ld_xrealloc(vec->items,next*sizeof(*vec->items));vec->capacity=next;}
+    if (!infiltratr_array_reserve((void **)&vec->items, &vec->capacity,
+                                  sizeof(*vec->items), vec->count + 1U, 8U))
+        ld_die("cannot grow NTFS attribute list");
     NtfsAttribute *a=&vec->items[vec->count++]; memset(a,0,sizeof(*a)); return a;
 }
 static void decode_utf16_ascii(const uint8_t *data, size_t chars, char *out, size_t cap) {

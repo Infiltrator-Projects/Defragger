@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "zfs_native.h"
 #include "version.h"
+#include "infiltratr/core.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -21,15 +22,8 @@ static void usage(FILE *stream)
 
 static int parse_cells(const char *text, uint64_t *cells)
 {
-    if (text == NULL || *text == '\0')
-        return -1;
-    errno = 0;
-    char *end = NULL;
-    const unsigned long long value = strtoull(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0' || value == 0ULL)
-        return -1;
-    *cells = (uint64_t)value;
-    return 0;
+    return infiltratr_parse_u64_range(text, 10U, 1U, UINT64_MAX, cells)
+        ? 0 : -1;
 }
 
 static void print_summary_json(const LdZfsSummary *summary, int detailed)

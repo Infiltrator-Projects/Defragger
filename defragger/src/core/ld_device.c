@@ -4,6 +4,7 @@
 
 #include "infiltratr/core.h"
 #include "infiltratr/posix.h"
+#include "infiltratr/token.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -45,15 +46,26 @@ static bool ld_add_related_device(LdRelatedDevice *devices, size_t *count,
     return true;
 }
 
+static bool ld_parse_device_number(const char *text, dev_t *result) {
+    if (text == NULL || result == NULL) return false;
+    const char *cursor = text;
+    uint64_t found_major = 0U;
+    uint64_t found_minor = 0U;
+    if (!infiltratr_parse_u64_token(&cursor, 10U, &found_major) ||
+        found_major > UINT_MAX || *cursor != ':')
+        return false;
+    cursor++;
+    if (!infiltratr_parse_u64_token(&cursor, 10U, &found_minor) ||
+        found_minor > UINT_MAX || *cursor != '\0')
+        return false;
+    *result = makedev((unsigned)found_major, (unsigned)found_minor);
+    return true;
+}
+
 static bool ld_read_sysfs_device(const char *path, dev_t *result) {
-    FILE *file = fopen(path, "r");
-    if (file == NULL) return false;
-    unsigned found_major = 0;
-    unsigned found_minor = 0;
-    bool valid = fscanf(file, "%u:%u", &found_major, &found_minor) == 2;
-    fclose(file);
-    if (valid) *result = makedev(found_major, found_minor);
-    return valid;
+    char text[64];
+    return infiltratr_read_text_file(path, text, sizeof(text)) &&
+           ld_parse_device_number(text, result);
 }
 
 static bool ld_resolve_sysfs_device(dev_t device, char *path, size_t size) {
@@ -161,8 +173,6 @@ bool ld_device_number_is_mounted(dev_t device_number) {
     size_t capacity = 0;
     bool mounted = false;
     while (getline(&line, &capacity, file) >= 0) {
-        unsigned found_major = 0;
-        unsigned found_minor = 0;
         char *cursor = line;
         int field = 0;
         while (*cursor != '\0') {
@@ -170,15 +180,21 @@ bool ld_device_number_is_mounted(dev_t device_number) {
             if (*cursor == '\0') break;
             field++;
             char *end = strchr(cursor, ' ');
-            if (field == 3 && sscanf(cursor, "%u:%u", &found_major, &found_minor) == 2) {
-                dev_t found = makedev(found_major, found_minor);
-                for (size_t index = 0; index < related_count; ++index) {
-                    if (related[index].value == found) {
-                        mounted = true;
-                        break;
+            if (field == 3) {
+                const char saved = end == NULL ? '\0' : *end;
+                if (end != NULL) *end = '\0';
+                dev_t found = 0;
+                const bool valid = ld_parse_device_number(cursor, &found);
+                if (end != NULL) *end = saved;
+                if (valid) {
+                    for (size_t index = 0; index < related_count; ++index) {
+                        if (related[index].value == found) {
+                            mounted = true;
+                            break;
+                        }
                     }
+                    if (mounted) break;
                 }
-                if (mounted) break;
             }
             if (end == NULL) break;
             cursor = end + 1;

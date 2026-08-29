@@ -2,6 +2,7 @@
 #include "minix_native.h"
 
 #include "ld_io.h"
+#include "infiltratr/endian.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -53,23 +54,12 @@ static void minix_error(char *error, size_t error_size, const char *message)
 
 static uint16_t minix_u16(const uint8_t *p, bool little_endian)
 {
-    if (little_endian)
-        return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
-    return (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
+    return little_endian ? infiltratr_load_le16(p) : infiltratr_load_be16(p);
 }
 
 static uint32_t minix_u32(const uint8_t *p, bool little_endian)
 {
-    if (little_endian) {
-        return (uint32_t)p[0] |
-               ((uint32_t)p[1] << 8) |
-               ((uint32_t)p[2] << 16) |
-               ((uint32_t)p[3] << 24);
-    }
-    return ((uint32_t)p[0] << 24) |
-           ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) |
-           (uint32_t)p[3];
+    return little_endian ? infiltratr_load_le32(p) : infiltratr_load_be32(p);
 }
 
 static bool minix_magic_v1_v2(uint16_t magic)

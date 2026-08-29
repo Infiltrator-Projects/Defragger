@@ -15,10 +15,10 @@ set(INFILTRATR_COMMON_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/shared/infiltratr-common")
 set(INFILTRATR_COMMON_URL
     "https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git")
-set(INFILTRATR_COMMON_TAG "v1.15.0")
-set(INFILTRATR_COMMON_EXPECTED_VERSION "1.15.0")
+set(INFILTRATR_COMMON_TAG "v1.15.4")
+set(INFILTRATR_COMMON_EXPECTED_VERSION "1.15.4")
 set(INFILTRATR_COMMON_EXPECTED_COMMIT
-    "d623410f55a071020539fae3f47682896473bd6f")
+    "046406bea2aefa539c74e1038b6c20825eca8af7")
 
 if(NOT EXISTS "${INFILTRATR_COMMON_DIR}/VERSION")
     find_program(LD_GIT_EXECUTABLE git REQUIRED)
@@ -126,7 +126,8 @@ if(LD_ENABLE_SANITIZERS)
 endif()
 
 # Infiltratr Common owns generic parsing, arithmetic, byte-order, exact-I/O,
-# string, path and sysfs primitives. Consume its authoritative package target
+# checked allocation growth, strings, paths, sysfs primitives and generic
+# durable file publication/removal. Consume its authoritative package target
 # so every source dependency and transitive platform library remains defined by
 # Common itself. Application-specific device safety, staging, Stop and
 # filesystem transaction mechanics remain local to Defragger.

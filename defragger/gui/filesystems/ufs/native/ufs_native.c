@@ -2,6 +2,7 @@
 #include "ufs_native.h"
 
 #include "ld_io.h"
+#include "infiltratr/endian.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -87,29 +88,12 @@ static bool ufs_little_endian(LdUfsVariant variant)
 
 static uint32_t read_u32(const uint8_t *data, bool little)
 {
-    if (little) {
-        return (uint32_t)data[0] |
-               ((uint32_t)data[1] << 8) |
-               ((uint32_t)data[2] << 16) |
-               ((uint32_t)data[3] << 24);
-    }
-    return ((uint32_t)data[0] << 24) |
-           ((uint32_t)data[1] << 16) |
-           ((uint32_t)data[2] << 8) |
-           (uint32_t)data[3];
+    return little ? infiltratr_load_le32(data) : infiltratr_load_be32(data);
 }
 
 static uint64_t read_u64(const uint8_t *data, bool little)
 {
-    uint64_t value = 0U;
-    if (little) {
-        for (unsigned int index = 0U; index < 8U; ++index)
-            value |= (uint64_t)data[index] << (index * 8U);
-    } else {
-        for (unsigned int index = 0U; index < 8U; ++index)
-            value = (value << 8) | data[index];
-    }
-    return value;
+    return little ? infiltratr_load_le64(data) : infiltratr_load_be64(data);
 }
 
 static bool power_of_two_u32(uint32_t value)
