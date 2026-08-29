@@ -3,6 +3,7 @@
 #include "version.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/posix.h"
 #include "infiltratr/endian.h"
 #include "ld_device.h"
 #include "ld_io.h"
@@ -82,9 +83,12 @@ static bool safe_value(const char *value) {
 
 static void unlink_if_exists(const char *path) {
     if (path == NULL || *path == '\0') return;
-    if (unlink(path) != 0 && errno != ENOENT)
-        fprintf(stderr, "%s: warning: cannot remove %s: %s\n", PROG, path, strerror(errno));
+    const int failure = infiltratr_unlink_durable(path, true);
+    if (failure != 0)
+        fprintf(stderr, "%s: warning: cannot durably remove %s: %s\n",
+                PROG, path, strerror(failure));
 }
+
 
 static void journal_free(HfsPlusJournal *state) {
     if (state == NULL) return;
@@ -113,25 +117,8 @@ static int ensure_directory_tree(const char *path, char **error) {
     return 0;
 }
 
-static int journal_save(const char *path, const HfsPlusJournal *state, char **error) {
-    if (!safe_value(state->device) || !safe_value(state->target_identity) ||
-        !safe_value(state->stage)) {
-        hfsplus_set_error(error, "HFS+ transaction paths contain unsupported journal characters");
-        return -1;
-    }
-    char *parent = ld_path_parent_directory(path);
-    if (ensure_directory_tree(parent, error) != 0) {
-        free(parent);
-        return -1;
-    }
-    free(parent);
-    char *temporary = NULL;
-    FILE *file = ld_path_open_atomic_temp(path, &temporary);
-    if (file == NULL) {
-        hfsplus_set_error(error, "cannot create HFS+ recovery journal: %s", strerror(errno));
-        free(temporary);
-        return -1;
-    }
+static bool journal_write_stream(FILE *file, const void *user_data) {
+    const HfsPlusJournal *state = user_data;
     fprintf(file, "%s\n", JOURNAL_MAGIC);
     fprintf(file, "device=%s\n", state->device);
     fprintf(file, "target_identity=%s\n", state->target_identity);
@@ -146,20 +133,28 @@ static int journal_save(const char *path, const HfsPlusJournal *state, char **er
     fprintf(file, "total_blocks=%u\n", state->total_blocks);
     fprintf(file, "signature=%u\n", (unsigned)state->signature);
     fprintf(file, "version=%u\n", (unsigned)state->version);
-    if (fflush(file) != 0 || fsync(fileno(file)) != 0 || fclose(file) != 0) {
-        hfsplus_set_error(error, "cannot sync HFS+ recovery journal: %s", strerror(errno));
-        unlink_if_exists(temporary);
-        free(temporary);
+    return !ferror(file);
+}
+
+static int journal_save(const char *path, const HfsPlusJournal *state, char **error) {
+    if (!safe_value(state->device) || !safe_value(state->target_identity) ||
+        !safe_value(state->stage)) {
+        hfsplus_set_error(error, "HFS+ transaction paths contain unsupported journal characters");
         return -1;
     }
-    if (rename(temporary, path) != 0) {
-        hfsplus_set_error(error, "cannot publish HFS+ recovery journal: %s", strerror(errno));
-        unlink_if_exists(temporary);
-        free(temporary);
+    char *parent = ld_path_parent_directory(path);
+    if (ensure_directory_tree(parent, error) != 0) {
+        free(parent);
         return -1;
     }
-    free(temporary);
-    ld_path_fsync_parent(path);
+    free(parent);
+    const int failure = infiltratr_atomic_file_write(
+        path, INFILTRATR_ATOMIC_FILE_PRIVATE, journal_write_stream, state);
+    if (failure != 0) {
+        hfsplus_set_error(error, "cannot publish HFS+ recovery journal: %s",
+                          strerror(failure));
+        return -1;
+    }
     return 0;
 }
 
@@ -256,7 +251,6 @@ static int journal_phase(const char *path, HfsPlusJournal *state,
 static void transaction_cleanup(const char *journal, const HfsPlusJournal *state) {
     if (state != NULL) unlink_if_exists(state->stage);
     unlink_if_exists(journal);
-    ld_path_fsync_parent(journal);
 }
 
 static char *stage_name(const char *journal) {

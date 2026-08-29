@@ -18,6 +18,9 @@
 #include "ld_runtime.h"
 #include "ld_stop.h"
 #include "version.h"
+#include "infiltratr/core.h"
+#include "infiltratr/posix.h"
+#include "infiltratr/token.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -106,24 +109,8 @@ static int ensure_directory_tree(const char *path, char **error) {
     return 0;
 }
 
-static int save_manifest(const char *journal_path,
-                         const ExfatRelayoutManifest *manifest,
-                         char **error) {
-    char *parent = ld_path_parent_directory(journal_path);
-    if (ensure_directory_tree(parent, error) != 0) {
-        free(parent);
-        return -1;
-    }
-    free(parent);
-
-    char *temporary = NULL;
-    FILE *file = ld_path_open_atomic_temp(journal_path, &temporary);
-    if (file == NULL) {
-        exfat_set_error(error, "cannot create exFAT relayout journal: %s",
-                        strerror(errno));
-        free(temporary);
-        return -1;
-    }
+static bool write_manifest_stream(FILE *file, const void *user_data) {
+    const ExfatRelayoutManifest *manifest = user_data;
     fprintf(file, "%s\n", EXFAT_RELAYOUT_MAGIC);
     fprintf(file, "serial=%u\n", manifest->serial);
     fprintf(file, "volume_bytes=%" PRIu64 "\n", manifest->volume_bytes);
@@ -141,47 +128,51 @@ static int save_manifest(const char *journal_path,
         fprintf(file,
                 "record=%u,%u,%u,%u,%u,%" PRIu64 ",%" PRIu64 ",%u,%" PRIu64
                 ",%" PRIu64 ",%" PRIu64 ",%u,%u\n",
-                (unsigned)record->kind,
-                record->target_start,
-                record->staged_start,
-                record->clusters,
-                record->reserve_clusters,
-                record->parent_index,
-                record->entry_offset,
-                record->entry_count,
-                record->system_entry_offset,
-                record->data_length,
-                record->valid_length,
-                record->regular_file ? 1U : 0U,
+                (unsigned)record->kind, record->target_start, record->staged_start,
+                record->clusters, record->reserve_clusters, record->parent_index,
+                record->entry_offset, record->entry_count,
+                record->system_entry_offset, record->data_length,
+                record->valid_length, record->regular_file ? 1U : 0U,
                 record->directory ? 1U : 0U);
     }
-    if (fflush(file) != 0 || fsync(fileno(file)) != 0 || fclose(file) != 0) {
-        exfat_set_error(error, "cannot sync exFAT relayout journal: %s",
-                        strerror(errno));
-        unlink(temporary);
-        free(temporary);
+    return !ferror(file);
+}
+
+static int save_manifest(const char *journal_path,
+                         const ExfatRelayoutManifest *manifest,
+                         char **error) {
+    char *parent = ld_path_parent_directory(journal_path);
+    if (ensure_directory_tree(parent, error) != 0) {
+        free(parent);
         return -1;
     }
-    if (rename(temporary, journal_path) != 0) {
+    free(parent);
+    const int failure = infiltratr_atomic_file_write(
+        journal_path, INFILTRATR_ATOMIC_FILE_PRIVATE,
+        write_manifest_stream, manifest);
+    if (failure != 0) {
         exfat_set_error(error, "cannot publish exFAT relayout journal: %s",
-                        strerror(errno));
-        unlink(temporary);
-        free(temporary);
+                        strerror(failure));
         return -1;
     }
-    free(temporary);
-    ld_path_fsync_parent(journal_path);
     return 0;
 }
 
 static bool parse_u64_text(const char *text, uint64_t *value) {
-    if (text == NULL || *text == '\0') return false;
-    char *end = NULL;
-    errno = 0;
-    unsigned long long parsed = strtoull(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0') return false;
-    *value = (uint64_t)parsed;
-    return true;
+    return infiltratr_parse_u64(text, 10U, value);
+}
+
+static bool parse_record_tuple(const char *text, uint64_t values[13]) {
+    const char *cursor = text;
+    for (size_t index = 0U; index < 13U; ++index) {
+        if (!infiltratr_parse_u64_token(&cursor, 10U, &values[index]))
+            return false;
+        if (index + 1U < 13U) {
+            if (*cursor != ',') return false;
+            cursor++;
+        }
+    }
+    return *cursor == '\0';
 }
 
 static bool parse_u32_text(const char *text, uint32_t *value) {
@@ -261,30 +252,28 @@ static int load_manifest(const char *journal_path,
                                            sizeof(*manifest->records));
         } else if (strcmp(line, "record") == 0) {
             if (manifest->records == NULL || records_seen >= manifest->record_count) goto malformed;
-            unsigned kind = 0, target = 0, staged = 0, clusters = 0, reserve = 0;
-            unsigned entry_count = 0, regular = 0, directory = 0;
-            unsigned long long parent = 0, entry_offset = 0, system_offset = 0;
-            unsigned long long data_length = 0, valid_length = 0;
-            int fields = sscanf(equals,
-                                "%u,%u,%u,%u,%u,%llu,%llu,%u,%llu,%llu,%llu,%u,%u",
-                                &kind, &target, &staged, &clusters, &reserve,
-                                &parent, &entry_offset, &entry_count, &system_offset,
-                                &data_length, &valid_length, &regular, &directory);
-            if (fields != 13 || kind > (unsigned)EXFAT_OBJ_FILE || clusters == 0U) goto malformed;
+            uint64_t fields[13] = {0};
+            if (!parse_record_tuple(equals, fields) ||
+                fields[0] > (uint64_t)EXFAT_OBJ_FILE ||
+                fields[1] > UINT32_MAX || fields[2] > UINT32_MAX ||
+                fields[3] == 0U || fields[3] > UINT32_MAX ||
+                fields[4] > UINT32_MAX || fields[7] > UINT32_MAX ||
+                fields[11] > UINT32_MAX || fields[12] > UINT32_MAX)
+                goto malformed;
             ExfatRelayoutRecord *record = &manifest->records[records_seen++];
-            record->kind = (ExfatObjectKind)kind;
-            record->target_start = target;
-            record->staged_start = staged;
-            record->clusters = clusters;
-            record->reserve_clusters = reserve;
-            record->parent_index = (uint64_t)parent;
-            record->entry_offset = (uint64_t)entry_offset;
-            record->entry_count = entry_count;
-            record->system_entry_offset = (uint64_t)system_offset;
-            record->data_length = (uint64_t)data_length;
-            record->valid_length = (uint64_t)valid_length;
-            record->regular_file = regular != 0U;
-            record->directory = directory != 0U;
+            record->kind = (ExfatObjectKind)fields[0];
+            record->target_start = (uint32_t)fields[1];
+            record->staged_start = (uint32_t)fields[2];
+            record->clusters = (uint32_t)fields[3];
+            record->reserve_clusters = (uint32_t)fields[4];
+            record->parent_index = fields[5];
+            record->entry_offset = fields[6];
+            record->entry_count = (uint32_t)fields[7];
+            record->system_entry_offset = fields[8];
+            record->data_length = fields[9];
+            record->valid_length = fields[10];
+            record->regular_file = fields[11] != 0U;
+            record->directory = fields[12] != 0U;
         } else {
             goto malformed;
         }

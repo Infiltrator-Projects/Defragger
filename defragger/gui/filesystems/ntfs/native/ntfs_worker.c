@@ -7,6 +7,7 @@
 #include "ld_path.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/posix.h"
 #include "ld_stop.h"
 #include "version.h"
 
@@ -80,9 +81,12 @@ static int ensure_directory_tree(const char *path, char **error) {
 
 static void unlink_if_exists(const char *path) {
     if (path == NULL || *path == '\0') return;
-    if (unlink(path) != 0 && errno != ENOENT)
-        fprintf(stderr, "%s: warning: cannot remove %s: %s\n", PROGRAM_NAME, path, strerror(errno));
+    const int failure = infiltratr_unlink_durable(path, true);
+    if (failure != 0)
+        fprintf(stderr, "%s: warning: cannot durably remove %s: %s\n",
+                PROGRAM_NAME, path, strerror(failure));
 }
+
 
 static void journal_free(NtfsJournal *state) {
     if (state == NULL) return;
@@ -94,21 +98,8 @@ static bool safe_journal_value(const char *value) {
     return value != NULL && strchr(value, '\n') == NULL && strchr(value, '\r') == NULL && strchr(value, '=') == NULL;
 }
 
-static int journal_save(const char *path, const NtfsJournal *state, char **error) {
-    if (!safe_journal_value(state->device) || !safe_journal_value(state->target_identity) ||
-        !safe_journal_value(state->stage) || !safe_journal_value(state->plan)) {
-        ntfs_set_error(error, "NTFS transaction paths contain unsupported journal characters");
-        return -1;
-    }
-    char *parent = ld_path_parent_directory(path);
-    if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
-    free(parent);
-    char *temporary = NULL;
-    FILE *file = ld_path_open_atomic_temp(path, &temporary);
-    if (file == NULL) {
-        ntfs_set_error(error, "cannot create NTFS journal: %s", strerror(errno));
-        free(temporary); return -1;
-    }
+static bool journal_write_stream(FILE *file, const void *user_data) {
+    const NtfsJournal *state = user_data;
     fprintf(file, "%s\n", JOURNAL_MAGIC);
     fprintf(file, "device=%s\n", state->device);
     fprintf(file, "target_identity=%s\n", state->target_identity);
@@ -123,15 +114,25 @@ static int journal_save(const char *path, const NtfsJournal *state, char **error
     fprintf(file, "move_clusters=%" PRIu64 "\n", state->move_clusters);
     fprintf(file, "workspace_start=%" PRIu64 "\n", state->workspace_start);
     fprintf(file, "workspace_clusters=%" PRIu64 "\n", state->workspace_clusters);
-    if (fflush(file) != 0 || fsync(fileno(file)) != 0 || fclose(file) != 0) {
-        ntfs_set_error(error, "cannot sync NTFS journal: %s", strerror(errno));
-        unlink_if_exists(temporary); free(temporary); return -1;
+    return !ferror(file);
+}
+
+static int journal_save(const char *path, const NtfsJournal *state, char **error) {
+    if (!safe_journal_value(state->device) || !safe_journal_value(state->target_identity) ||
+        !safe_journal_value(state->stage) || !safe_journal_value(state->plan)) {
+        ntfs_set_error(error, "NTFS transaction paths contain unsupported journal characters");
+        return -1;
     }
-    if (rename(temporary, path) != 0) {
-        ntfs_set_error(error, "cannot publish NTFS journal: %s", strerror(errno));
-        unlink_if_exists(temporary); free(temporary); return -1;
+    char *parent = ld_path_parent_directory(path);
+    if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
+    free(parent);
+    const int failure = infiltratr_atomic_file_write(
+        path, INFILTRATR_ATOMIC_FILE_PRIVATE, journal_write_stream, state);
+    if (failure != 0) {
+        ntfs_set_error(error, "cannot publish NTFS journal: %s", strerror(failure));
+        return -1;
     }
-    free(temporary); ld_path_fsync_parent(path); return 0;
+    return 0;
 }
 
 static char *value_copy(const char *value) {
@@ -194,7 +195,7 @@ static void transaction_cleanup(const char *journal, const NtfsJournal *state) {
             unlink_if_exists(wal); unlink_if_exists(shm); free(wal); free(shm);
         }
     }
-    unlink_if_exists(journal); ld_path_fsync_parent(journal);
+    unlink_if_exists(journal);
 }
 
 static void serial_hex(const uint8_t serial[8], char output[17]) {

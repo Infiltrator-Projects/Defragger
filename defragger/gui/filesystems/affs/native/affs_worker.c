@@ -3,6 +3,7 @@
 #include "version.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/posix.h"
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_path.h"
@@ -73,9 +74,12 @@ static bool safe_value(const char *value) {
 
 static void unlink_if_exists(const char *path) {
     if (path == NULL || *path == '\0') return;
-    if (unlink(path) != 0 && errno != ENOENT)
-        fprintf(stderr, "%s: warning: cannot remove %s: %s\n", PROG, path, strerror(errno));
+    const int failure = infiltratr_unlink_durable(path, true);
+    if (failure != 0)
+        fprintf(stderr, "%s: warning: cannot durably remove %s: %s\n",
+                PROG, path, strerror(failure));
 }
+
 
 static void journal_free(AffsJournal *state) {
     if (state == NULL) return;
@@ -104,25 +108,8 @@ static int ensure_directory_tree(const char *path, char **error) {
     return 0;
 }
 
-static int journal_save(const char *path, const AffsJournal *state, char **error) {
-    if (!safe_value(state->device) || !safe_value(state->target_identity) ||
-        !safe_value(state->stage)) {
-        affs_set_error(error, "Amiga transaction paths contain unsupported journal characters");
-        return -1;
-    }
-    char *parent = ld_path_parent_directory(path);
-    if (ensure_directory_tree(parent, error) != 0) {
-        free(parent);
-        return -1;
-    }
-    free(parent);
-    char *temporary = NULL;
-    FILE *file = ld_path_open_atomic_temp(path, &temporary);
-    if (file == NULL) {
-        affs_set_error(error, "cannot create Amiga recovery journal: %s", strerror(errno));
-        free(temporary);
-        return -1;
-    }
+static bool journal_write_stream(FILE *file, const void *user_data) {
+    const AffsJournal *state = user_data;
     fprintf(file, "%s\n", JOURNAL_MAGIC);
     fprintf(file, "device=%s\n", state->device);
     fprintf(file, "target_identity=%s\n", state->target_identity);
@@ -136,20 +123,28 @@ static int journal_save(const char *path, const AffsJournal *state, char **error
     fprintf(file, "blocks=%u\n", state->blocks);
     fprintf(file, "root_block=%u\n", state->root_block);
     fprintf(file, "dostype=%u\n", (unsigned)state->dostype);
-    if (fflush(file) != 0 || fsync(fileno(file)) != 0 || fclose(file) != 0) {
-        affs_set_error(error, "cannot sync Amiga recovery journal: %s", strerror(errno));
-        unlink_if_exists(temporary);
-        free(temporary);
+    return !ferror(file);
+}
+
+static int journal_save(const char *path, const AffsJournal *state, char **error) {
+    if (!safe_value(state->device) || !safe_value(state->target_identity) ||
+        !safe_value(state->stage)) {
+        affs_set_error(error, "Amiga transaction paths contain unsupported journal characters");
         return -1;
     }
-    if (rename(temporary, path) != 0) {
-        affs_set_error(error, "cannot publish Amiga recovery journal: %s", strerror(errno));
-        unlink_if_exists(temporary);
-        free(temporary);
+    char *parent = ld_path_parent_directory(path);
+    if (ensure_directory_tree(parent, error) != 0) {
+        free(parent);
         return -1;
     }
-    free(temporary);
-    ld_path_fsync_parent(path);
+    free(parent);
+    const int failure = infiltratr_atomic_file_write(
+        path, INFILTRATR_ATOMIC_FILE_PRIVATE, journal_write_stream, state);
+    if (failure != 0) {
+        affs_set_error(error, "cannot publish Amiga recovery journal: %s",
+                       strerror(failure));
+        return -1;
+    }
     return 0;
 }
 
@@ -241,7 +236,6 @@ static int journal_phase(const char *path, AffsJournal *state,
 static void transaction_cleanup(const char *journal, const AffsJournal *state) {
     if (state != NULL) unlink_if_exists(state->stage);
     unlink_if_exists(journal);
-    ld_path_fsync_parent(journal);
 }
 
 static char *stage_name(const char *journal) {

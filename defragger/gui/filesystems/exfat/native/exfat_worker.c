@@ -7,6 +7,7 @@
 #include "ld_path.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/posix.h"
 #include "ld_stop.h"
 #include "version.h"
 
@@ -78,9 +79,12 @@ static int ensure_directory_tree(const char *path, char **error) {
 
 static void unlink_if_exists(const char *path) {
     if (path == NULL || *path == '\0') return;
-    if (unlink(path) != 0 && errno != ENOENT)
-        fprintf(stderr, "%s: warning: cannot remove %s: %s\n", PROGRAM_NAME, path, strerror(errno));
+    const int failure = infiltratr_unlink_durable(path, true);
+    if (failure != 0)
+        fprintf(stderr, "%s: warning: cannot durably remove %s: %s\n",
+                PROGRAM_NAME, path, strerror(failure));
 }
+
 
 static void journal_free(ExfatJournal *state) {
     if (state == NULL) return;
@@ -91,16 +95,8 @@ static bool safe_value(const char *value) {
     return value != NULL && strchr(value, '\n') == NULL && strchr(value, '\r') == NULL && strchr(value, '=') == NULL;
 }
 
-static int journal_save(const char *path, const ExfatJournal *state, char **error) {
-    if (!safe_value(state->device) || !safe_value(state->target_identity) || !safe_value(state->stage)) {
-        exfat_set_error(error, "exFAT transaction paths contain unsupported journal characters"); return -1;
-    }
-    char *parent = ld_path_parent_directory(path);
-    if (ensure_directory_tree(parent, error) != 0) { free(parent); return -1; }
-    free(parent);
-    char *temporary = NULL;
-    FILE *file = ld_path_open_atomic_temp(path, &temporary);
-    if (file == NULL) { exfat_set_error(error, "cannot create exFAT journal: %s", strerror(errno)); free(temporary); return -1; }
+static bool journal_write_stream(FILE *file, const void *user_data) {
+    const ExfatJournal *state = user_data;
     fprintf(file, "%s\n", JOURNAL_MAGIC);
     fprintf(file, "device=%s\n", state->device);
     fprintf(file, "target_identity=%s\n", state->target_identity);
@@ -113,13 +109,28 @@ static int journal_save(const char *path, const ExfatJournal *state, char **erro
     fprintf(file, "filesystem_bytes=%" PRIu64 "\n", state->filesystem_bytes);
     fprintf(file, "commit_offset=%" PRIu64 "\n", state->commit_offset);
     fprintf(file, "boot_length=%" PRIu64 "\n", state->boot_length);
-    if (fflush(file) != 0 || fsync(fileno(file)) != 0 || fclose(file) != 0) {
-        exfat_set_error(error, "cannot sync exFAT journal: %s", strerror(errno)); unlink_if_exists(temporary); free(temporary); return -1;
+    return !ferror(file);
+}
+
+static int journal_save(const char *path, const ExfatJournal *state, char **error) {
+    if (!safe_value(state->device) || !safe_value(state->target_identity) ||
+        !safe_value(state->stage)) {
+        exfat_set_error(error, "exFAT transaction paths contain unsupported journal characters");
+        return -1;
     }
-    if (rename(temporary, path) != 0) {
-        exfat_set_error(error, "cannot publish exFAT journal: %s", strerror(errno)); unlink_if_exists(temporary); free(temporary); return -1;
+    char *parent = ld_path_parent_directory(path);
+    if (ensure_directory_tree(parent, error) != 0) {
+        free(parent);
+        return -1;
     }
-    free(temporary); ld_path_fsync_parent(path); return 0;
+    free(parent);
+    const int failure = infiltratr_atomic_file_write(
+        path, INFILTRATR_ATOMIC_FILE_PRIVATE, journal_write_stream, state);
+    if (failure != 0) {
+        exfat_set_error(error, "cannot publish exFAT journal: %s", strerror(failure));
+        return -1;
+    }
+    return 0;
 }
 
 static int parse_u64(const char *text, uint64_t *value) {
@@ -164,7 +175,6 @@ static int journal_phase(const char *path, ExfatJournal *state, const char *phas
 static void transaction_cleanup(const char *journal, const ExfatJournal *state) {
     if (state != NULL) unlink_if_exists(state->stage);
     unlink_if_exists(journal);
-    ld_path_fsync_parent(journal);
 }
 
 static char *canonical_path(const char *path, char **error) {
