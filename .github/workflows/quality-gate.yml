@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   quality-gate:
-    runs-on: linux-native
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
       run:
@@ -40,7 +40,6 @@ jobs:
           fi
 
       - name: Install build and test dependencies
-        if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -70,5 +69,40 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/defragger/gui:${{ github.workspace }}/defragger/tests
           LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/defragger/build
         run: |
+          python3 tests/test_btrfs_architecture.py
+          python3 tests/test_release_gate.py
+
+  local-quality:
+    name: Local Linux / heavy qualification
+    runs-on: linux-native
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: defragger
+    steps:
+      - name: Check out exact main candidate
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build all first-party C with warnings as errors
+        run: |
+          cmake -S . -B build-local \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLD_ENABLE_WERROR=ON \
+            -DBUILD_TESTING=ON
+          cmake --build build-local -j2
+      - name: Run local native, filesystem and GUI tests
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: ${{ github.workspace }}/defragger/gui:${{ github.workspace }}/defragger/tests
+          LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/defragger/build-local
+        run: ctest --test-dir build-local --output-on-failure -E '^linux-defragger-tests$'
+      - name: Enforce architecture and release contracts
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: ${{ github.workspace }}/defragger/gui:${{ github.workspace }}/defragger/tests
+          LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/defragger/build-local
+        run: |
+          python3 tests/test_architecture.py
           python3 tests/test_btrfs_architecture.py
           python3 tests/test_release_gate.py
