@@ -6,6 +6,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_path.h"
+#include "ld_runtime.h"
 #include "ld_stop.h"
 
 #include <errno.h>
