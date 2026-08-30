@@ -21,6 +21,11 @@ typedef struct {
     uint64_t physical_bytes;
     uint64_t free_blocks;
     uint64_t used_blocks;
+    uint64_t data_blocks;
+    uint64_t regular_files;
+    uint64_t directories;
+    uint64_t fragmented_files;
+    bool growth_10_satisfied;
     bool primary_root_valid;
     bool backup_root_valid;
     bool transaction_pending;
@@ -31,6 +36,7 @@ typedef struct {
     uint64_t end;
     uint64_t free_count;
     uint64_t used_count;
+    uint64_t fragmented_count;
     uint64_t outside_count;
 } SfsMapCell;
 

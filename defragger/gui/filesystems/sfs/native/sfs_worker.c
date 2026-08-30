@@ -54,12 +54,18 @@ static void print_analysis_json(const SfsAnalysis *analysis)
         "\"block_size\":%u,\"total_blocks\":%u,\"filesystem_bytes\":%" PRIu64 ","
         "\"physical_bytes\":%" PRIu64 ",\"bitmap_base\":%u,\"bitmap_blocks\":%u,"
         "\"used_blocks\":%" PRIu64 ",\"free_blocks\":%" PRIu64 ","
+        "\"data_blocks\":%" PRIu64 ",\"regular_files\":%" PRIu64 ","
+        "\"directories\":%" PRIu64 ",\"fragmented_files\":%" PRIu64 ","
+        "\"growth_10_satisfied\":%s,"
         "\"primary_root_valid\":%s,\"backup_root_valid\":%s,"
-        "\"transaction_pending\":%s,\"fragmentation_available\":false}\n",
+        "\"transaction_pending\":%s,\"fragmentation_available\":true}\n",
         analysis->structure_version, analysis->sequence_number,
         analysis->block_size, analysis->total_blocks, analysis->filesystem_bytes,
         analysis->physical_bytes, analysis->bitmap_base, analysis->bitmap_blocks,
         analysis->used_blocks, analysis->free_blocks,
+        analysis->data_blocks, analysis->regular_files,
+        analysis->directories, analysis->fragmented_files,
+        json_bool(analysis->growth_10_satisfied),
         json_bool(analysis->primary_root_valid), json_bool(analysis->backup_root_valid),
         json_bool(analysis->transaction_pending));
 }
@@ -104,27 +110,32 @@ static int print_map(const char *path, uint64_t requested_cells)
         "\"total_bytes\":%" PRIu64 ",\"filesystem_units\":%u,"
         "\"filesystem_bytes\":%" PRIu64 ",\"outside_bytes\":%" PRIu64 ","
         "\"free_bytes\":%" PRIu64 ",\"used_bytes\":%" PRIu64 ","
-        "\"unknown_bytes\":0,\"cells\":[",
+        "\"unknown_bytes\":0,\"regular_files\":%" PRIu64 ","
+        "\"directories\":%" PRIu64 ",\"fragmented_files\":%" PRIu64 ","
+        "\"growth_10_satisfied\":%s,\"cells\":[",
         analysis.block_size, total_units, cells,
         total_units * analysis.block_size, analysis.total_blocks,
         analysis.filesystem_bytes, outside_units * analysis.block_size,
         analysis.free_blocks * analysis.block_size,
-        analysis.used_blocks * analysis.block_size);
+        analysis.used_blocks * analysis.block_size,
+        analysis.regular_files, analysis.directories, analysis.fragmented_files,
+        json_bool(analysis.growth_10_satisfied));
     for (uint64_t i = 0U; i < cells; ++i) {
         if (i != 0U) (void)putchar(',');
         (void)printf(
             "{\"start\":%" PRIu64 ",\"end\":%" PRIu64 ","
             "\"free\":%" PRIu64 ",\"used\":%" PRIu64 ","
-            "\"unknown\":0,\"bad\":0,\"fragmented\":0,\"directory\":0,"
+            "\"unknown\":0,\"bad\":0,\"fragmented\":%" PRIu64 ",\"directory\":0,"
             "\"outside\":%" PRIu64 "}",
             map[i].start, map[i].end, map[i].free_count, map[i].used_count,
-            map[i].outside_count);
+            map[i].fragmented_count, map[i].outside_count);
     }
     (void)printf(
         "],\"details\":{\"format\":\"SFS0\",\"structure_version\":%u,"
         "\"sequence_number\":%u,\"bitmap_base\":%u,\"bitmap_blocks\":%u,"
         "\"primary_root_valid\":%s,\"backup_root_valid\":%s,"
-        "\"transaction_pending\":%s,\"fragmentation_available\":false,"
+        "\"transaction_pending\":%s,\"fragmentation_available\":true,"
+        "\"fragmentation_basis\":\"validated SFS object containers and extent B-tree chains\","
         "\"allocation_basis\":\"validated SFS BTMP free-space bitmap\","
         "\"sfs2_note\":\"SFS2 is not advertised until independent large-file fixtures and compatibility validation are available\"}}\n",
         analysis.structure_version, analysis.sequence_number,

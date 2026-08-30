@@ -63,22 +63,71 @@ static void make_root(uint8_t *block, uint32_t own_block, uint16_t sequence)
     stamp_checksum(block);
 }
 
-static void make_bitmap(uint8_t *block)
+static void bitmap_mark_used(uint8_t *block, uint32_t number)
+{
+    block[12U + number / 8U] &=
+        (uint8_t)~(uint8_t)(0x80U >> (number & 7U));
+}
+
+static void make_bitmap(uint8_t *block, int fragmented)
 {
     memset(block, 0, TEST_BLOCK_SIZE);
     set_header(block, "BTMP", 1U);
     for (uint32_t number = 16U; number < 100U; ++number)
         block[12U + number / 8U] |= (uint8_t)(0x80U >> (number & 7U));
+    bitmap_mark_used(block, 20U);
+    if (fragmented != 0) {
+        bitmap_mark_used(block, 30U);
+        bitmap_mark_used(block, 31U);
+    } else {
+        bitmap_mark_used(block, 21U);
+        bitmap_mark_used(block, 22U);
+    }
     stamp_checksum(block);
 }
 
-static void make_image(uint8_t *image, int transaction_pending)
+static void make_extent_tree(uint8_t *block, int fragmented)
+{
+    memset(block, 0, TEST_BLOCK_SIZE);
+    set_header(block, "BNDC", 3U);
+    put16(block + 12U, 2U);
+    block[14U] = 1U;
+    block[15U] = 14U;
+    const uint32_t second = fragmented != 0 ? 30U : 21U;
+    put32(block + 16U, 20U);
+    put32(block + 20U, second);
+    put32(block + 24U, 0U);
+    put16(block + 28U, 1U);
+    put32(block + 30U, second);
+    put32(block + 34U, 0U);
+    put32(block + 38U, 20U);
+    put16(block + 42U, 2U);
+    stamp_checksum(block);
+}
+
+static void make_object_container(uint8_t *block)
+{
+    memset(block, 0, TEST_BLOCK_SIZE);
+    set_header(block, "OBJC", 4U);
+    put32(block + 24U + 4U, 10U);
+    put32(block + 24U + 8U, 0x0fU);
+    put32(block + 24U + 12U, 20U);
+    put32(block + 24U + 16U, 3U * TEST_BLOCK_SIZE);
+    block[24U + 24U] = 0U;
+    memcpy(block + 24U + 25U, "frag", 5U);
+    block[24U + 30U] = 0U;
+    stamp_checksum(block);
+}
+
+static void make_image(uint8_t *image, int transaction_pending, int fragmented)
 {
     memset(image, 0, TEST_BYTES);
     make_root(image, 0U, 5U);
     make_root(image + (TEST_BLOCKS - 1U) * TEST_BLOCK_SIZE,
               TEST_BLOCKS - 1U, 6U);
-    make_bitmap(image + TEST_BLOCK_SIZE);
+    make_bitmap(image + TEST_BLOCK_SIZE, fragmented);
+    make_extent_tree(image + 3U * TEST_BLOCK_SIZE, fragmented);
+    make_object_container(image + 4U * TEST_BLOCK_SIZE);
     if (transaction_pending != 0) {
         uint8_t *marker = image + 6U * TEST_BLOCK_SIZE;
         set_header(marker, "TRFA", 6U);
@@ -134,7 +183,7 @@ int main(void)
     SfsMapCell cells[16];
     char error[256] = {0};
 
-    make_image(image, 0);
+    make_image(image, 0, 1);
     if (analyse_image(image, &analysis, cells, 16U, error, sizeof(error)) != 0) {
         (void)fprintf(stderr, "valid SFS image rejected: %s\n", error);
         free(image);
@@ -142,7 +191,9 @@ int main(void)
     }
     if (analysis.block_size != TEST_BLOCK_SIZE ||
         analysis.total_blocks != TEST_BLOCKS ||
-        analysis.free_blocks != 84U || analysis.used_blocks != 44U ||
+        analysis.free_blocks != 81U || analysis.used_blocks != 47U ||
+        analysis.data_blocks != 3U || analysis.regular_files != 1U ||
+        analysis.fragmented_files != 1U || analysis.growth_10_satisfied ||
         analysis.sequence_number != 6U ||
         !analysis.primary_root_valid || !analysis.backup_root_valid ||
         analysis.transaction_pending) {
@@ -156,13 +207,25 @@ int main(void)
         mapped_free += cells[index].free_count;
         mapped_used += cells[index].used_count;
     }
-    if (mapped_free != analysis.free_blocks || mapped_used != analysis.used_blocks) {
-        (void)fprintf(stderr, "SFS cell accounting disagrees with bitmap totals\n");
+    uint64_t mapped_fragmented = 0U;
+    for (size_t index = 0U; index < 16U; ++index)
+        mapped_fragmented += cells[index].fragmented_count;
+    if (mapped_free != analysis.free_blocks || mapped_used != analysis.used_blocks ||
+        mapped_fragmented != analysis.data_blocks) {
+        (void)fprintf(stderr, "SFS cell accounting disagrees with catalogue totals\n");
         free(image);
         return 4;
     }
 
-    make_image(image, 1);
+    make_image(image, 0, 0);
+    if (analyse_image(image, &analysis, cells, 16U, error, sizeof(error)) != 0 ||
+        analysis.fragmented_files != 0U || !analysis.growth_10_satisfied) {
+        (void)fprintf(stderr, "contiguous SFS extent chain was not recognised: %s\n", error);
+        free(image);
+        return 5;
+    }
+
+    make_image(image, 1, 1);
     if (analyse_image(image, &analysis, NULL, 0U, error, sizeof(error)) != 0 ||
         !analysis.transaction_pending) {
         (void)fprintf(stderr, "SFS unfinished transaction was not reported: %s\n", error);
@@ -170,7 +233,7 @@ int main(void)
         return 5;
     }
 
-    make_image(image, 0);
+    make_image(image, 0, 1);
     image[TEST_BLOCK_SIZE + 20U] ^= 1U;
     if (probe_image(image) != 1) {
         (void)fprintf(stderr, "SFS identity probe depended on bitmap health\n");
@@ -183,7 +246,7 @@ int main(void)
         return 7;
     }
 
-    make_image(image, 0);
+    make_image(image, 0, 1);
     image[4U] ^= 1U;
     if (analyse_image(image, &analysis, NULL, 0U, error, sizeof(error)) != 0 ||
         analysis.primary_root_valid || !analysis.backup_root_valid ||
@@ -193,7 +256,7 @@ int main(void)
         return 8;
     }
 
-    make_image(image, 0);
+    make_image(image, 0, 1);
     put32(image + (TEST_BLOCKS - 1U) * TEST_BLOCK_SIZE + 48U, TEST_BLOCKS - 1U);
     stamp_checksum(image + (TEST_BLOCKS - 1U) * TEST_BLOCK_SIZE);
     if (analyse_image(image, &analysis, NULL, 0U, error, sizeof(error)) == 0) {
