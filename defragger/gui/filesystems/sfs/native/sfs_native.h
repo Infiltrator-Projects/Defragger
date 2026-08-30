@@ -44,4 +44,11 @@ int sfs_analyse(const char *path, SfsAnalysis *analysis,
                 SfsMapCell *cells, uint64_t cell_count,
                 char *error, size_t error_size);
 bool sfs_probe(const char *path);
+int sfs_build_stage(const char *source, const char *stage, bool growth,
+                    unsigned growth_percent, bool live_updates,
+                    uint64_t *commit_bytes, char *error, size_t error_size);
+int sfs_verify_layout(const char *path, bool growth, unsigned growth_percent,
+                      char *error, size_t error_size);
+int sfs_commit_stage(const char *stage, const char *target, uint64_t *written,
+                     char *error, size_t error_size);
 #endif

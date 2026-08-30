@@ -128,6 +128,14 @@ static void make_image(uint8_t *image, int transaction_pending, int fragmented)
     make_bitmap(image + TEST_BLOCK_SIZE, fragmented);
     make_extent_tree(image + 3U * TEST_BLOCK_SIZE, fragmented);
     make_object_container(image + 4U * TEST_BLOCK_SIZE);
+    memset(image + 20U * TEST_BLOCK_SIZE, 'A', TEST_BLOCK_SIZE);
+    if (fragmented != 0) {
+        memset(image + 30U * TEST_BLOCK_SIZE, 'B', TEST_BLOCK_SIZE);
+        memset(image + 31U * TEST_BLOCK_SIZE, 'C', TEST_BLOCK_SIZE);
+    } else {
+        memset(image + 21U * TEST_BLOCK_SIZE, 'B', TEST_BLOCK_SIZE);
+        memset(image + 22U * TEST_BLOCK_SIZE, 'C', TEST_BLOCK_SIZE);
+    }
     if (transaction_pending != 0) {
         uint8_t *marker = image + 6U * TEST_BLOCK_SIZE;
         set_header(marker, "TRFA", 6U);
@@ -161,6 +169,19 @@ static int analyse_image(const uint8_t *image, SfsAnalysis *analysis,
                                    error, error_size);
     (void)unlink(path);
     return result;
+}
+
+static int make_stage_path(char path[64])
+{
+    (void)snprintf(path, 64U, "/tmp/linux-defragger-sfs-stage-XXXXXX");
+    const int fd = mkstemp(path);
+    if (fd < 0)
+        return -1;
+    if (close(fd) != 0) {
+        (void)unlink(path);
+        return -1;
+    }
+    return unlink(path);
 }
 
 static int probe_image(const uint8_t *image)
@@ -264,6 +285,65 @@ int main(void)
         free(image);
         return 9;
     }
+
+    make_image(image, 0, 1);
+    char source[64];
+    char stage[64];
+    if (save_image(image, source) != 0 || make_stage_path(stage) != 0) {
+        (void)fprintf(stderr, "cannot create SFS relocation test paths\n");
+        free(image);
+        return 10;
+    }
+    uint64_t commit_bytes = 0U;
+    if (sfs_build_stage(source, stage, false, 10U, false,
+                        &commit_bytes, error, sizeof(error)) != 0 ||
+        commit_bytes != TEST_BYTES ||
+        sfs_verify_layout(stage, false, 10U, error, sizeof(error)) != 0 ||
+        analyse_image(image, &analysis, NULL, 0U, error, sizeof(error)) != 0) {
+        (void)fprintf(stderr, "SFS Defrag stage failed: %s\n", error);
+        (void)unlink(source);
+        (void)unlink(stage);
+        free(image);
+        return 11;
+    }
+    uint8_t payload[3U * TEST_BLOCK_SIZE];
+    const int stage_fd = open(stage, O_RDONLY | O_CLOEXEC);
+    const ssize_t payload_read = stage_fd >= 0
+        ? pread(stage_fd, payload, sizeof(payload), 16U * TEST_BLOCK_SIZE) : -1;
+    if (stage_fd >= 0) (void)close(stage_fd);
+    if (payload_read != (ssize_t)sizeof(payload) ||
+        payload[0] != 'A' || payload[TEST_BLOCK_SIZE] != 'B' ||
+        payload[2U * TEST_BLOCK_SIZE] != 'C') {
+        (void)fprintf(stderr, "SFS Defrag did not preserve logical payload order\n");
+        (void)unlink(source);
+        (void)unlink(stage);
+        free(image);
+        return 12;
+    }
+    SfsAnalysis staged;
+    if (sfs_analyse(stage, &staged, NULL, 0U, error, sizeof(error)) != 0 ||
+        staged.fragmented_files != 0U || staged.data_blocks != 3U) {
+        (void)fprintf(stderr, "SFS Defrag stage did not become contiguous: %s\n", error);
+        (void)unlink(source);
+        (void)unlink(stage);
+        free(image);
+        return 13;
+    }
+    (void)unlink(stage);
+    if (make_stage_path(stage) != 0 ||
+        sfs_build_stage(source, stage, true, 10U, false,
+                        &commit_bytes, error, sizeof(error)) != 0 ||
+        sfs_verify_layout(stage, true, 10U, error, sizeof(error)) != 0 ||
+        sfs_analyse(stage, &staged, NULL, 0U, error, sizeof(error)) != 0 ||
+        !staged.growth_10_satisfied) {
+        (void)fprintf(stderr, "SFS Growth Defrag stage failed: %s\n", error);
+        (void)unlink(source);
+        (void)unlink(stage);
+        free(image);
+        return 14;
+    }
+    (void)unlink(source);
+    (void)unlink(stage);
 
     free(image);
     return 0;

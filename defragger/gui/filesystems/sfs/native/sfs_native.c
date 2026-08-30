@@ -33,6 +33,7 @@
 #define SFS_MIN_BLOCK 512U
 #define SFS_MAX_BLOCK 65536U
 #define SFS_HEADER_BYTES 12U
+#define SFS_IO_BATCH_BYTES (1024U * 1024U)
 
 static void set_error(char *error, size_t size, const char *text) {
     if (error != NULL && size != 0U) (void)snprintf(error, size, "%s", text);
@@ -78,6 +79,8 @@ typedef struct {
     uint32_t next;
     uint32_t prev;
     uint16_t blocks;
+    uint32_t container_block;
+    uint32_t node_offset;
 } SfsExtent;
 
 typedef struct {
@@ -97,6 +100,32 @@ typedef struct {
     size_t count;
     size_t capacity;
 } SfsU32Vec;
+
+typedef struct {
+    uint32_t object_block;
+    uint32_t object_offset;
+    uint32_t object_node;
+    uint32_t byte_size;
+    uint32_t first_extent;
+    uint32_t new_start;
+    SfsSizeVec chain;
+} SfsFile;
+
+typedef struct {
+    SfsFile *items;
+    size_t count;
+    size_t capacity;
+} SfsFileVec;
+
+typedef struct {
+    int fd;
+    uint64_t physical_bytes;
+    Root root;
+    uint8_t *free_map;
+    SfsExtentVec extents;
+    SfsFileVec files;
+    bool transaction_pending;
+} SfsModel;
 
 static int reserve_array(void **items, size_t *capacity, size_t need,
                          size_t item_size, char *error, size_t error_size) {
@@ -145,6 +174,21 @@ static int u32_push(SfsU32Vec *vec, uint32_t value,
                       sizeof(*vec->items), error, error_size) != 0) return -1;
     vec->items[vec->count++] = value;
     return 0;
+}
+
+static int file_push(SfsFileVec *vec, SfsFile value,
+                     char *error, size_t error_size) {
+    if (reserve_array((void **)&vec->items, &vec->capacity, vec->count + 1U,
+                      sizeof(*vec->items), error, error_size) != 0) return -1;
+    vec->items[vec->count++] = value;
+    return 0;
+}
+
+static void files_free(SfsFileVec *files) {
+    for (size_t index = 0U; index < files->count; ++index)
+        free(files->items[index].chain.items);
+    free(files->items);
+    memset(files, 0, sizeof(*files));
 }
 
 static bool parse_root(const uint8_t *block, uint32_t bytes, uint32_t expected_own,
@@ -308,6 +352,8 @@ static int scan_extent_container(int fd, const Root *root, uint32_t block_no,
                 .next = be32(node + 4U),
                 .prev = be32(node + 8U),
                 .blocks = be16(node + 12U),
+                .container_block = block_no,
+                .node_offset = SFS_BNODE_HEADER_BYTES + (uint32_t)index * node_size,
             };
             if (extent.key == 0U || extent.blocks == 0U ||
                 extent.key >= root->total_blocks ||
@@ -385,7 +431,8 @@ static int evaluate_file(const Root *root, const SfsExtentVec *extents,
                          uint8_t *extent_owned, const uint8_t *free_map,
                          uint32_t first, uint32_t size,
                          SfsAnalysis *analysis, SfsMapCell *cells,
-                         uint64_t cell_count, char *error, size_t error_size) {
+                         uint64_t cell_count, SfsSizeVec *record_chain,
+                         char *error, size_t error_size) {
     const uint64_t expected =
         ((uint64_t)size + root->block_size - 1U) / root->block_size;
     analysis->regular_files++;
@@ -465,7 +512,11 @@ static int evaluate_file(const Root *root, const SfsExtentVec *extents,
             }
         }
     }
-    free(chain.items);
+    if (record_chain != NULL) {
+        *record_chain = chain;
+    } else {
+        free(chain.items);
+    }
     return 0;
 }
 
@@ -473,7 +524,7 @@ static int scan_object_catalogue(int fd, const Root *root,
                                  const SfsExtentVec *extents,
                                  uint8_t *extent_owned, const uint8_t *free_map,
                                  SfsAnalysis *analysis, SfsMapCell *cells,
-                                 uint64_t cell_count,
+                                 uint64_t cell_count, SfsFileVec *files,
                                  char *error, size_t error_size) {
     uint8_t *visited = calloc(root->total_blocks, 1U);
     if (visited == NULL) {
@@ -561,12 +612,31 @@ static int scan_object_catalogue(int fd, const Root *root,
                         break;
                     }
                 } else if ((bits & (SFS_OTYPE_LINK | SFS_OTYPE_HARDLINK)) == 0U) {
+                    SfsSizeVec chain = {0};
                     if (evaluate_file(root, extents, extent_owned, free_map,
                                       data, auxiliary, analysis, cells, cell_count,
+                                      files != NULL ? &chain : NULL,
                                       error, error_size) != 0) {
                         free(buffer);
                         rc = -1;
                         break;
+                    }
+                    if (files != NULL) {
+                        SfsFile file = {
+                            .object_block = block_no,
+                            .object_offset = (uint32_t)offset,
+                            .object_node = object_node,
+                            .byte_size = auxiliary,
+                            .first_extent = data,
+                            .new_start = 0U,
+                            .chain = chain,
+                        };
+                        if (file_push(files, file, error, error_size) != 0) {
+                            free(chain.items);
+                            free(buffer);
+                            rc = -1;
+                            break;
+                        }
                     }
                 }
 
@@ -639,7 +709,8 @@ static int scan_catalogue(int fd, const Root *root, const uint8_t *free_map,
     }
     analysis->growth_10_satisfied = true;
     rc = scan_object_catalogue(fd, root, &extents, owned, free_map,
-                               analysis, cells, cell_count, error, error_size);
+                               analysis, cells, cell_count, NULL,
+                               error, error_size);
     if (rc == 0) {
         for (size_t index = 0U; index < extents.count; ++index) {
             if (owned[index] == 0U) {
@@ -649,8 +720,6 @@ static int scan_catalogue(int fd, const Root *root, const uint8_t *free_map,
             }
         }
     }
-    if (analysis->regular_files == 0U)
-        analysis->growth_10_satisfied = false;
     free(owned);
     free(extents.items);
     (void)first_key;
@@ -752,6 +821,673 @@ int sfs_analyse(const char *path, SfsAnalysis *analysis, SfsMapCell *cells,
     free(free_map);
     close(fd); if(error&&error_size)error[0]='\0'; return 0;
 }
+
+
+static void model_close(SfsModel *model) {
+    if (model->fd >= 0) (void)close(model->fd);
+    free(model->free_map);
+    free(model->extents.items);
+    files_free(&model->files);
+    memset(model, 0, sizeof(*model));
+    model->fd = -1;
+}
+
+static int model_open(const char *path, SfsModel *model,
+                      char *error, size_t error_size) {
+    memset(model, 0, sizeof(*model));
+    model->fd = -1;
+    model->fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (model->fd < 0) {
+        if (error != NULL && error_size != 0U)
+            (void)snprintf(error, error_size, "open: %s", strerror(errno));
+        return -1;
+    }
+    if (size_bytes(model->fd, path, &model->physical_bytes) != 0) {
+        if (error != NULL && error_size != 0U)
+            (void)snprintf(error, error_size, "size: %s", strerror(errno));
+        model_close(model);
+        return -1;
+    }
+    bool primary_valid = false;
+    bool backup_valid = false;
+    if (discover_roots(model->fd, model->physical_bytes, &model->root,
+                       &primary_valid, &backup_valid, error, error_size) != 0 ||
+        validate_transaction(model->fd, &model->root,
+                             &model->transaction_pending, error, error_size) != 0) {
+        model_close(model);
+        return -1;
+    }
+
+    model->free_map = calloc(model->root.total_blocks, 1U);
+    if (model->free_map == NULL) {
+        set_error(error, error_size, "out of memory tracking SFS allocation state");
+        model_close(model);
+        return -1;
+    }
+    SfsAnalysis analysis = {0};
+    if (scan_bitmap(model->fd, &model->root, &analysis, NULL, 0U,
+                    model->root.total_blocks, model->free_map,
+                    error, error_size) != 0) {
+        model_close(model);
+        return -1;
+    }
+
+    uint8_t *tree_visited = calloc(model->root.total_blocks, 1U);
+    if (tree_visited == NULL) {
+        set_error(error, error_size, "out of memory tracking SFS extent B-tree");
+        model_close(model);
+        return -1;
+    }
+    uint32_t first_key = 0U;
+    bool has_key = false;
+    int rc = scan_extent_container(model->fd, &model->root,
+                                   model->root.extent_bnode_root,
+                                   tree_visited, 0U, &model->extents,
+                                   &first_key, &has_key, error, error_size);
+    free(tree_visited);
+    if (rc != 0) {
+        model_close(model);
+        return -1;
+    }
+    for (size_t index = 0U; index < model->extents.count; ++index) {
+        const SfsExtent *extent = &model->extents.items[index];
+        if (index != 0U) {
+            const SfsExtent *previous = &model->extents.items[index - 1U];
+            if ((uint64_t)previous->key + previous->blocks > extent->key) {
+                set_error(error, error_size, "SFS data extents overlap");
+                model_close(model);
+                return -1;
+            }
+        }
+        for (uint32_t block = 0U; block < extent->blocks; ++block) {
+            if (model->free_map[extent->key + block] != 0U) {
+                set_error(error, error_size,
+                          "SFS extent B-tree references bitmap-free data");
+                model_close(model);
+                return -1;
+            }
+        }
+    }
+
+    uint8_t *owned = calloc(model->extents.count == 0U ? 1U :
+                            model->extents.count, 1U);
+    if (owned == NULL) {
+        set_error(error, error_size, "out of memory tracking SFS extent ownership");
+        model_close(model);
+        return -1;
+    }
+    analysis.growth_10_satisfied = true;
+    rc = scan_object_catalogue(model->fd, &model->root, &model->extents,
+                               owned, model->free_map, &analysis, NULL, 0U,
+                               &model->files, error, error_size);
+    if (rc == 0) {
+        for (size_t index = 0U; index < model->extents.count; ++index) {
+            if (owned[index] == 0U) {
+                set_error(error, error_size,
+                          "SFS extent B-tree contains unreferenced data");
+                rc = -1;
+                break;
+            }
+        }
+    }
+    free(owned);
+    (void)first_key;
+    (void)has_key;
+    if (rc != 0) {
+        model_close(model);
+        return -1;
+    }
+    return 0;
+}
+
+static void fix_checksum(uint8_t *block, uint32_t block_size) {
+    infiltratr_store_be32(block + 4U, 0U);
+    uint32_t sum = 1U;
+    for (uint32_t offset = 0U; offset < block_size; offset += 4U)
+        sum += be32(block + offset);
+    infiltratr_store_be32(block + 4U, 0U - sum);
+}
+
+static int copy_bytes(int source_fd, int target_fd, uint64_t bytes,
+                      char *error, size_t error_size) {
+    uint8_t *buffer = malloc(SFS_IO_BATCH_BYTES);
+    if (buffer == NULL) {
+        set_error(error, error_size, "out of memory batching SFS image I/O");
+        return -1;
+    }
+    int rc = 0;
+    for (uint64_t offset = 0U; offset < bytes;) {
+        uint64_t remaining = bytes - offset;
+        size_t count = remaining > SFS_IO_BATCH_BYTES ?
+                       SFS_IO_BATCH_BYTES : (size_t)remaining;
+        if (ld_pread_full(source_fd, buffer, count, offset) != (ssize_t)count ||
+            ld_pwrite_full(target_fd, buffer, count, offset) != (ssize_t)count) {
+            if (error != NULL && error_size != 0U)
+                (void)snprintf(error, error_size,
+                               "short SFS image I/O at byte %" PRIu64, offset);
+            rc = -1;
+            break;
+        }
+        offset += count;
+    }
+    free(buffer);
+    return rc;
+}
+
+static int choose_run(uint8_t *claimed, uint32_t total_blocks,
+                      uint32_t need, uint32_t reserve, uint32_t *start) {
+    const uint64_t span = (uint64_t)need + reserve;
+    if (span == 0U) {
+        *start = 0U;
+        return 0;
+    }
+    for (uint32_t candidate = 0U;
+         (uint64_t)candidate + span <= total_blocks; ++candidate) {
+        bool available = true;
+        for (uint32_t index = 0U; index < need + reserve; ++index) {
+            if (claimed[candidate + index] != 0U) {
+                candidate += index;
+                available = false;
+                break;
+            }
+        }
+        if (!available) continue;
+        *start = candidate;
+        memset(claimed + candidate, 1, (size_t)need + reserve);
+        return 0;
+    }
+    return -1;
+}
+
+static int copy_file_payload(const SfsModel *source, int stage_fd,
+                             const SfsFile *file, uint32_t target_start,
+                             char *error, size_t error_size) {
+    const uint32_t batch_blocks =
+        SFS_IO_BATCH_BYTES / source->root.block_size == 0U ? 1U :
+        SFS_IO_BATCH_BYTES / source->root.block_size;
+    uint8_t *buffer = malloc((size_t)batch_blocks * source->root.block_size);
+    if (buffer == NULL) {
+        set_error(error, error_size, "out of memory batching SFS file relocation");
+        return -1;
+    }
+    uint32_t logical = 0U;
+    for (size_t chain = 0U; chain < file->chain.count; ++chain) {
+        const SfsExtent *extent =
+            &source->extents.items[file->chain.items[chain]];
+        uint32_t done = 0U;
+        while (done < extent->blocks) {
+            uint32_t count = extent->blocks - done;
+            if (count > batch_blocks) count = batch_blocks;
+            const size_t bytes = (size_t)count * source->root.block_size;
+            const uint64_t source_offset =
+                (uint64_t)(extent->key + done) * source->root.block_size;
+            const uint64_t target_offset =
+                (uint64_t)(target_start + logical) * source->root.block_size;
+            if (ld_pread_full(source->fd, buffer, bytes, source_offset) !=
+                    (ssize_t)bytes ||
+                ld_pwrite_full(stage_fd, buffer, bytes, target_offset) !=
+                    (ssize_t)bytes) {
+                set_error(error, error_size, "short I/O relocating SFS file data");
+                free(buffer);
+                return -1;
+            }
+            done += count;
+            logical += count;
+        }
+    }
+    free(buffer);
+    return 0;
+}
+
+static int extent_compare(const void *left, const void *right) {
+    const SfsExtent *a = left;
+    const SfsExtent *b = right;
+    if (a->key < b->key) return -1;
+    if (a->key > b->key) return 1;
+    return 0;
+}
+
+static int write_extent_records(int fd, const Root *root,
+                                const SfsExtentVec *slots,
+                                SfsExtent *records, size_t count,
+                                char *error, size_t error_size) {
+    if (count != slots->count) {
+        set_error(error, error_size, "SFS relocation changed extent-record count");
+        return -1;
+    }
+    if (count != 0U)
+        qsort(records, count, sizeof(*records), extent_compare);
+    uint8_t *block = malloc(root->block_size);
+    if (block == NULL) {
+        set_error(error, error_size, "out of memory rewriting SFS extent B-tree");
+        return -1;
+    }
+    for (size_t index = 0U; index < count; ++index) {
+        const SfsExtent *slot = &slots->items[index];
+        const SfsExtent *record = &records[index];
+        if (index != 0U) {
+            const SfsExtent *previous = &records[index - 1U];
+            if ((uint64_t)previous->key + previous->blocks > record->key) {
+                free(block);
+                set_error(error, error_size, "planned SFS extents overlap");
+                return -1;
+            }
+        }
+        if (read_metadata_block(fd, root, slot->container_block,
+                                SFS_BNODE_ID, block, error, error_size) != 0) {
+            free(block);
+            return -1;
+        }
+        if ((uint64_t)slot->node_offset + SFS_EXTENT_NODE_BYTES >
+            root->block_size || block[14U] == 0U ||
+            block[15U] != SFS_EXTENT_NODE_BYTES) {
+            free(block);
+            set_error(error, error_size, "SFS extent slot changed during staging");
+            return -1;
+        }
+        uint8_t *node = block + slot->node_offset;
+        infiltratr_store_be32(node, record->key);
+        infiltratr_store_be32(node + 4U, record->next);
+        infiltratr_store_be32(node + 8U, record->prev);
+        infiltratr_store_be16(node + 12U, record->blocks);
+        fix_checksum(block, root->block_size);
+        if (ld_pwrite_full(fd, block, root->block_size,
+                           (uint64_t)slot->container_block * root->block_size) !=
+            (ssize_t)root->block_size) {
+            free(block);
+            set_error(error, error_size, "cannot rewrite SFS extent B-tree leaf");
+            return -1;
+        }
+    }
+    free(block);
+    return 0;
+}
+
+static int refresh_btree_node(int fd, const Root *root, uint32_t block_no,
+                              uint8_t *visited, unsigned depth,
+                              uint32_t *first_key, bool *has_key,
+                              char *error, size_t error_size) {
+    if (depth > 64U || block_no >= root->total_blocks ||
+        visited[block_no] != 0U) {
+        set_error(error, error_size, "SFS extent B-tree topology changed during staging");
+        return -1;
+    }
+    visited[block_no] = 1U;
+    uint8_t *block = malloc(root->block_size);
+    if (block == NULL) {
+        set_error(error, error_size, "out of memory refreshing SFS extent B-tree");
+        return -1;
+    }
+    if (read_metadata_block(fd, root, block_no, SFS_BNODE_ID, block,
+                            error, error_size) != 0) {
+        free(block);
+        return -1;
+    }
+    const uint16_t count = be16(block + 12U);
+    const bool leaf = block[14U] != 0U;
+    const uint8_t node_size = block[15U];
+    if ((leaf && node_size != SFS_EXTENT_NODE_BYTES) ||
+        (!leaf && node_size != SFS_INTERNAL_NODE_BYTES) ||
+        (uint64_t)count * node_size >
+            root->block_size - SFS_BNODE_HEADER_BYTES) {
+        free(block);
+        set_error(error, error_size, "invalid SFS extent B-tree geometry during refresh");
+        return -1;
+    }
+    *has_key = false;
+    if (leaf) {
+        if (count != 0U) {
+            *first_key = be32(block + SFS_BNODE_HEADER_BYTES);
+            *has_key = true;
+        }
+        free(block);
+        return 0;
+    }
+
+    for (uint16_t index = 0U; index < count; ++index) {
+        uint8_t *node = block + SFS_BNODE_HEADER_BYTES +
+                        (size_t)index * node_size;
+        const uint32_t child = be32(node + 4U);
+        uint32_t child_first = 0U;
+        bool child_has_key = false;
+        if (child == 0U ||
+            refresh_btree_node(fd, root, child, visited, depth + 1U,
+                               &child_first, &child_has_key,
+                               error, error_size) != 0 ||
+            !child_has_key) {
+            free(block);
+            if (error != NULL && error_size != 0U && error[0] == '\0')
+                set_error(error, error_size, "invalid SFS B-tree child during refresh");
+            return -1;
+        }
+        infiltratr_store_be32(node, index == 0U ? 0U : child_first);
+        if (!*has_key) {
+            *first_key = child_first;
+            *has_key = true;
+        }
+    }
+    fix_checksum(block, root->block_size);
+    if (ld_pwrite_full(fd, block, root->block_size,
+                       (uint64_t)block_no * root->block_size) !=
+        (ssize_t)root->block_size) {
+        free(block);
+        set_error(error, error_size, "cannot refresh SFS extent B-tree separators");
+        return -1;
+    }
+    free(block);
+    return 0;
+}
+
+static int refresh_btree(int fd, const Root *root,
+                         char *error, size_t error_size) {
+    uint8_t *visited = calloc(root->total_blocks, 1U);
+    if (visited == NULL) {
+        set_error(error, error_size, "out of memory refreshing SFS extent B-tree");
+        return -1;
+    }
+    uint32_t first = 0U;
+    bool has = false;
+    const int rc = refresh_btree_node(fd, root, root->extent_bnode_root,
+                                      visited, 0U, &first, &has,
+                                      error, error_size);
+    free(visited);
+    (void)first;
+    (void)has;
+    return rc;
+}
+
+static int write_file_pointer(int fd, const Root *root, const SfsFile *file,
+                              char *error, size_t error_size) {
+    uint8_t *block = malloc(root->block_size);
+    if (block == NULL) {
+        set_error(error, error_size, "out of memory rewriting SFS object");
+        return -1;
+    }
+    if (read_metadata_block(fd, root, file->object_block,
+                            SFS_OBJECT_ID, block, error, error_size) != 0) {
+        free(block);
+        return -1;
+    }
+    if ((uint64_t)file->object_offset + SFS_OBJECT_FIXED_BYTES >
+            root->block_size ||
+        be32(block + file->object_offset + 4U) != file->object_node) {
+        free(block);
+        set_error(error, error_size, "SFS file object changed during staging");
+        return -1;
+    }
+    infiltratr_store_be32(block + file->object_offset + 12U,
+                          file->chain.count == 0U ? 0U : file->new_start);
+    fix_checksum(block, root->block_size);
+    if (ld_pwrite_full(fd, block, root->block_size,
+                       (uint64_t)file->object_block * root->block_size) !=
+        (ssize_t)root->block_size) {
+        free(block);
+        set_error(error, error_size, "cannot rewrite SFS file object");
+        return -1;
+    }
+    free(block);
+    return 0;
+}
+
+static int write_bitmap(int fd, const Root *root, const uint8_t *free_map,
+                        char *error, size_t error_size) {
+    const uint64_t bits_per =
+        (uint64_t)(root->block_size - SFS_HEADER_BYTES) * 8U;
+    const uint64_t bitmap_blocks =
+        ((uint64_t)root->total_blocks + bits_per - 1U) / bits_per;
+    uint8_t *block = malloc(root->block_size);
+    if (block == NULL) {
+        set_error(error, error_size, "out of memory rewriting SFS bitmap");
+        return -1;
+    }
+    for (uint64_t bitmap_index = 0U; bitmap_index < bitmap_blocks;
+         ++bitmap_index) {
+        const uint32_t block_no = root->bitmap_base + (uint32_t)bitmap_index;
+        if (read_metadata_block(fd, root, block_no, SFS_BITMAP_ID, block,
+                                error, error_size) != 0) {
+            free(block);
+            return -1;
+        }
+        const uint64_t first = bitmap_index * bits_per;
+        uint64_t count = bits_per;
+        if (first + count > root->total_blocks)
+            count = root->total_blocks - first;
+        for (uint64_t bit = 0U; bit < count; ++bit) {
+            const uint8_t mask = (uint8_t)(0x80U >> (bit & 7U));
+            uint8_t *byte = block + SFS_HEADER_BYTES + (size_t)(bit >> 3U);
+            if (free_map[first + bit] != 0U) *byte |= mask;
+            else *byte &= (uint8_t)~mask;
+        }
+        fix_checksum(block, root->block_size);
+        if (ld_pwrite_full(fd, block, root->block_size,
+                           (uint64_t)block_no * root->block_size) !=
+            (ssize_t)root->block_size) {
+            free(block);
+            set_error(error, error_size, "cannot rewrite SFS allocation bitmap");
+            return -1;
+        }
+    }
+    free(block);
+    return 0;
+}
+
+int sfs_build_stage(const char *source, const char *stage, bool growth,
+                    unsigned growth_percent, bool live_updates,
+                    uint64_t *commit_bytes, char *error, size_t error_size) {
+    if (source == NULL || stage == NULL || growth_percent > 100U) {
+        set_error(error, error_size, "invalid SFS staging request");
+        return -1;
+    }
+    SfsModel model;
+    if (model_open(source, &model, error, error_size) != 0)
+        return -1;
+    if (model.transaction_pending) {
+        set_error(error, error_size,
+                  "SFS filesystem has an unfinished native transaction marker");
+        model_close(&model);
+        return -1;
+    }
+
+    const uint64_t filesystem_bytes =
+        (uint64_t)model.root.total_blocks * model.root.block_size;
+    int stage_fd = open(stage, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (stage_fd < 0 || ftruncate(stage_fd, (off_t)filesystem_bytes) != 0) {
+        if (stage_fd >= 0) (void)close(stage_fd);
+        if (error != NULL && error_size != 0U)
+            (void)snprintf(error, error_size,
+                           "cannot create SFS working image: %s", strerror(errno));
+        model_close(&model);
+        return -1;
+    }
+    if (copy_bytes(model.fd, stage_fd, filesystem_bytes,
+                   error, error_size) != 0) {
+        (void)close(stage_fd);
+        model_close(&model);
+        return -1;
+    }
+
+    uint8_t *claimed = calloc(model.root.total_blocks, 1U);
+    uint8_t *stage_free = malloc(model.root.total_blocks);
+    SfsExtent *records = calloc(model.extents.count == 0U ? 1U :
+                                model.extents.count, sizeof(*records));
+    if (claimed == NULL || stage_free == NULL || records == NULL) {
+        free(claimed);
+        free(stage_free);
+        free(records);
+        (void)close(stage_fd);
+        model_close(&model);
+        set_error(error, error_size, "out of memory planning SFS relocation");
+        return -1;
+    }
+    memcpy(stage_free, model.free_map, model.root.total_blocks);
+    for (uint32_t block = 0U; block < model.root.total_blocks; ++block)
+        claimed[block] = model.free_map[block] == 0U ? 1U : 0U;
+    for (size_t index = 0U; index < model.extents.count; ++index) {
+        const SfsExtent *extent = &model.extents.items[index];
+        memset(claimed + extent->key, 0, extent->blocks);
+        memset(stage_free + extent->key, 1, extent->blocks);
+    }
+
+    size_t record_count = 0U;
+    int rc = 0;
+    for (size_t file_index = 0U; file_index < model.files.count; ++file_index) {
+        SfsFile *file = &model.files.items[file_index];
+        const uint64_t need64 =
+            ((uint64_t)file->byte_size + model.root.block_size - 1U) /
+            model.root.block_size;
+        if (need64 > UINT32_MAX) {
+            set_error(error, error_size, "SFS file is too large for SFS0 relocation");
+            rc = -1;
+            break;
+        }
+        const uint32_t need = (uint32_t)need64;
+        const uint64_t reserve64 = growth && need != 0U ?
+            ((uint64_t)need * growth_percent + 99U) / 100U : 0U;
+        if (reserve64 > UINT32_MAX) {
+            set_error(error, error_size, "SFS growth reserve is too large");
+            rc = -1;
+            break;
+        }
+        const uint32_t reserve = (uint32_t)reserve64;
+        uint32_t start = 0U;
+        if (need != 0U &&
+            choose_run(claimed, model.root.total_blocks, need, reserve,
+                       &start) != 0) {
+            if (error != NULL && error_size != 0U)
+                (void)snprintf(error, error_size,
+                    "SFS layout cannot place object %u contiguously with its required reserve",
+                    file->object_node);
+            rc = -1;
+            break;
+        }
+        file->new_start = start;
+        if (need != 0U &&
+            copy_file_payload(&model, stage_fd, file, start,
+                              error, error_size) != 0) {
+            rc = -1;
+            break;
+        }
+        if (need != 0U) memset(stage_free + start, 0, need);
+        if (reserve != 0U) memset(stage_free + start + need, 1, reserve);
+
+        uint32_t cursor = start;
+        for (size_t chain = 0U; chain < file->chain.count; ++chain) {
+            const SfsExtent *old =
+                &model.extents.items[file->chain.items[chain]];
+            if (record_count >= model.extents.count) {
+                set_error(error, error_size, "SFS extent planning overflow");
+                rc = -1;
+                break;
+            }
+            const uint32_t next = chain + 1U < file->chain.count ?
+                                  cursor + old->blocks : 0U;
+            const uint32_t prev = chain == 0U ? 0U :
+                cursor - model.extents.items[file->chain.items[chain - 1U]].blocks;
+            records[record_count++] = (SfsExtent){
+                .key = cursor,
+                .next = next,
+                .prev = prev,
+                .blocks = old->blocks,
+                .container_block = 0U,
+                .node_offset = 0U,
+            };
+            cursor += old->blocks;
+        }
+        if (rc != 0) break;
+        if (write_file_pointer(stage_fd, &model.root, file,
+                               error, error_size) != 0) {
+            rc = -1;
+            break;
+        }
+        if (live_updates && need != 0U) {
+            (void)printf(
+                "@@LIVE_RANGES {\"ranges\":[[%u,%u,1]],\"sequence\":%zu}\n",
+                start, start + need, file_index + 1U);
+            (void)fflush(stdout);
+        }
+    }
+    if (rc == 0 && record_count != model.extents.count) {
+        set_error(error, error_size,
+                  "SFS object catalogue does not account for every extent record");
+        rc = -1;
+    }
+    if (rc == 0 &&
+        (write_extent_records(stage_fd, &model.root, &model.extents,
+                              records, record_count, error, error_size) != 0 ||
+         refresh_btree(stage_fd, &model.root, error, error_size) != 0 ||
+         write_bitmap(stage_fd, &model.root, stage_free,
+                      error, error_size) != 0 ||
+         fsync(stage_fd) != 0)) {
+        if (rc == 0 && error != NULL && error_size != 0U && error[0] == '\0')
+            (void)snprintf(error, error_size,
+                           "cannot sync SFS working image: %s", strerror(errno));
+        rc = -1;
+    }
+    free(claimed);
+    free(stage_free);
+    free(records);
+    (void)close(stage_fd);
+    if (rc == 0 && commit_bytes != NULL) *commit_bytes = filesystem_bytes;
+    model_close(&model);
+    return rc;
+}
+
+int sfs_verify_layout(const char *path, bool growth, unsigned growth_percent,
+                      char *error, size_t error_size) {
+    if (growth && growth_percent != 10U) {
+        set_error(error, error_size, "SFS Growth Defrag requires exactly 10 percent reserve");
+        return -1;
+    }
+    SfsAnalysis analysis;
+    if (sfs_analyse(path, &analysis, NULL, 0U, error, error_size) != 0)
+        return -1;
+    if (analysis.transaction_pending) {
+        set_error(error, error_size, "SFS layout retains an unfinished native transaction marker");
+        return -1;
+    }
+    if (analysis.fragmented_files != 0U) {
+        set_error(error, error_size, "SFS layout remains fragmented");
+        return -1;
+    }
+    if (growth && !analysis.growth_10_satisfied) {
+        set_error(error, error_size,
+                  "SFS layout does not provide the exact 10 percent post-file reserve");
+        return -1;
+    }
+    return 0;
+}
+
+int sfs_commit_stage(const char *stage, const char *target, uint64_t *written,
+                     char *error, size_t error_size) {
+    SfsAnalysis analysis;
+    if (sfs_analyse(stage, &analysis, NULL, 0U, error, error_size) != 0)
+        return -1;
+    int source_fd = open(stage, O_RDONLY | O_CLOEXEC);
+    int target_fd = open(target, O_RDWR | O_CLOEXEC);
+    if (source_fd < 0 || target_fd < 0) {
+        if (source_fd >= 0) (void)close(source_fd);
+        if (target_fd >= 0) (void)close(target_fd);
+        if (error != NULL && error_size != 0U)
+            (void)snprintf(error, error_size, "cannot open SFS stage or target: %s",
+                           strerror(errno));
+        return -1;
+    }
+    const int rc = copy_bytes(source_fd, target_fd, analysis.filesystem_bytes,
+                              error, error_size);
+    if (rc == 0 && fsync(target_fd) != 0) {
+        if (error != NULL && error_size != 0U)
+            (void)snprintf(error, error_size, "cannot sync SFS target: %s",
+                           strerror(errno));
+        (void)close(source_fd);
+        (void)close(target_fd);
+        return -1;
+    }
+    (void)close(source_fd);
+    (void)close(target_fd);
+    if (rc == 0 && written != NULL) *written = analysis.filesystem_bytes;
+    return rc;
+}
+
 bool sfs_probe(const char *path)
 {
     if (path == NULL) return false;
