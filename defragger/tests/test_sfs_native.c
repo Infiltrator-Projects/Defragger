@@ -194,8 +194,27 @@ static int probe_image(const uint8_t *image)
     return result;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    if (argc == 4 && strcmp(argv[1], "--write-fixture") == 0) {
+        uint8_t *fixture = malloc(TEST_BYTES);
+        if (fixture == NULL)
+            return 2;
+        const int fragmented = strcmp(argv[3], "fragmented") == 0 ? 1 :
+                               strcmp(argv[3], "contiguous") == 0 ? 0 : -1;
+        if (fragmented < 0) {
+            free(fixture);
+            return 2;
+        }
+        make_image(fixture, 0, fragmented);
+        const int fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+        const ssize_t written = fd >= 0 ? write(fd, fixture, TEST_BYTES) : -1;
+        if (fd >= 0) (void)close(fd);
+        free(fixture);
+        return written == TEST_BYTES ? 0 : 1;
+    }
+    if (argc != 1)
+        return 2;
     uint8_t *image = malloc(TEST_BYTES);
     if (image == NULL)
         return 1;

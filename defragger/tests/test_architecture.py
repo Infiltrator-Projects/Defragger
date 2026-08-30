@@ -30,6 +30,7 @@ NATIVE_WRITERS = {
     "ext4": "ext-native",
     "xfs": "xfs-native",
     "affs": "affs-native",
+    "sfs": "sfs-native",
     "hfsplus": "hfsplus-native",
 }
 
@@ -87,7 +88,7 @@ def test_dispatch_is_filesystem_neutral() -> None:
         for filesystem, worker in (("fat32", "fat-native"), ("exfat", "exfat-native"),
                                    ("ntfs", "ntfs-native"), ("ext4", "ext-native"),
                                    ("xfs", "xfs-native"), ("affs", "affs-native"),
-                                   ("hfsplus", "hfsplus-native")):
+                                   ("sfs", "sfs-native"), ("hfsplus", "hfsplus-native")):
             command = operation_engine.build_worker_command(
                 registry, filesystem, "defrag", "/dev/test", []
             )
@@ -134,7 +135,7 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         "runtime.py", "staging.py", "tools.py", "libext.py", "geometry.py", "format.py",
         "placement.py",
     }
-    for filesystem in ("ext4", "ntfs", "exfat", "xfs", "affs", "hfsplus"):
+    for filesystem in ("ext4", "ntfs", "exfat", "xfs", "affs", "sfs", "hfsplus"):
         package = GUI / "filesystems" / filesystem
         assert not ({path.name for path in package.glob("*.py")} & forbidden_python)
 
@@ -264,7 +265,8 @@ def test_infiltratr_common_integration() -> None:
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
         assert "infiltratr_parse_u64" in source
         assert "infiltratr_trim_line_end" in source
-    for filesystem, worker in (("affs", "affs_worker.c"), ("hfsplus", "hfsplus_worker.c")):
+    for filesystem, worker in (("affs", "affs_worker.c"), ("sfs", "sfs_worker.c"),
+                               ("hfsplus", "hfsplus_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
         assert "infiltratr_parse_u64_range" in source
         assert "infiltratr_trim_line_end" in source
@@ -301,6 +303,7 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
         "exfat": native / "exfat" / "native" / "exfat_worker.c",
         "xfs": native / "xfs" / "native" / "xfs_worker.c",
         "affs": native / "affs" / "native" / "affs_worker.c",
+        "sfs": native / "sfs" / "native" / "sfs_worker.c",
         "hfsplus": native / "hfsplus" / "native" / "hfsplus_worker.c",
     }
     sources = {name: path.read_text() for name, path in workers.items()}
@@ -316,6 +319,7 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
     assert "ld_path_is_mounted(device)" in sources["exfat"]
     assert "ld_device_number_is_mounted(status.st_rdev)" in sources["xfs"]
     assert "ld_path_is_mounted(device)" in sources["affs"]
+    assert "ld_path_is_mounted(device)" in sources["sfs"]
     assert "ld_path_is_mounted(device)" in sources["hfsplus"]
 
     recovery_bindings = {
@@ -324,6 +328,7 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
         "exfat": (".exfat-stage.img",),
         "xfs": (".xfs-stage.img", ".xfs-plan.sqlite"),
         "affs": (".affs-stage",),
+        "sfs": (".sfs-stage",),
         "hfsplus": (".hfsplus-stage",),
     }
     for name, suffixes in recovery_bindings.items():
@@ -338,6 +343,7 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
         "exfat": workers["exfat"],
         "xfs": workers["xfs"],
         "affs": workers["affs"],
+        "sfs": workers["sfs"],
         "hfsplus": workers["hfsplus"],
     }
     for name, path in journal_sources.items():

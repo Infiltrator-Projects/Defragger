@@ -19,7 +19,7 @@ The current software version is defined by [`VERSION`](VERSION). Installable bui
 | ext2 / ext3 / ext4 | Exact | Native C staged writer | Native C, exact 10% reserve | Yes |
 | XFS v5 | Exact | Native C raw userspace writer | Native C, exact 10% reserve | Yes |
 | Amiga OFS / FFS | Exact | Native C | Native C, exact 10% reserve | Yes |
-| Amiga SFS0 | Exact allocation + file-extent fragmentation analysis, native C read-only | Not implemented | Not implemented | No |
+| Amiga SFS0 | Exact allocation + file-extent fragmentation analysis, native C | First-party native C offline raw relayout | Exact 10% post-file reserve | Yes |
 | Amiga SFS2 | Not implemented | Not implemented | Not implemented | No |
 | Amiga PFS3 | Not implemented | Not implemented | Not implemented | No |
 | HFS+ / HFSX | Exact | Native C, fail-closed preflight | Native C, exact 10% reserve | Yes |

@@ -4,7 +4,7 @@
 # Author: Shannon Smith
 # Purpose: Thin GUI adapter for the native C Amiga Smart File System analyser.
 
-"""Read-only SFS0 allocation backend.
+"""Native SFS0 allocation and offline relocation backend.
 
 The native worker validates redundant root blocks and every BTMP allocation
 bitmap block directly from raw storage.  SFS2 is intentionally not advertised as supported by this backend until its
@@ -20,13 +20,21 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from backends.base import BackendError, BackendInfo, CAP_ANALYSE, CAP_MAP, FilesystemBackend
+from backends.base import (
+    BackendError, BackendInfo, CAP_ANALYSE, CAP_DEFRAG, CAP_GROWTH_DEFRAG,
+    CAP_LIVE_MAP, CAP_MAP, CAP_RECOVER, FilesystemBackend, operation,
+)
 from core.paths import resolve_program
 
 INFO = BackendInfo(
     "sfs", "Amiga SFS", ("sfs", "sfs0", "smartfilesystem"),
-    CAP_ANALYSE | CAP_MAP,
+    CAP_ANALYSE | CAP_MAP | CAP_DEFRAG | CAP_GROWTH_DEFRAG | CAP_RECOVER | CAP_LIVE_MAP,
     "exact-allocation",
+    operations=(
+        operation("defrag", "sfs-native", warning="Amiga SFS0 writing uses Linux Defragger's offline first-party native C raw engine."),
+        operation("growth-defrag", "sfs-native", warning="SFS0 Growth Defrag leaves an exact 10% free-block reserve after every regular file."),
+        operation("recover", "sfs-native"),
+    ),
 )
 
 
