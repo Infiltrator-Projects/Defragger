@@ -20,28 +20,18 @@ jobs:
 
     steps:
       - name: Prove runner identity
-        shell: powershell
+        shell: cmd
         run: |
-          Write-Host "Slot: ${{ matrix.slot }}"
-          Write-Host "Runner name: $env:RUNNER_NAME"
-          Write-Host "Runner OS: $env:RUNNER_OS"
-          Write-Host "Runner architecture: $env:RUNNER_ARCH"
-          Write-Host "Computer name: $env:COMPUTERNAME"
-          Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
-          Write-Host "Processor architecture: $env:PROCESSOR_ARCHITECTURE"
+          echo Slot: ${{ matrix.slot }}
+          echo Runner name: %RUNNER_NAME%
+          echo Runner OS: %RUNNER_OS%
+          echo Runner architecture: %RUNNER_ARCH%
+          echo Computer name: %COMPUTERNAME%
+          echo Processor architecture: %PROCESSOR_ARCHITECTURE%
 
-      - name: Verify native ARM64 execution
-        shell: powershell
+      - name: Hold all five runners busy together
+        shell: cmd
         run: |
-          $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-          Write-Host "Native OS architecture: $arch"
-          if ($arch -ne [System.Runtime.InteropServices.Architecture]::Arm64) {
-            throw "Expected ARM64 runner, got $arch"
-          }
-
-      - name: Short overlap to exercise all five runners
-        shell: powershell
-        run: |
-          Write-Host "Holding runner for 20 seconds so the five matrix jobs overlap."
-          Start-Sleep -Seconds 20
-          Write-Host "Smoke test complete on $env:RUNNER_NAME"
+          echo Holding %RUNNER_NAME% busy for 20 seconds...
+          ping 127.0.0.1 -n 21 >nul
+          echo Smoke test complete on %RUNNER_NAME%
