@@ -1,0 +1,47 @@
+name: Windows runner smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-runner-smoke:
+    name: Windows runner ${{ matrix.slot }}
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        slot: [1, 2, 3, 4, 5]
+
+    runs-on: [self-hosted, Windows, ARM64]
+    timeout-minutes: 10
+
+    steps:
+      - name: Prove runner identity
+        shell: powershell
+        run: |
+          Write-Host "Slot: ${{ matrix.slot }}"
+          Write-Host "Runner name: $env:RUNNER_NAME"
+          Write-Host "Runner OS: $env:RUNNER_OS"
+          Write-Host "Runner architecture: $env:RUNNER_ARCH"
+          Write-Host "Computer name: $env:COMPUTERNAME"
+          Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
+          Write-Host "Processor architecture: $env:PROCESSOR_ARCHITECTURE"
+
+      - name: Verify native ARM64 execution
+        shell: powershell
+        run: |
+          $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+          Write-Host "Native OS architecture: $arch"
+          if ($arch -ne [System.Runtime.InteropServices.Architecture]::Arm64) {
+            throw "Expected ARM64 runner, got $arch"
+          }
+
+      - name: Short overlap to exercise all five runners
+        shell: powershell
+        run: |
+          Write-Host "Holding runner for 20 seconds so the five matrix jobs overlap."
+          Start-Sleep -Seconds 20
+          Write-Host "Smoke test complete on $env:RUNNER_NAME"
