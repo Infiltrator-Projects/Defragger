@@ -32,6 +32,6 @@ jobs:
       - name: Hold all five runners busy together
         shell: cmd
         run: |
-          echo Holding %RUNNER_NAME% busy for 20 seconds...
-          ping 127.0.0.1 -n 21 >nul
+          echo Holding %RUNNER_NAME% busy for 120 seconds...
+          ping 127.0.0.1 -n 121 >nul
           echo Smoke test complete on %RUNNER_NAME%
