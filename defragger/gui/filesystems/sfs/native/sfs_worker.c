@@ -237,23 +237,12 @@ static void journal_free(SfsJournal *state)
 
 static int ensure_directory_tree(const char *path, char *error, size_t error_size)
 {
-    char *copy = ld_xstrdup(path);
-    const size_t length = strlen(copy);
-    for (size_t index = 1U; index <= length; ++index) {
-        if (copy[index] != '/' && copy[index] != '\0')
-            continue;
-        const char saved = copy[index];
-        copy[index] = '\0';
-        if (copy[0] != '\0' && mkdir(copy, 0700) != 0 && errno != EEXIST) {
-            worker_error(error, error_size,
-                         "cannot create SFS journal directory %s: %s",
-                         copy, strerror(errno));
-            free(copy);
-            return -1;
-        }
-        copy[index] = saved;
+    if (ld_path_ensure_trusted_directory_tree(path) != 0) {
+        worker_error(error, error_size,
+                     "cannot create SFS journal directory %s: %s",
+                     path, strerror(errno));
+        return -1;
     }
-    free(copy);
     return 0;
 }
 
@@ -678,7 +667,9 @@ static int safe_commit_stage(const char *stage_path, const char *target_path,
         return -1;
     }
     int stage = open(stage_path, O_RDONLY | O_CLOEXEC);
-    int target = open(target_path, O_RDWR | O_CLOEXEC);
+    int target = ld_device_open_verified_fd(target_path, true,
+                                            state->target_identity,
+                                            state->physical_bytes);
     if (stage < 0 || target < 0) {
         if (stage >= 0) (void)close(stage);
         if (target >= 0) (void)close(target);
