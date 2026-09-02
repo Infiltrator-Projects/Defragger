@@ -320,19 +320,21 @@ static int check_unchanged_target(const char *device, const NtfsJournal *state, 
     ntfs_close_volume(&volume); return result;
 }
 
-static int mark_source_dirty(const char *device, char **error) {
+static int set_source_dirty(const char *device, const char *target_identity,
+                            uint64_t physical_bytes, bool dirty, char **error) {
     NtfsVolume volume; NtfsLayout layout;
     if (ntfs_open_volume(device, true, &volume, error) != 0) return -1;
-    if (ntfs_read_layout(&volume, false, &layout, error) != 0) { ntfs_close_volume(&volume); return -1; }
-    int result = ntfs_set_volume_dirty(&volume, &layout, true, error);
-    ntfs_layout_free(&layout); ntfs_close_volume(&volume); return result;
-}
-
-static int clear_source_dirty(const char *device, char **error) {
-    NtfsVolume volume; NtfsLayout layout;
-    if (ntfs_open_volume(device, true, &volume, error) != 0) return -1;
-    if (ntfs_read_layout(&volume, true, &layout, error) != 0) { ntfs_close_volume(&volume); return -1; }
-    int result = ntfs_set_volume_dirty(&volume, &layout, false, error);
+    if (!ld_fd_matches_identity(volume.fd, target_identity, physical_bytes)) {
+        ntfs_set_error(error,
+                       "NTFS dirty-state descriptor does not match the journaled target");
+        ntfs_close_volume(&volume);
+        return -1;
+    }
+    if (ntfs_read_layout(&volume, dirty ? false : true, &layout, error) != 0) {
+        ntfs_close_volume(&volume);
+        return -1;
+    }
+    int result = ntfs_set_volume_dirty(&volume, &layout, dirty, error);
     ntfs_layout_free(&layout); ntfs_close_volume(&volume); return result;
 }
 
@@ -539,13 +541,13 @@ static int try_terminal_workspace_relayout(const char *device, const char *opera
         if (ld_stop_requested()) { result = 130; goto stopped_unchanged; }
         if (check_unchanged_target(device, state, error) != 0) goto done;
         if (journal_phase(journal_path, state, "direct-metadata", error) != 0) goto done;
-        if (mark_source_dirty(device, error) != 0) goto metadata_recover_required;
-        if (ntfs_apply_stage_metadata(device, db, true, error) != 0) goto metadata_recover_required;
+        if (set_source_dirty(device, state->target_identity, state->physical_bytes, true, error) != 0) goto metadata_recover_required;
+        if (ntfs_apply_stage_metadata(device, db, true, state->target_identity, state->physical_bytes, error) != 0) goto metadata_recover_required;
         if (journal_phase(journal_path, state, "direct-verifying-source", error) != 0)
             goto metadata_recover_required;
         if (ntfs_verify_stage(device, db, growth, true, error) != 0)
             goto metadata_recover_required;
-        if (clear_source_dirty(device, error) != 0) goto metadata_recover_required;
+        if (set_source_dirty(device, state->target_identity, state->physical_bytes, false, error) != 0) goto metadata_recover_required;
         if (live_updates) emit_committed_live_reset(device, error);
         transaction_cleanup(journal_path, state);
         puts("NTFS direct metadata layout: canonical metadata verified without payload relocation or a filesystem-sized working image.");
@@ -597,7 +599,7 @@ static int try_terminal_workspace_relayout(const char *device, const char *opera
     fflush(stdout);
     if (ld_stop_requested()) { result = 130; goto stopped_unchanged; }
     if (check_unchanged_target(device, state, error) != 0) goto done;
-    if (mark_source_dirty(device, error) != 0) goto done;
+    if (set_source_dirty(device, state->target_identity, state->physical_bytes, true, error) != 0) goto done;
     if (journal_phase(journal_path, state, "workspace-placing", error) != 0) goto recover_required;
 
     puts("NTFS phase 2: placing the canonical layout directly from the durable terminal workspace.");
@@ -610,7 +612,7 @@ static int try_terminal_workspace_relayout(const char *device, const char *opera
         if (ntfs_restore_workspace(device, db, source->cluster_size,
                                    state->target_identity, state->physical_bytes,
                                    &restore_error) != 0 ||
-            clear_source_dirty(device, &restore_error) != 0) {
+            set_source_dirty(device, state->target_identity, state->physical_bytes, false, &restore_error) != 0) {
             if (error != NULL && *error == NULL) *error = restore_error;
             else free(restore_error);
             goto recover_required;
@@ -624,7 +626,7 @@ static int try_terminal_workspace_relayout(const char *device, const char *opera
         if (ntfs_restore_workspace(device, db, source->cluster_size,
                                    state->target_identity, state->physical_bytes,
                                    &restore_error) == 0 &&
-            clear_source_dirty(device, &restore_error) == 0) {
+            set_source_dirty(device, state->target_identity, state->physical_bytes, false, &restore_error) == 0) {
             free(restore_error);
             transaction_cleanup(journal_path, state);
             goto done;
@@ -635,11 +637,11 @@ static int try_terminal_workspace_relayout(const char *device, const char *opera
     if (journal_phase(journal_path, state, "workspace-metadata", error) != 0) goto recover_required;
     puts("NTFS phase 3: committing canonical MFT mapping pairs and $Bitmap metadata.");
     fflush(stdout);
-    if (ntfs_apply_stage_metadata(device, db, true, error) != 0) goto recover_required;
+    if (ntfs_apply_stage_metadata(device, db, true, state->target_identity, state->physical_bytes, error) != 0) goto recover_required;
     if (journal_phase(journal_path, state, "workspace-verifying-source", error) != 0)
         goto recover_required;
     if (ntfs_verify_stage(device, db, growth, true, error) != 0) goto recover_required;
-    if (clear_source_dirty(device, error) != 0) goto recover_required;
+    if (set_source_dirty(device, state->target_identity, state->physical_bytes, false, error) != 0) goto recover_required;
     if (live_updates) emit_committed_live_reset(device, error);
     transaction_cleanup(journal_path, state);
     printf("NTFS unified workspace layout: %llu clusters staged and placed without a filesystem-sized working image.\n",
@@ -760,19 +762,19 @@ static int build_and_commit(const char *device, const char *operation, const cha
         if (ld_stop_requested()) goto stopped;
         goto precommit_fail;
     }
-    if (ntfs_apply_stage_metadata(state.stage, db, false, error) != 0) goto precommit_fail;
+    if (ntfs_apply_stage_metadata(state.stage, db, false, NULL, 0U, error) != 0) goto precommit_fail;
     if (journal_phase(journal_path, &state, "verifying-stage", error) != 0 ||
         ntfs_verify_stage(state.stage, db, growth, false, error) != 0) goto precommit_fail;
     if (ld_stop_requested()) goto stopped;
     if (check_unchanged_target(device, &state, error) != 0) goto precommit_fail;
-    if (mark_source_dirty(device, error) != 0) goto precommit_fail;
+    if (set_source_dirty(device, state.target_identity, state.physical_bytes, true, error) != 0) goto precommit_fail;
     state.commit_cluster = 0;
     if (journal_phase(journal_path, &state, "commit", error) != 0) goto commit_fail;
     puts("The internally verified raw NTFS working image is complete. Starting the persistent source commit."); fflush(stdout);
     if (commit_stage(device, journal_path, &state, 0, error) != 0) goto commit_fail;
     if (journal_phase(journal_path, &state, "verifying-source", error) != 0) goto commit_fail;
     if (ntfs_verify_stage(device, db, growth, true, error) != 0) goto commit_fail;
-    if (clear_source_dirty(device, error) != 0) goto commit_fail;
+    if (set_source_dirty(device, state.target_identity, state.physical_bytes, false, error) != 0) goto commit_fail;
     if (live_updates) {
         NtfsVolume committed; NtfsLayout committed_layout;
         if (ntfs_open_volume(device,false,&committed,error)==0 && ntfs_read_layout(&committed,false,&committed_layout,error)==0) {
@@ -826,12 +828,12 @@ static int recover_transaction(const char *device, const char *journal_path, cha
         bool growth = strcmp(state.operation, "growth-defrag") == 0;
         puts("Recovering an NTFS metadata-only canonical relayout.");
         fflush(stdout);
-        if (mark_source_dirty(device, error) != 0 ||
+        if (set_source_dirty(device, state.target_identity, state.physical_bytes, true, error) != 0 ||
             journal_phase(journal_path, &state, "direct-metadata", error) != 0 ||
-            ntfs_apply_stage_metadata(device, metadata_db, true, error) != 0 ||
+            ntfs_apply_stage_metadata(device, metadata_db, true, state.target_identity, state.physical_bytes, error) != 0 ||
             journal_phase(journal_path, &state, "direct-verifying-source", error) != 0 ||
             ntfs_verify_stage(device, metadata_db, growth, true, error) != 0 ||
-            clear_source_dirty(device, error) != 0) {
+            set_source_dirty(device, state.target_identity, state.physical_bytes, false, error) != 0) {
             sqlite3_close(metadata_db);
             goto done;
         }
@@ -872,16 +874,16 @@ static int recover_transaction(const char *device, const char *journal_path, cha
         bool growth = strcmp(state.operation, "growth-defrag") == 0;
         puts("Recovering NTFS directly from the checksummed terminal safety workspace.");
         fflush(stdout);
-        if (mark_source_dirty(device, error) != 0 ||
+        if (set_source_dirty(device, state.target_identity, state.physical_bytes, true, error) != 0 ||
             journal_phase(journal_path, &state, "workspace-placing", error) != 0 ||
             ntfs_place_workspace(device, workspace_db, cluster_size,
                                  state.target_identity, state.physical_bytes,
                                  false, error) != 0 ||
             journal_phase(journal_path, &state, "workspace-metadata", error) != 0 ||
-            ntfs_apply_stage_metadata(device, workspace_db, true, error) != 0 ||
+            ntfs_apply_stage_metadata(device, workspace_db, true, state.target_identity, state.physical_bytes, error) != 0 ||
             journal_phase(journal_path, &state, "workspace-verifying-source", error) != 0 ||
             ntfs_verify_stage(device, workspace_db, growth, true, error) != 0 ||
-            clear_source_dirty(device, error) != 0) {
+            set_source_dirty(device, state.target_identity, state.physical_bytes, false, error) != 0) {
             sqlite3_close(workspace_db); goto done;
         }
         sqlite3_close(workspace_db);
@@ -916,7 +918,7 @@ static int recover_transaction(const char *device, const char *journal_path, cha
     }
     if (journal_phase(journal_path, &state, "verifying-source", error) != 0) { sqlite3_close(db); goto done; }
     if (ntfs_verify_stage(device, db, growth, true, error) != 0) { sqlite3_close(db); goto done; }
-    if (clear_source_dirty(device, error) != 0) { sqlite3_close(db); goto done; }
+    if (set_source_dirty(device, state.target_identity, state.physical_bytes, false, error) != 0) { sqlite3_close(db); goto done; }
     sqlite3_close(db); transaction_cleanup(journal_path, &state);
     puts("NTFS recovery completed successfully."); emit_result("recover", "completed", ""); result = 0;
 done:
