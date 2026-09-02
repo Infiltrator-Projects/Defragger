@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ntfs_native.h"
 
+#include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "ld_stop.h"
