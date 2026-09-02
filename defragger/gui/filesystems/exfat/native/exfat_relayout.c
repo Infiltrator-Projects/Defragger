@@ -1043,8 +1043,12 @@ int exfat_relayout_in_place(const char *device, const char *journal_path,
     uint8_t *buffer = ld_xmalloc(buffer_bytes);
     ExfatRelayoutManifest manifest;
     if (populate_manifest(&manifest, &volume, &catalogue, reserve_percent,
-                          workspace_start, error) != 0)
-        goto fail;
+                          workspace_start, error) != 0) {
+        free(buffer);
+        exfat_close_volume(&volume);
+        exfat_catalogue_free(&catalogue);
+        return EXFAT_RELAYOUT_FAILED;
+    }
 
     bool stopped = false;
     for (size_t i = 0; i < catalogue.objects.count; ++i) {
