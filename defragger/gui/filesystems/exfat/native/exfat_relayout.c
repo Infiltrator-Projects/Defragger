@@ -91,21 +91,10 @@ static void manifest_free(ExfatRelayoutManifest *manifest) {
 }
 
 static int ensure_directory_tree(const char *path, char **error) {
-    char *copy = ld_xstrdup(path);
-    size_t length = strlen(copy);
-    for (size_t i = 1; i <= length; ++i) {
-        if (copy[i] != '/' && copy[i] != '\0') continue;
-        char saved = copy[i];
-        copy[i] = '\0';
-        if (copy[0] != '\0' && mkdir(copy, 0700) != 0 && errno != EEXIST) {
-            exfat_set_error(error, "cannot create exFAT journal directory %s: %s",
-                            copy, strerror(errno));
-            free(copy);
-            return -1;
-        }
-        copy[i] = saved;
+    if (ld_path_ensure_trusted_directory_tree(path) != 0) {
+        exfat_set_error(error, "cannot create exFAT journal directory %s: %s", path, strerror(errno));
+        return -1;
     }
-    free(copy);
     return 0;
 }
 
@@ -1194,9 +1183,7 @@ static int repair_boot_regions_from_survivor(const char *device,
         free(real);
         return -1;
     }
-    int flags = O_RDWR | O_CLOEXEC;
-    if (S_ISBLK(status.st_mode)) flags |= O_EXCL;
-    int fd = open(real, flags);
+    int fd = ld_device_open_verified_fd(real, true, NULL, 0U);
     if (fd < 0) {
         exfat_set_error(error, "cannot open exFAT recovery target: %s",
                         strerror(errno));
