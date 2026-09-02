@@ -403,6 +403,85 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
 
     assert "an unfinished NTFS journal exists; run Recover first" in sources["ntfs"]
 
+    path_source = (ROOT / "src" / "core" / "ld_path.c").read_text()
+    for required in ("openat(", "mkdirat(", "O_NOFOLLOW", "fstat("):
+        assert required in path_source, (
+            f"trusted journal path walker lost {required}"
+        )
+
+    support_source = (GUI / "ui" / "support.py").read_text()
+    helper_source = (GUI / "privileged_helper.py").read_text()
+    assert "/var/lib/linux-defragger/state" in support_source
+    assert "XDG_STATE_HOME" not in support_source
+    assert "_validate_operation_engine_args" in helper_source
+    assert "operation journal must be directly below" in helper_source
+
+    fat_journal = native / "fat" / "native" / "fat_journal.c"
+    assert "ld_path_ensure_trusted_directory_tree" in fat_journal.read_text()
+
+    journal_workers = (
+        workers["ext"], workers["ntfs"], workers["exfat"], workers["xfs"],
+        workers["affs"], workers["sfs"], workers["hfsplus"],
+        native / "exfat" / "native" / "exfat_relayout.c",
+    )
+    for path in journal_workers:
+        source = path.read_text()
+        assert "ld_path_ensure_trusted_directory_tree" in source, (
+            f"{path.relative_to(ROOT)} bypasses trusted journal-parent traversal"
+        )
+        assert "mkdir(copy, 0700)" not in source, (
+            f"{path.relative_to(ROOT)} reintroduced pathname-based parent traversal"
+        )
+
+    device_source = (ROOT / "src" / "core" / "ld_device.c").read_text()
+    for required in (
+        "ld_device_try_open",
+        "ld_device_matches_identity",
+        "ld_fd_matches_identity",
+        "ld_device_open_verified_fd",
+    ):
+        assert required in device_source, (
+            f"raw target identity core lost {required}"
+        )
+
+    for path in (
+        workers["ext"], workers["ntfs"], workers["affs"],
+        workers["sfs"], workers["hfsplus"],
+        native / "ntfs" / "native" / "ntfs_plan.c",
+        native / "exfat" / "native" / "exfat_relayout.c",
+    ):
+        source = path.read_text()
+        assert (
+            "ld_device_open_verified_fd" in source
+            or "ld_device_matches_identity" in source
+        ), f"{path.relative_to(ROOT)} bypasses journal-bound target opening"
+
+    xfs_source = workers["xfs"].read_text()
+    assert "ld_device_try_open" in xfs_source
+    assert "ld_device_matches_identity" in xfs_source
+
+    ntfs_plan = (native / "ntfs" / "native" / "ntfs_plan.c").read_text()
+    ntfs_worker = workers["ntfs"].read_text()
+    assert "ld_fd_matches_identity" in ntfs_plan
+    assert "ld_fd_matches_identity" in ntfs_worker
+    assert "open(device, O_RDWR | O_CLOEXEC)" not in ntfs_plan
+    assert "open(device, O_RDWR | O_CLOEXEC)" not in ntfs_worker
+
+    exfat_worker = workers["exfat"].read_text()
+    exfat_relayout = (native / "exfat" / "native" / "exfat_relayout.c").read_text()
+    assert "ld_fd_matches_identity" in exfat_worker
+    assert "target_identity" in exfat_relayout
+    assert "device_size" in exfat_relayout
+    assert "ld_fd_matches_identity" in exfat_relayout
+
+    for path in (
+        workers["ext"], workers["ntfs"], workers["affs"],
+        workers["sfs"], workers["hfsplus"],
+    ):
+        source = path.read_text()
+        assert "open(device, O_RDWR | O_CLOEXEC)" not in source
+        assert "open(target_path, O_RDWR | O_CLOEXEC)" not in source
+
 
 def test_version_and_registry_are_dynamic() -> None:
     assert re.fullmatch(r"\d+\.\d+\.\d+-\d+", (ROOT / "VERSION").read_text().strip())
