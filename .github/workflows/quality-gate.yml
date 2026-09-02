@@ -26,6 +26,7 @@ jobs:
       - name: Check out exact main candidate
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
 
       - name: Reject tracked generated state
@@ -83,6 +84,7 @@ jobs:
       - name: Check out exact main candidate
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
 
       - name: Install sanitizer build dependencies
@@ -124,6 +126,7 @@ jobs:
       - name: Check out exact main candidate
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
       - name: Build all first-party C with warnings as errors
         run: |
