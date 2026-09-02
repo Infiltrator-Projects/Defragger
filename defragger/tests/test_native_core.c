@@ -6,6 +6,7 @@
 #include "ld_runtime.h"
 #include "ld_stop.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
