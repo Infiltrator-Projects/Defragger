@@ -158,7 +158,7 @@ def main() -> None:
     assert isinstance(writer_assignment, dict), (
         "cannot determine authoritative native writer set from architecture test"
     )
-    match = re.search(r"^Audited writer IDs:\\s*(.+)$", audit, re.MULTILINE)
+    match = re.search(r"^Audited writer IDs:\s*(.+)$", audit, re.MULTILINE)
     assert match is not None, "completed safety audit lost Audited writer IDs"
     audited_writer_ids = {
         item.strip() for item in match.group(1).split(",") if item.strip()
