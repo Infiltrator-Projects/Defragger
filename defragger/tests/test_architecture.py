@@ -319,7 +319,7 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
         "O_NOFOLLOW",
         "fstat(fd, &opened)",
         "errno = ESTALE",
-        "target became mounted while opening it for raw writing",
+        "errno = EBUSY",
     ):
         assert required in device_source, f"raw target open lost hardening: {required}"
 
