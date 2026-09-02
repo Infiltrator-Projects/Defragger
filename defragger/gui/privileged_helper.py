@@ -32,6 +32,7 @@ PROTOCOL_VERSION = 1
 MAPPER = Path("/usr/lib/linux-defragger/allocation_mapper.py")
 OPERATION_ENGINE = Path("/usr/lib/linux-defragger/operation_engine.py")
 UDISKSCTL = Path("/usr/bin/udisksctl")
+STATE_ROOT = Path("/var/lib/linux-defragger/state")
 
 _emit_lock = threading.Lock()
 _active_lock = threading.Lock()
@@ -54,16 +55,41 @@ def fail(request_id: int | None, message: str) -> None:
     emit({"type": "error", "id": request_id, "message": message})
 
 
+def _invoking_uid() -> int:
+    for name in ("PKEXEC_UID", "SUDO_UID"):
+        raw = os.environ.get(name, "")
+        if raw.isdecimal():
+            return int(raw, 10)
+    if os.geteuid() != 0:
+        return os.getuid()
+    raise RuntimeError("cannot determine the unprivileged caller UID")
+
+
+def _validate_operation_engine_args(argv: list[str]) -> None:
+    if not argv or argv[0] not in {"defrag", "growth-defrag", "recover"}:
+        raise RuntimeError("operation-engine command is not allowed")
+    if "--filesystem" not in argv:
+        raise RuntimeError("operation-engine request has no filesystem plugin")
+    positions = [index for index, value in enumerate(argv) if value == "--journal"]
+    if len(positions) != 1 or positions[0] + 1 >= len(argv):
+        raise RuntimeError("operation-engine request must provide exactly one journal")
+    journal = Path(argv[positions[0] + 1])
+    expected_parent = STATE_ROOT / str(_invoking_uid())
+    if not journal.is_absolute() or journal.parent != expected_parent:
+        raise RuntimeError(
+            f"operation journal must be directly below {expected_parent}"
+        )
+    if re.fullmatch(r"[A-Za-z0-9_.-]+\.journal", journal.name) is None:
+        raise RuntimeError("operation journal filename is not valid")
+
+
 def allowed_command(program: str, argv: list[str]) -> list[str]:
     """Translate a small protocol identifier into one fixed installed command."""
 
     if program == "operation-engine":
+        _validate_operation_engine_args(argv)
         if not OPERATION_ENGINE.is_file() or not os.access(OPERATION_ENGINE, os.X_OK):
             raise RuntimeError(f"operation engine is unavailable: {OPERATION_ENGINE}")
-        if not argv or argv[0] not in {"defrag", "growth-defrag", "recover"}:
-            raise RuntimeError("operation-engine command is not allowed")
-        if "--filesystem" not in argv:
-            raise RuntimeError("operation-engine request has no filesystem plugin")
         return [str(OPERATION_ENGINE), *argv]
     if program == "mapper":
         if not MAPPER.is_file() or not os.access(MAPPER, os.X_OK):
