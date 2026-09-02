@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "gui"))
 
 from core import devices
 import privileged_helper
+from ui import support
 
 
 def _link(link: Path, target: Path) -> None:
@@ -86,6 +87,44 @@ def test_regular_image_mount_source() -> None:
             devices._SYS_DEV_BLOCK = old_sysfs
 
 
+def test_root_owned_journal_namespace() -> None:
+    old_xdg = os.environ.get("XDG_STATE_HOME")
+    os.environ["XDG_STATE_HOME"] = "/tmp/attacker-controlled-state"
+    try:
+        assert support.state_dir() == Path("/var/lib/linux-defragger/state") / str(os.getuid())
+    finally:
+        if old_xdg is None:
+            os.environ.pop("XDG_STATE_HOME", None)
+        else:
+            os.environ["XDG_STATE_HOME"] = old_xdg
+
+    old_pkexec = os.environ.get("PKEXEC_UID")
+    os.environ["PKEXEC_UID"] = "1234"
+    good = [
+        "defrag", "/dev/test", "--filesystem", "xfs", "--write", "--confirm",
+        "/dev/test", "--journal",
+        "/var/lib/linux-defragger/state/1234/dev_test.journal",
+    ]
+    try:
+        privileged_helper._validate_operation_engine_args(good)
+        for bad in (
+            [*good[:-1], "/tmp/dev_test.journal"],
+            [*good[:-1], "/var/lib/linux-defragger/state/999/dev_test.journal"],
+            [*good, "--journal", "/var/lib/linux-defragger/state/1234/other.journal"],
+        ):
+            try:
+                privileged_helper._validate_operation_engine_args(bad)
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError(f"unsafe privileged journal accepted: {bad}")
+    finally:
+        if old_pkexec is None:
+            os.environ.pop("PKEXEC_UID", None)
+        else:
+            os.environ["PKEXEC_UID"] = old_pkexec
+
+
 def test_helper_waits_for_writer() -> None:
     events: list[object] = []
 
@@ -131,5 +170,6 @@ def test_helper_waits_for_writer() -> None:
 if __name__ == "__main__":
     test_block_topology()
     test_regular_image_mount_source()
+    test_root_owned_journal_namespace()
     test_helper_waits_for_writer()
     print("mount-topology and privileged-helper safety tests passed")
