@@ -2,6 +2,8 @@
 #define _FILE_OFFSET_BITS 64
 #include "hfsplus_native.h"
 
+#include "ld_device.h"
+
 #include "infiltratr/endian.h"
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/posix_io.h"
@@ -1243,7 +1245,7 @@ int hfsplus_commit_stage(const char *stage_path, const char *target_path,
                          uint64_t *written, char **error) {
     HfsPlusVolume stage;
     if (hfsplus_scan(stage_path, false, &stage, error)) return -1;
-    int target = open(target_path, O_RDWR | O_CLOEXEC);
+    int target = ld_device_open_verified_fd(target_path, true, NULL, 0U);
     if (target < 0) { hfsplus_set_error(error, "cannot open HFS+ source for commit: %s", strerror(errno)); hfsplus_close(&stage); return -1; }
     unsigned char *buffer = malloc(HFS_IO_CHUNK);
     if (!buffer) { hfsplus_set_error(error, "out of memory committing HFS+ stage"); close(target); hfsplus_close(&stage); return -1; }
