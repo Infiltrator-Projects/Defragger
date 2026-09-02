@@ -618,7 +618,12 @@ int affs_build_stage(const char *source, const char *stage, bool growth, unsigne
                      bool live, uint64_t *commit_bytes, char **e) {
     AffsVolume src;
     if (affs_scan(source, false, &src, e)) return -1;
-    int out = open(stage, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    (void)unlink(stage);
+    int stage_flags = O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+    stage_flags |= O_NOFOLLOW;
+#endif
+    int out = open(stage, stage_flags, 0600);
     if (out < 0) {
         affs_set_error(e, "cannot create Amiga working image: %s", strerror(errno));
         affs_close(&src);

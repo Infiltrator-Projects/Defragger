@@ -143,24 +143,6 @@ class MainWindow(Gtk.ApplicationWindow):
         self.runner.authenticate()
         return False
 
-    def create_fragmented_test_data(self, _item: Gtk.MenuItem) -> None:
-        folder = self.view.choose_test_folder()
-        if not folder:
-            return
-        if not self.confirm(
-            "Create deliberately fragmented test data?",
-            f"Linux Defragger will create and delete test files inside:\n{folder}\n\n"
-            "Use an empty folder on a disposable test volume. Existing files "
-            "outside that folder are not touched.",
-        ):
-            return
-        self.clear_log()
-        self.append_log(f"Creating fragmented test data in {folder}…")
-        self.coordinator.run_command(
-            ["/usr/bin/linux-defragger-testdata", folder],
-            privileged=False,
-            purpose="test-data",
-        )
 
     def refresh_devices(
         self,

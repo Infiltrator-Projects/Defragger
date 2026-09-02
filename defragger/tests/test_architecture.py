@@ -362,6 +362,26 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
         assert "SQLITE_OPEN_NOFOLLOW" in path.read_text(), (
             f"{path.relative_to(ROOT)} lost SQLite symlink refusal"
         )
+
+    # Persistent stages can be created by a root worker below a user-owned state
+    # directory. They must never follow or truncate a pre-created symlink.
+    for path in (
+        native / "exfat" / "native" / "exfat_plan.c",
+        native / "affs" / "native" / "affs_native.c",
+        native / "sfs" / "native" / "sfs_native.c",
+        native / "hfsplus" / "native" / "hfsplus_native.c",
+    ):
+        stage_source = path.read_text()
+        assert "O_EXCL" in stage_source, (
+            f"{path.relative_to(ROOT)} lost exclusive stage creation"
+        )
+        assert "O_NOFOLLOW" in stage_source, (
+            f"{path.relative_to(ROOT)} lost stage symlink refusal"
+        )
+        assert "O_TRUNC" not in stage_source, (
+            f"{path.relative_to(ROOT)} can truncate a pre-existing stage target"
+        )
+
     assert "an unfinished NTFS journal exists; run Recover first" in sources["ntfs"]
 
 
@@ -398,6 +418,14 @@ def test_test_media_companion_is_all_c() -> None:
 
     desktop = (ROOT / "packaging" / "io.github.linuxdefragger.TestMedia.desktop").read_text()
     assert "Exec=linux-defragger-test-media" in desktop
+
+    window = (GUI / "ui" / "window.py").read_text()
+    window_view = (GUI / "ui" / "window_view.py").read_text()
+    install_script = (ROOT / "install.sh").read_text()
+    assert "linux-defragger-testdata" not in window
+    assert "Create fragmented test data" not in window_view
+    assert "linux-defragger-testdata" not in install_script
+    assert 'cmake --install "$BUILD" --prefix /usr' in install_script
 
 
 def main() -> None:

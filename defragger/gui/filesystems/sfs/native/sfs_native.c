@@ -1291,7 +1291,12 @@ int sfs_build_stage(const char *source, const char *stage, bool growth,
 
     const uint64_t filesystem_bytes =
         (uint64_t)model.root.total_blocks * model.root.block_size;
-    int stage_fd = open(stage, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    (void)unlink(stage);
+    int stage_flags = O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+    stage_flags |= O_NOFOLLOW;
+#endif
+    int stage_fd = open(stage, stage_flags, 0600);
     if (stage_fd < 0 || ftruncate(stage_fd, (off_t)filesystem_bytes) != 0) {
         if (stage_fd >= 0) (void)close(stage_fd);
         if (error != NULL && error_size != 0U)

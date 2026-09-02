@@ -1101,7 +1101,12 @@ int hfsplus_build_stage(const char *source_path, const char *stage_path, bool gr
     HfsPlusVolume source;
     if (hfsplus_scan(source_path, false, &source, error)) return -1;
     if (mutation_preflight(&source, growth, gp, error)) { hfsplus_close(&source); return -1; }
-    int out = open(stage_path, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    (void)unlink(stage_path);
+    int stage_flags = O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+    stage_flags |= O_NOFOLLOW;
+#endif
+    int out = open(stage_path, stage_flags, 0600);
     if (out < 0) { hfsplus_set_error(error, "cannot create HFS+ working image: %s", strerror(errno)); hfsplus_close(&source); return -1; }
     if (ftruncate(out, (off_t)source.bytes) || copy_allocated(&source, out, error)) {
         if (!*error) hfsplus_set_error(error, "cannot initialise HFS+ sparse working image: %s", strerror(errno));

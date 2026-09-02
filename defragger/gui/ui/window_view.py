@@ -61,7 +61,6 @@ class WindowActions(Protocol):
 
     def request_stop(self, button: Gtk.Button) -> None: ...
 
-    def create_fragmented_test_data(self, item: Gtk.MenuItem) -> None: ...
 
 
 class WindowView:
@@ -256,11 +255,6 @@ class WindowView:
         open_item = Gtk.MenuItem.new_with_mnemonic("_Open image…")
         open_item.connect("activate", self.controller.open_image)
         file_menu.append(open_item)
-        test_item = Gtk.MenuItem.new_with_label("Create fragmented test data…")
-        test_item.connect(
-            "activate", self.controller.create_fragmented_test_data
-        )
-        file_menu.append(test_item)
         refresh_item = Gtk.MenuItem.new_with_mnemonic("_Refresh volumes")
         refresh_item.connect(
             "activate",
@@ -376,24 +370,6 @@ class WindowView:
         chooser.destroy()
         return filename
 
-    def choose_test_folder(self) -> str | None:
-        chooser = Gtk.FileChooserDialog(
-            title="Choose an empty folder on the test volume",
-            transient_for=self.window,
-            action=Gtk.FileChooserAction.SELECT_FOLDER,
-        )
-        chooser.add_buttons(
-            Gtk.STOCK_CANCEL,
-            Gtk.ResponseType.CANCEL,
-            "Create test data",
-            Gtk.ResponseType.OK,
-        )
-        response = chooser.run()
-        folder = (
-            chooser.get_filename() if response == Gtk.ResponseType.OK else None
-        )
-        chooser.destroy()
-        return folder
 
     def show_about(self) -> None:
         dialog = Gtk.AboutDialog(transient_for=self.window, modal=True)

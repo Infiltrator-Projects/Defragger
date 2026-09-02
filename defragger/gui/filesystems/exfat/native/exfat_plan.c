@@ -321,7 +321,12 @@ int exfat_build_stage(const char *source_path, const char *stage_path, ExfatVolu
                       ExfatCatalogue *catalogue, const ExfatPlan *plan,
                       bool live_updates, char **error) {
     (void)source_path;
-    int fd = open(stage_path, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    (void)unlink(stage_path);
+    int stage_flags = O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+    stage_flags |= O_NOFOLLOW;
+#endif
+    int fd = open(stage_path, stage_flags, 0600);
     if (fd < 0) { exfat_set_error(error, "cannot create exFAT working image: %s", strerror(errno)); return -1; }
     if (ftruncate(fd, (off_t)source->volume_bytes) != 0) {
         exfat_set_error(error, "cannot size exFAT working image: %s", strerror(errno)); close(fd); return -1;
