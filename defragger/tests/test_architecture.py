@@ -313,6 +313,25 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
         )
         assert "ld_runtime_require_write_audit_override" not in source
 
+    device_source = (ROOT / "src" / "core" / "ld_device.c").read_text()
+    for required in (
+        "realpath(path, NULL)",
+        "O_NOFOLLOW",
+        "fstat(fd, &opened)",
+        "target identity changed between validation and open",
+        "target became mounted while opening it for raw writing",
+    ):
+        assert required in device_source, f"raw target open lost hardening: {required}"
+
+    for path in (
+        native / "ntfs" / "native" / "ntfs_common.c",
+        native / "exfat" / "native" / "exfat_common.c",
+    ):
+        opener = path.read_text()
+        assert "O_NOFOLLOW" in opener
+        assert "fstat(fd" in opener
+        assert "identity changed between validation and open" in opener
+
     assert "ld_device_open(device_path, mutating)" in sources["fat"]
     assert sources["ext"].count("ld_path_is_mounted(device)") >= 2
     assert sources["ntfs"].count("ld_path_is_mounted(device)") >= 2
