@@ -7,6 +7,7 @@
 #include "ld_stop.h"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,7 +70,7 @@ int main(void) {
     if (snprintf(target_link, sizeof(target_link), "%s-link", target_path) < 0)
         return fail("target symlink path");
     if (symlink(target_path, target_link) != 0) return fail("target symlink");
-    char resolved_target[128];
+    char resolved_target[PATH_MAX];
     if (realpath(target_path, resolved_target) == NULL) return fail("target realpath");
     LdDevice target = ld_device_open(target_link, false);
     if (target.fd < 0 || target.is_block || target.size_bytes != 8192U ||
