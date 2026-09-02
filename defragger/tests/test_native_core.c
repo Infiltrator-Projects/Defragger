@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "infiltratr/core.h"
+#include "ld_device.h"
 #include "ld_io.h"
 #include "ld_path.h"
 #include "ld_runtime.h"
@@ -58,6 +59,25 @@ int main(void) {
     unlink(atomic_path);
     unlink(victim_path);
     free(atomic_path);
+
+    char target_path[] = "/tmp/linux-defragger-core-target.XXXXXX";
+    int target_fd = mkstemp(target_path);
+    if (target_fd < 0) return fail("target mkstemp");
+    if (ftruncate(target_fd, 8192) != 0) return fail("target size");
+    close(target_fd);
+    char target_link[128];
+    if (snprintf(target_link, sizeof(target_link), "%s-link", target_path) < 0)
+        return fail("target symlink path");
+    if (symlink(target_path, target_link) != 0) return fail("target symlink");
+    char resolved_target[128];
+    if (realpath(target_path, resolved_target) == NULL) return fail("target realpath");
+    LdDevice target = ld_device_open(target_link, false);
+    if (target.fd < 0 || target.is_block || target.size_bytes != 8192U ||
+        strcmp(target.path, resolved_target) != 0)
+        return fail("raw target canonical identity");
+    ld_device_close(&target);
+    unlink(target_link);
+    unlink(target_path);
 
     uint8_t encoded[8] = {0};
     ld_write_le16(encoded, UINT16_C(0xa55a));
