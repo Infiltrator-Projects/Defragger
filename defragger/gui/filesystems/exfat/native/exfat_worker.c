@@ -341,8 +341,14 @@ static int commit_stage(const char *device, const char *journal_path, ExfatJourn
                         bool recovery, char **error) {
     ExfatVolume target;
     if (exfat_open_volume(device, true, recovery, &target, error) != 0) return -1;
-    if (target.serial != state->serial || target.volume_bytes != state->filesystem_bytes) {
-        exfat_close_volume(&target); exfat_set_error(error, "exFAT target identity changed before commit"); return -1;
+    if (!ld_fd_matches_identity(target.fd, state->target_identity,
+                                state->physical_bytes) ||
+        target.serial != state->serial ||
+        target.volume_bytes != state->filesystem_bytes) {
+        exfat_close_volume(&target);
+        exfat_set_error(error,
+                        "exFAT writable descriptor does not match the journaled target");
+        return -1;
     }
 
     ExfatVolume stage_volume;
