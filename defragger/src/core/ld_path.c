@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 char *ld_path_append_suffix(const char *base, const char *suffix)
@@ -81,6 +82,85 @@ char *ld_path_parent_directory(const char *path)
     if (slash == copy) slash[1] = '\0';
     else *slash = '\0';
     return copy;
+}
+
+static bool trusted_directory(const struct stat *status, uid_t effective_uid)
+{
+    if (!S_ISDIR(status->st_mode)) return false;
+    const mode_t shared_write = status->st_mode & (S_IWGRP | S_IWOTH);
+    if (effective_uid == 0)
+        return status->st_uid == 0 && shared_write == 0;
+    if (status->st_uid == effective_uid)
+        return shared_write == 0;
+    if (status->st_uid == 0) {
+        if (shared_write == 0) return true;
+        return (status->st_mode & S_ISVTX) != 0;
+    }
+    return false;
+}
+
+int ld_path_ensure_trusted_directory_tree(const char *path)
+{
+    if (path == NULL || path[0] != '/') {
+        errno = EINVAL;
+        return -1;
+    }
+
+    int directory = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (directory < 0) return -1;
+    char *copy = ld_xstrdup(path);
+    char *save = NULL;
+    const uid_t effective_uid = geteuid();
+    int result = 0;
+
+    for (char *component = strtok_r(copy, "/", &save);
+         component != NULL;
+         component = strtok_r(NULL, "/", &save)) {
+        if (strcmp(component, ".") == 0 || component[0] == '\0') continue;
+        if (strcmp(component, "..") == 0) {
+            errno = EINVAL;
+            result = -1;
+            break;
+        }
+
+        int next = openat(directory, component,
+                          O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+        if (next < 0 && errno == ENOENT) {
+            if (mkdirat(directory, component, 0755) != 0 && errno != EEXIST) {
+                result = -1;
+                break;
+            }
+            next = openat(directory, component,
+                          O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+        }
+        if (next < 0) {
+            result = -1;
+            break;
+        }
+
+        struct stat status;
+        if (fstat(next, &status) != 0) {
+            const int failure = errno;
+            (void)close(next);
+            errno = failure;
+            result = -1;
+            break;
+        }
+        if (!trusted_directory(&status, effective_uid)) {
+            (void)close(next);
+            errno = EPERM;
+            result = -1;
+            break;
+        }
+        (void)close(directory);
+        directory = next;
+    }
+
+    const int failure = errno;
+    free(copy);
+    (void)close(directory);
+    if (result != 0) errno = failure;
+    return result;
 }
 
 void ld_path_fsync_parent(const char *path)
