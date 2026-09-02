@@ -212,17 +212,35 @@ bool ld_path_is_mounted(const char *path) {
     return S_ISBLK(status.st_mode) && ld_device_number_is_mounted(status.st_rdev);
 }
 
-LdDevice ld_device_open(const char *path, bool writable) {
+int ld_device_try_open(const char *path, bool writable, LdDevice *device) {
+    if (path == NULL || device == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    memset(device, 0, sizeof(*device));
+    device->fd = -1;
+
     char *resolved = realpath(path, NULL);
-    if (resolved == NULL) ld_die_errno("resolve target");
+    if (resolved == NULL) return -1;
 
     struct stat expected;
-    if (stat(resolved, &expected) != 0) ld_die_errno("stat target");
+    if (stat(resolved, &expected) != 0) {
+        const int failure = errno;
+        free(resolved);
+        errno = failure;
+        return -1;
+    }
     const bool block = S_ISBLK(expected.st_mode);
-    if (!block && !S_ISREG(expected.st_mode))
-        ld_die("target must be a block device or a regular filesystem image");
-    if (block && writable && ld_device_number_is_mounted(expected.st_rdev))
-        ld_die("refusing to open a mounted block device for writing; unmount it first");
+    if (!block && !S_ISREG(expected.st_mode)) {
+        free(resolved);
+        errno = EINVAL;
+        return -1;
+    }
+    if (block && writable && ld_device_number_is_mounted(expected.st_rdev)) {
+        free(resolved);
+        errno = EBUSY;
+        return -1;
+    }
 
     int flags = (writable ? O_RDWR : O_RDONLY) | O_CLOEXEC;
     if (block && writable) flags |= O_EXCL;
@@ -230,37 +248,113 @@ LdDevice ld_device_open(const char *path, bool writable) {
     flags |= O_NOFOLLOW;
 #endif
     const int fd = open(resolved, flags);
-    if (fd < 0) ld_die_errno("open target");
+    if (fd < 0) {
+        const int failure = errno;
+        free(resolved);
+        errno = failure;
+        return -1;
+    }
 
     struct stat opened;
-    if (fstat(fd, &opened) != 0) ld_die_errno("fstat target");
+    if (fstat(fd, &opened) != 0) {
+        const int failure = errno;
+        (void)close(fd);
+        free(resolved);
+        errno = failure;
+        return -1;
+    }
     const bool same_kind =
         (expected.st_mode & S_IFMT) == (opened.st_mode & S_IFMT);
     const bool same_object =
         same_kind && expected.st_dev == opened.st_dev &&
         expected.st_ino == opened.st_ino &&
         (!block || expected.st_rdev == opened.st_rdev);
-    if (!same_object)
-        ld_die("target identity changed between validation and open");
-    if (block && writable && ld_device_number_is_mounted(opened.st_rdev))
-        ld_die("target became mounted while opening it for raw writing");
+    if (!same_object) {
+        (void)close(fd);
+        free(resolved);
+        errno = ESTALE;
+        return -1;
+    }
+    if (block && writable && ld_device_number_is_mounted(opened.st_rdev)) {
+        (void)close(fd);
+        free(resolved);
+        errno = EBUSY;
+        return -1;
+    }
 
     uint64_t size = 0;
     if (block) {
-        if (ioctl(fd, BLKGETSIZE64, &size) != 0) ld_die_errno("BLKGETSIZE64");
+        if (ioctl(fd, BLKGETSIZE64, &size) != 0) {
+            const int failure = errno;
+            (void)close(fd);
+            free(resolved);
+            errno = failure;
+            return -1;
+        }
     } else {
-        if (opened.st_size < 0) ld_die("regular image has an invalid negative size");
+        if (opened.st_size < 0) {
+            (void)close(fd);
+            free(resolved);
+            errno = EOVERFLOW;
+            return -1;
+        }
         size = (uint64_t)opened.st_size;
     }
 
-    LdDevice device = {
+    *device = (LdDevice){
         .fd = fd,
         .path = resolved,
         .writable = writable,
         .is_block = block,
         .size_bytes = size,
         .device_number = block ? opened.st_rdev : 0,
+        .host_device = opened.st_dev,
+        .inode = opened.st_ino,
     };
+    return 0;
+}
+
+bool ld_device_matches_identity(const LdDevice *device,
+                                const char *expected_identity,
+                                uint64_t expected_size) {
+    if (device == NULL || device->fd < 0 || expected_identity == NULL)
+        return false;
+    if (expected_size != 0U && device->size_bytes != expected_size)
+        return false;
+    char identity[160];
+    if (device->is_block) {
+        (void)snprintf(identity, sizeof(identity), "block:%u:%u",
+                       major(device->device_number), minor(device->device_number));
+    } else {
+        (void)snprintf(identity, sizeof(identity), "file:%llu:%llu",
+                       (unsigned long long)device->host_device,
+                       (unsigned long long)device->inode);
+    }
+    return strcmp(identity, expected_identity) == 0;
+}
+
+int ld_device_open_verified_fd(const char *path, bool writable,
+                               const char *expected_identity,
+                               uint64_t expected_size) {
+    LdDevice device;
+    if (ld_device_try_open(path, writable, &device) != 0)
+        return -1;
+    if (expected_identity != NULL &&
+        !ld_device_matches_identity(&device, expected_identity, expected_size)) {
+        ld_device_close(&device);
+        errno = ESTALE;
+        return -1;
+    }
+    const int fd = device.fd;
+    device.fd = -1;
+    ld_device_close(&device);
+    return fd;
+}
+
+LdDevice ld_device_open(const char *path, bool writable) {
+    LdDevice device;
+    if (ld_device_try_open(path, writable, &device) != 0)
+        ld_die_errno("open target");
     return device;
 }
 
