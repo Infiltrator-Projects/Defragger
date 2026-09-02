@@ -318,7 +318,7 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
         "realpath(path, NULL)",
         "O_NOFOLLOW",
         "fstat(fd, &opened)",
-        "target identity changed between validation and open",
+        "errno = ESTALE",
         "target became mounted while opening it for raw writing",
     ):
         assert required in device_source, f"raw target open lost hardening: {required}"
