@@ -56,6 +56,8 @@ typedef struct {
 
 typedef struct {
     uint32_t serial;
+    char target_identity[160];
+    uint64_t device_size;
     uint64_t volume_bytes;
     uint32_t bytes_per_sector;
     uint32_t cluster_size;
@@ -102,6 +104,8 @@ static bool write_manifest_stream(FILE *file, const void *user_data) {
     const ExfatRelayoutManifest *manifest = user_data;
     fprintf(file, "%s\n", EXFAT_RELAYOUT_MAGIC);
     fprintf(file, "serial=%u\n", manifest->serial);
+    fprintf(file, "target_identity=%s\n", manifest->target_identity);
+    fprintf(file, "device_size=%" PRIu64 "\n", manifest->device_size);
     fprintf(file, "volume_bytes=%" PRIu64 "\n", manifest->volume_bytes);
     fprintf(file, "bytes_per_sector=%u\n", manifest->bytes_per_sector);
     fprintf(file, "cluster_size=%u\n", manifest->cluster_size);
@@ -223,6 +227,15 @@ static int load_manifest(const char *journal_path,
         *equals++ = '\0';
         if (strcmp(line, "serial") == 0) {
             if (!parse_u32_text(equals, &manifest->serial)) goto malformed;
+        } else if (strcmp(line, "target_identity") == 0) {
+            if (*equals == '\0' || strlen(equals) >= sizeof(manifest->target_identity) ||
+                strchr(equals, '\n') != NULL || strchr(equals, '\r') != NULL)
+                goto malformed;
+            infiltratr_copy_string(manifest->target_identity,
+                                   sizeof(manifest->target_identity), equals);
+        } else if (strcmp(line, "device_size") == 0) {
+            if (!parse_u64_text(equals, &manifest->device_size) ||
+                manifest->device_size == 0U) goto malformed;
         } else if (strcmp(line, "volume_bytes") == 0) {
             if (!parse_u64_text(equals, &manifest->volume_bytes)) goto malformed;
         } else if (strcmp(line, "bytes_per_sector") == 0) {
@@ -279,7 +292,8 @@ static int load_manifest(const char *journal_path,
     }
     free(line);
     fclose(file);
-    if (manifest->serial == 0U || manifest->volume_bytes == 0U ||
+    if (manifest->serial == 0U || manifest->target_identity[0] == '\0' ||
+        manifest->device_size == 0U || manifest->volume_bytes == 0U ||
         manifest->bytes_per_sector == 0U || manifest->cluster_size == 0U ||
         manifest->cluster_count == 0U || manifest->fat_length == 0U ||
         manifest->workspace_start < 2U || manifest->records == NULL ||
@@ -827,12 +841,34 @@ static int verify_final_layout(const char *device, unsigned reserve_percent,
     return 0;
 }
 
-static void populate_manifest(ExfatRelayoutManifest *manifest,
-                              const ExfatVolume *volume,
-                              const ExfatCatalogue *catalogue,
-                              unsigned reserve_percent,
-                              uint32_t workspace_start) {
+static int populate_manifest(ExfatRelayoutManifest *manifest,
+                             const ExfatVolume *volume,
+                             const ExfatCatalogue *catalogue,
+                             unsigned reserve_percent,
+                             uint32_t workspace_start,
+                             char **error) {
     memset(manifest, 0, sizeof(*manifest));
+    struct stat status;
+    if (fstat(volume->fd, &status) != 0) {
+        exfat_set_error(error, "cannot capture exFAT target identity: %s",
+                        strerror(errno));
+        return -1;
+    }
+    if (S_ISBLK(status.st_mode)) {
+        (void)snprintf(manifest->target_identity,
+                       sizeof(manifest->target_identity),
+                       "block:%u:%u", major(status.st_rdev), minor(status.st_rdev));
+    } else if (S_ISREG(status.st_mode)) {
+        (void)snprintf(manifest->target_identity,
+                       sizeof(manifest->target_identity),
+                       "file:%llu:%llu",
+                       (unsigned long long)status.st_dev,
+                       (unsigned long long)status.st_ino);
+    } else {
+        exfat_set_error(error, "exFAT relayout target identity is not raw storage");
+        return -1;
+    }
+    manifest->device_size = volume->device_size;
     manifest->serial = volume->serial;
     manifest->volume_bytes = volume->volume_bytes;
     manifest->bytes_per_sector = volume->bytes_per_sector;
@@ -866,6 +902,7 @@ static void populate_manifest(ExfatRelayoutManifest *manifest,
         record->directory = object->directory;
         staged += record->clusters;
     }
+    return 0;
 }
 
 static int rollback_original_layout(ExfatVolume *volume,
@@ -1004,8 +1041,9 @@ int exfat_relayout_in_place(const char *device, const char *journal_path,
                                               ram_bytes, batch_clusters);
     uint8_t *buffer = ld_xmalloc(buffer_bytes);
     ExfatRelayoutManifest manifest;
-    populate_manifest(&manifest, &volume, &catalogue, reserve_percent,
-                      workspace_start);
+    if (populate_manifest(&manifest, &volume, &catalogue, reserve_percent,
+                          workspace_start, error) != 0)
+        goto fail;
 
     bool stopped = false;
     for (size_t i = 0; i < catalogue.objects.count; ++i) {
@@ -1158,6 +1196,8 @@ static bool boot_region_valid(const uint8_t *region, uint32_t bytes_per_sector) 
    allowed to inspect the transaction.  Data placement never begins until both
    boot copies have first been made valid and dirty. */
 static int repair_boot_regions_from_survivor(const char *device,
+                                             const char *target_identity,
+                                             uint64_t device_size,
                                              uint32_t bytes_per_sector,
                                              char **error) {
     if (bytes_per_sector < 512U || bytes_per_sector > 4096U ||
@@ -1183,7 +1223,7 @@ static int repair_boot_regions_from_survivor(const char *device,
         free(real);
         return -1;
     }
-    int fd = ld_device_open_verified_fd(real, true, NULL, 0U);
+    int fd = ld_device_open_verified_fd(real, true, target_identity, device_size);
     if (fd < 0) {
         exfat_set_error(error, "cannot open exFAT recovery target: %s",
                         strerror(errno));
@@ -1246,7 +1286,9 @@ int exfat_relayout_recover(const char *device, const char *journal_path,
     int loaded = load_manifest(journal_path, &manifest, handled, error);
     if (loaded != 0 || !*handled) return loaded != 0 ? 1 : 0;
 
-    if (repair_boot_regions_from_survivor(device, manifest.bytes_per_sector,
+    if (repair_boot_regions_from_survivor(device, manifest.target_identity,
+                                          manifest.device_size,
+                                          manifest.bytes_per_sector,
                                           error) != 0) {
         manifest_free(&manifest);
         return 1;
