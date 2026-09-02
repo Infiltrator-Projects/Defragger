@@ -2,6 +2,8 @@
 #define _FILE_OFFSET_BITS 64
 #include "affs_native.h"
 
+#include "ld_device.h"
+
 #include "infiltratr/endian.h"
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/posix_io.h"
@@ -738,7 +740,7 @@ int affs_verify_layout(const char *path, bool growth, unsigned gp, char **e) {
 int affs_commit_stage(const char *stage, const char *target, uint64_t *written, char **e) {
     AffsVolume v;
     if (affs_scan(stage, false, &v, e)) return -1;
-    int out = open(target, O_RDWR | O_CLOEXEC);
+    int out = ld_device_open_verified_fd(target, true, NULL, 0U);
     if (out < 0) {
         affs_set_error(e, "cannot open Amiga source for commit: %s", strerror(errno));
         affs_close(&v);
