@@ -213,33 +213,53 @@ bool ld_path_is_mounted(const char *path) {
 }
 
 LdDevice ld_device_open(const char *path, bool writable) {
-    struct stat status;
-    if (stat(path, &status) != 0) ld_die_errno("stat device");
-    bool block = S_ISBLK(status.st_mode);
-    if (!block && !S_ISREG(status.st_mode))
+    char *resolved = realpath(path, NULL);
+    if (resolved == NULL) ld_die_errno("resolve target");
+
+    struct stat expected;
+    if (stat(resolved, &expected) != 0) ld_die_errno("stat target");
+    const bool block = S_ISBLK(expected.st_mode);
+    if (!block && !S_ISREG(expected.st_mode))
         ld_die("target must be a block device or a regular filesystem image");
-    if (block && writable && ld_device_number_is_mounted(status.st_rdev))
+    if (block && writable && ld_device_number_is_mounted(expected.st_rdev))
         ld_die("refusing to open a mounted block device for writing; unmount it first");
 
     int flags = (writable ? O_RDWR : O_RDONLY) | O_CLOEXEC;
     if (block && writable) flags |= O_EXCL;
-    int fd = open(path, flags);
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    const int fd = open(resolved, flags);
     if (fd < 0) ld_die_errno("open target");
+
+    struct stat opened;
+    if (fstat(fd, &opened) != 0) ld_die_errno("fstat target");
+    const bool same_kind =
+        (expected.st_mode & S_IFMT) == (opened.st_mode & S_IFMT);
+    const bool same_object =
+        same_kind && expected.st_dev == opened.st_dev &&
+        expected.st_ino == opened.st_ino &&
+        (!block || expected.st_rdev == opened.st_rdev);
+    if (!same_object)
+        ld_die("target identity changed between validation and open");
+    if (block && writable && ld_device_number_is_mounted(opened.st_rdev))
+        ld_die("target became mounted while opening it for raw writing");
 
     uint64_t size = 0;
     if (block) {
         if (ioctl(fd, BLKGETSIZE64, &size) != 0) ld_die_errno("BLKGETSIZE64");
     } else {
-        size = (uint64_t)status.st_size;
+        if (opened.st_size < 0) ld_die("regular image has an invalid negative size");
+        size = (uint64_t)opened.st_size;
     }
 
     LdDevice device = {
         .fd = fd,
-        .path = ld_xstrdup(path),
+        .path = resolved,
         .writable = writable,
         .is_block = block,
         .size_bytes = size,
-        .device_number = block ? status.st_rdev : 0,
+        .device_number = block ? opened.st_rdev : 0,
     };
     return device;
 }
