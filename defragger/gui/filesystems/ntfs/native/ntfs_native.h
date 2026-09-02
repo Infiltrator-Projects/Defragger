@@ -183,7 +183,9 @@ int ntfs_create_plan_db(const char *path, NtfsVolume *volume, NtfsLayout *layout
 int ntfs_open_plan_db(const char *path, sqlite3 **db, char **error);
 int ntfs_permute_stage(const char *stage, sqlite3 *db, uint32_t cluster_size,
                        uint64_t move_count, char **error);
-int ntfs_apply_stage_metadata(const char *stage, sqlite3 *db, bool allow_dirty, char **error);
+int ntfs_apply_stage_metadata(const char *stage, sqlite3 *db, bool allow_dirty,
+                              const char *target_identity, uint64_t physical_bytes,
+                              char **error);
 int ntfs_prepare_workspace_map(sqlite3 *db, uint64_t workspace_start,
                                uint64_t workspace_clusters, char **error);
 int ntfs_stage_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
