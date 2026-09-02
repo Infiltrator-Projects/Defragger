@@ -99,21 +99,10 @@ static void journal_free(HfsPlusJournal *state) {
 }
 
 static int ensure_directory_tree(const char *path, char **error) {
-    char *copy = ld_xstrdup(path);
-    size_t length = strlen(copy);
-    for (size_t i = 1; i <= length; ++i) {
-        if (copy[i] != '/' && copy[i] != '\0') continue;
-        char saved = copy[i];
-        copy[i] = '\0';
-        if (copy[0] != '\0' && mkdir(copy, 0700) != 0 && errno != EEXIST) {
-            hfsplus_set_error(error, "cannot create HFS+ journal directory %s: %s",
-                              copy, strerror(errno));
-            free(copy);
-            return -1;
-        }
-        copy[i] = saved;
+    if (ld_path_ensure_trusted_directory_tree(path) != 0) {
+        hfsplus_set_error(error, "cannot create HFS+ journal directory %s: %s", path, strerror(errno));
+        return -1;
     }
-    free(copy);
     return 0;
 }
 
@@ -479,10 +468,13 @@ static int stop_commit(int target, char **error) {
 }
 
 static int safe_commit_stage(const char *stage_path, const char *target_path,
+                             const HfsPlusJournal *state,
                              uint64_t *written, char **error) {
     HfsPlusVolume stage;
     if (hfsplus_scan(stage_path, false, &stage, error) != 0) return -1;
-    int target = open(target_path, O_RDWR | O_CLOEXEC);
+    int target = ld_device_open_verified_fd(target_path, true,
+                                            state->target_identity,
+                                            state->physical_bytes);
     if (target < 0) {
         hfsplus_set_error(error, "cannot open HFS+ source for commit: %s", strerror(errno));
         hfsplus_close(&stage);
@@ -620,7 +612,7 @@ static int handle_recovery(const char *device, const char *journal,
         return 1;
     }
     uint64_t written = 0;
-    int commit_rc = safe_commit_stage(state.stage, device, &written, error);
+    int commit_rc = safe_commit_stage(state.stage, device, &state, &written, error);
     if (commit_rc == STOPPED) {
         printf("HFS+ recovery stopped at a durable source-write boundary; journal and verified stage were retained.\n");
         result("recover", "stopped", "Recovery can be resumed safely.");
