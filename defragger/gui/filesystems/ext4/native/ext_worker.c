@@ -67,18 +67,11 @@ static void emit_result(const char *operation, const char *status, const char *m
 
 
 static int ensure_directory_tree(const char *path, char **error) {
-    char *copy = ld_xstrdup(path);
-    size_t length = strlen(copy);
-    for (size_t index = 1; index <= length; ++index) {
-        if (copy[index] != '/' && copy[index] != '\0') continue;
-        char saved = copy[index]; copy[index] = '\0';
-        if (copy[0] != '\0' && mkdir(copy, 0700) != 0 && errno != EEXIST) {
-            ext_set_error(error, "cannot create EXT journal directory %s: %s", copy, strerror(errno));
-            free(copy); return -1;
-        }
-        copy[index] = saved;
+    if (ld_path_ensure_trusted_directory_tree(path) != 0) {
+        ext_set_error(error, "cannot create EXT journal directory %s: %s", path, strerror(errno));
+        return -1;
     }
-    free(copy); return 0;
+    return 0;
 }
 
 
@@ -549,9 +542,12 @@ static int try_workspace_relayout(const char *device, const char *operation,
 
     if (ext_open_plan_db(state->plan, true, &db, error) != 0) goto fail_clean;
     if (ext_open_fs(device, false, &fs, error) != 0) goto fail_clean;
-    fd = open(device, O_RDWR | O_CLOEXEC);
+    fd = ld_device_open_verified_fd(device, true, state->target_identity,
+                                    state->physical_bytes);
     if (fd < 0) {
-        ext_set_error(error, "cannot open EXT source for direct relayout: %s", strerror(errno));
+        ext_set_error(error,
+                      "cannot open the journal-bound EXT source for direct relayout: %s",
+                      strerror(errno));
         goto fail_clean;
     }
     if (flock(fd, LOCK_EX | LOCK_NB) != 0) {
