@@ -388,13 +388,18 @@ static int commit_stage(const char *device_path, const char *journal_path,
     fflush(stdout);
 
     LdDevice target;
-    if (ld_device_try_open(device_path, true, &target) != 0 ||
-        !ld_device_matches_identity(&target, state->target_identity,
-                                    state->physical_bytes)) {
-        if (target.fd >= 0) ld_device_close(&target);
+    if (ld_device_try_open(device_path, true, &target) != 0) {
         ext_set_error(error,
                       "cannot open the journal-bound EXT target for commit: %s",
-                      strerror(errno == 0 ? ESTALE : errno));
+                      strerror(errno));
+        ext_range_free(&allocated_ranges);
+        return -1;
+    }
+    if (!ld_device_matches_identity(&target, state->target_identity,
+                                    state->physical_bytes)) {
+        ld_device_close(&target);
+        ext_set_error(error,
+                      "EXT target identity or capacity changed before commit");
         ext_range_free(&allocated_ranges);
         return -1;
     }
