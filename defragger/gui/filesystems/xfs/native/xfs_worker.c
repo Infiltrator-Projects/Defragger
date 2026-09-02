@@ -83,21 +83,10 @@ static void uuid_hex(const uint8_t uuid[16], char out[33]) {
 
 
 static int ensure_directory_tree(const char *path, char **error) {
-    char *copy = ld_xstrdup(path);
-    size_t length = strlen(copy);
-    if (length == 0) { free(copy); return 0; }
-    for (size_t index = 1; index <= length; ++index) {
-        if (copy[index] != '/' && copy[index] != '\0') continue;
-        char saved = copy[index];
-        copy[index] = '\0';
-        if (copy[0] != '\0' && mkdir(copy, 0700) != 0 && errno != EEXIST) {
-            xfs_set_error(error, "cannot create XFS journal directory %s: %s", copy, strerror(errno));
-            free(copy);
-            return -1;
-        }
-        copy[index] = saved;
+    if (ld_path_ensure_trusted_directory_tree(path) != 0) {
+        xfs_set_error(error, "cannot create XFS journal directory %s: %s", path, strerror(errno));
+        return -1;
     }
-    free(copy);
     return 0;
 }
 
