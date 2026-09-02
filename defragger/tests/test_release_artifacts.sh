@@ -40,7 +40,7 @@ PYTHONDONTWRITEBYTECODE=1 \
 PYTHONPATH="$EXTRACTED_ROOT/gui:$EXTRACTED_ROOT/tests" \
 LINUX_DEFRAGGER_BUILD_DIR="$EXTRACTED_BUILD" \
 ctest --test-dir "$EXTRACTED_BUILD" --output-on-failure \
-    -E '^linux-defragger-tests$'
+    -E linux-defragger-tests
 
 if grep -Eq '(^|/)\.git(/|$)' "$WORK/source-files.txt"; then
     printf '%s\n' 'Source archive contains Git worktree metadata.' >&2

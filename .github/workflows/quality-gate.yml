@@ -111,7 +111,7 @@ jobs:
           LINUX_DEFRAGGER_BUILD_DIR: ${{ github.workspace }}/defragger/build-sanitize
         run: |
           ctest --test-dir build-sanitize --output-on-failure \
-            -E '^linux-defragger-tests$'
+            -E linux-defragger-tests
 
   local-quality:
     name: Local Linux / heavy qualification
