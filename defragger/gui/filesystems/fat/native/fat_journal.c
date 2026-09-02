@@ -123,6 +123,12 @@ static bool relocation_journal_write_stream(FILE *file, const void *user_data) {
 }
 
 void relocation_journal_write(const char *path, const RelocationJournal *j) {
+    char *parent = ld_path_parent_directory(path);
+    if (ld_path_ensure_trusted_directory_tree(parent) != 0) {
+        free(parent);
+        ld_die_errno("create relocation journal directory");
+    }
+    free(parent);
     const int failure = infiltratr_atomic_file_write(
         path, INFILTRATR_ATOMIC_FILE_PRIVATE,
         relocation_journal_write_stream, j);
