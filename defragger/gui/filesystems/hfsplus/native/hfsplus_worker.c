@@ -786,7 +786,7 @@ int main(int argc, char **argv) {
            planned / 1024U);
     fflush(stdout);
     uint64_t written = 0;
-    int commit_rc = safe_commit_stage(state.stage, device, &written, &error);
+    int commit_rc = safe_commit_stage(state.stage, device, &state, &written, &error);
     if (commit_rc == STOPPED) {
         printf("HFS+ Stop reached a durable source-write boundary; recovery journal and verified stage were retained.\n");
         result(mode, "stopped", "Run Recover to resume the verified transaction.");
