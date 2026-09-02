@@ -24,6 +24,8 @@ int ld_device_try_open(const char *path, bool writable, LdDevice *device);
 bool ld_device_matches_identity(const LdDevice *device,
                                 const char *expected_identity,
                                 uint64_t expected_size);
+bool ld_fd_matches_identity(int fd, const char *expected_identity,
+                            uint64_t expected_size);
 int ld_device_open_verified_fd(const char *path, bool writable,
                                const char *expected_identity,
                                uint64_t expected_size);
