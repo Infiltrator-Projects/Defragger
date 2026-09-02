@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-02
 
 Applies to: release version 1.8.0-141
-Audited source commit: 229611232f763d0ea2a0dfdb0e83ca7348448bd5
+Audited source commit: 0d563368cea355d8ae251e853a6c83c5e09b68a0
 Audited release-governance commit: 4f4ff372210eb8ffcb0ff151a70366956271dacd
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -88,7 +88,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The 1.8.0-141 audit extension is bound to Defragger source baseline
-`229611232f763d0ea2a0dfdb0e83ca7348448bd5`. Release qualification rejects any later change beneath the
+`0d563368cea355d8ae251e853a6c83c5e09b68a0`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `4f4ff372210eb8ffcb0ff151a70366956271dacd`; changes beneath `.github/workflows`
