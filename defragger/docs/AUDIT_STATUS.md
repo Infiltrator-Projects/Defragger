@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-02
 
 Applies to: release version 1.8.0-141
-Audited source commit: 4f4ff372210eb8ffcb0ff151a70366956271dacd
+Audited source commit: 229611232f763d0ea2a0dfdb0e83ca7348448bd5
 Audited release-governance commit: 4f4ff372210eb8ffcb0ff151a70366956271dacd
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -67,6 +67,20 @@ Recover.
 9. Release-governance workflows are independently audit-bound. GitHub release
    publication remains conditional on the exact successful Project quality gate,
    while APT publication is a separate retryable workflow.
+10. Persistent recovery journals and their derived stages now live under the
+    root-controlled `/var/lib/linux-defragger/state/<uid>` namespace. The
+    privileged helper accepts exactly one journal directly below the invoking
+    user's namespace, and native workers create/validate every parent component
+    through directory descriptors using `openat`, `mkdirat`, `O_NOFOLLOW`
+    and `fstat`; user-controlled parent symlinks cannot redirect privileged
+    recovery files.
+11. Authoritative raw mutation descriptors are now bound to the OS-level target
+    identity and physical capacity recorded by the transaction. EXT and XFS
+    commit/recovery paths, NTFS workspace/dirty-state/metadata/stage commits,
+    exFAT normal commits and torn-boot recovery, and AFFS/SFS0/HFS+ stage commits
+    verify the descriptor that actually receives writes rather than trusting a
+    prior pathname check. Regular image replacement between preflight and commit
+    therefore fails closed.
 
 ## Shared Common dependency
 
@@ -74,7 +88,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The 1.8.0-141 audit extension is bound to Defragger source baseline
-`4f4ff372210eb8ffcb0ff151a70366956271dacd`. Release qualification rejects any later change beneath the
+`229611232f763d0ea2a0dfdb0e83ca7348448bd5`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `4f4ff372210eb8ffcb0ff151a70366956271dacd`; changes beneath `.github/workflows`
