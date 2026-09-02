@@ -333,6 +333,36 @@ bool ld_device_matches_identity(const LdDevice *device,
     return strcmp(identity, expected_identity) == 0;
 }
 
+bool ld_fd_matches_identity(int fd, const char *expected_identity,
+                            uint64_t expected_size) {
+    if (fd < 0 || expected_identity == NULL) return false;
+    struct stat status;
+    if (fstat(fd, &status) != 0) return false;
+
+    bool block = S_ISBLK(status.st_mode);
+    if (!block && !S_ISREG(status.st_mode)) return false;
+
+    uint64_t size = 0;
+    if (block) {
+        if (ioctl(fd, BLKGETSIZE64, &size) != 0) return false;
+    } else {
+        if (status.st_size < 0) return false;
+        size = (uint64_t)status.st_size;
+    }
+    if (expected_size != 0U && size != expected_size) return false;
+
+    char identity[160];
+    if (block) {
+        (void)snprintf(identity, sizeof(identity), "block:%u:%u",
+                       major(status.st_rdev), minor(status.st_rdev));
+    } else {
+        (void)snprintf(identity, sizeof(identity), "file:%llu:%llu",
+                       (unsigned long long)status.st_dev,
+                       (unsigned long long)status.st_ino);
+    }
+    return strcmp(identity, expected_identity) == 0;
+}
+
 int ld_device_open_verified_fd(const char *path, bool writable,
                                const char *expected_identity,
                                uint64_t expected_size) {
