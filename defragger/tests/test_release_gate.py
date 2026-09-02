@@ -44,11 +44,7 @@ def main() -> None:
     assert "run: ctest --test-dir build --output-on-failure" in gate, (
         "primary quality gate must run the complete aggregate project suite"
     )
-    sanitizer_exclusion = "-E '^linux-defragger-tests$'"
-    assert gate.count(sanitizer_exclusion) == 1, (
-        "only the sanitizer lane may exclude the recursive aggregate packaging harness"
-    )
-
+    sanitizer_exclusion = "-E '^linux-defragger-tests
     for required in (
         "tests/test_release_artifacts.sh",
         "tests/run_typecheck.sh",
@@ -221,7 +217,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-") == 1, (
+"
+    assert gate.count(sanitizer_exclusion) == 1, (
         "only the sanitizer lane may exclude the recursive aggregate packaging harness"
     )
 
