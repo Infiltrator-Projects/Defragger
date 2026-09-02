@@ -48,6 +48,7 @@ jobs:
           VERSION=$(tr -d '\r\n' < VERSION)
           test -n "$VERSION"
           grep -Fq 'Status: **complete**' docs/AUDIT_STATUS.md
+          grep -Fqx "Applies to: release version ${VERSION}" docs/AUDIT_STATUS.md
           subject=$(git log -1 --format=%s "$head_commit")
           if [[ "$subject" != "Release ${VERSION}" && "$subject" != "Release ${VERSION}:"* ]]; then
             echo "Release commit subject must begin with Release ${VERSION}." >&2

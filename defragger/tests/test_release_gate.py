@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import ast
+import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,8 @@ def main() -> None:
     cmake = (PROJECT_ROOT / "cmake" / "project.cmake").read_text(encoding="utf-8")
     design = (PROJECT_ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
     audit = (PROJECT_ROOT / "docs" / "AUDIT_STATUS.md").read_text(encoding="utf-8")
+    architecture = (PROJECT_ROOT / "tests" / "test_architecture.py").read_text(encoding="utf-8")
+    version = (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
 
     for required in (
@@ -86,6 +90,7 @@ def main() -> None:
         'Defragger-${VERSION}.zip',
         "RELEASE_SHA256SUMS.txt",
         "Status: **complete**",
+        'Applies to: release version ${VERSION}',
         "published releases are immutable",
         "gh release create",
     ):
@@ -130,12 +135,39 @@ def main() -> None:
         "exFAT",
         "XFS",
         "Amiga OFS/FFS",
+        "Amiga SFS0",
         "HFS+/HFSX",
         "Project quality gate",
         "protected main",
         "explicit release decision",
     ):
         assert required in audit, f"completed safety audit lost evidence: {required}"
+
+    assert f"Applies to: release version {version}" in audit, (
+        "completed safety audit does not apply to the current VERSION"
+    )
+
+    writer_assignment = None
+    for node in ast.parse(architecture).body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "NATIVE_WRITERS"
+            for target in node.targets
+        ):
+            writer_assignment = ast.literal_eval(node.value)
+            break
+    assert isinstance(writer_assignment, dict), (
+        "cannot determine authoritative native writer set from architecture test"
+    )
+    match = re.search(r"^Audited writer IDs:\\s*(.+)$", audit, re.MULTILINE)
+    assert match is not None, "completed safety audit lost Audited writer IDs"
+    audited_writer_ids = {
+        item.strip() for item in match.group(1).split(",") if item.strip()
+    }
+    expected_writer_ids = set(writer_assignment)
+    assert audited_writer_ids == expected_writer_ids, (
+        "safety audit writer scope does not match enabled native writers: "
+        f"audited={sorted(audited_writer_ids)} enabled={sorted(expected_writer_ids)}"
+    )
 
     print("release quality-gate contract passed")
 

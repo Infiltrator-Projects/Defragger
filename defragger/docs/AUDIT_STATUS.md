@@ -4,8 +4,11 @@
 Status: **complete**
 
 Completed: 2026-08-25
+Extended: 2026-09-02
 
-Applies to: release version 1.8.0-140
+Applies to: release version 1.8.0-141
+
+Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
 The production write quarantine has been removed. Analyse, Map, Defragment,
 Growth Defrag and Recover are available according to each filesystem plugin's
@@ -26,6 +29,7 @@ open, mutation loop, Stop handling, recovery and final read-only verification.
 | exFAT | Native terminal-workspace manifest and verified-stage fallback reviewed; serial/geometry binding, payload preservation, directory/FAT/bitmap rebuilding, recovery replay and final reopened-image scans are enforced. |
 | XFS | Native v5 planner, CRC/metadata update, clean-log gate, payload relocation, durable checkpoint and recovery path reviewed; unsupported feature combinations fail closed. |
 | Amiga OFS/FFS | Native full-stage digest, volume token, target identity, commit/recovery and reopened-image payload/layout verification reviewed and exercised. |
+| Amiga SFS0 | Native SFS3 root/bitmap/B-tree validation, exact file-extent catalogue, full-stage payload digest, target identity, mounted-target refusal, journal-bound stage path, commit/recovery and reopened-image Defrag/Growth Defrag verification reviewed and exercised. |
 | HFS+/HFSX | Native full-stage digest, volume identity, clean-journal gate, commit/recovery and reopened-image payload/layout verification reviewed and exercised. |
 
 Interrupted-operation behaviour was reviewed at each durable journal phase.
@@ -51,13 +55,16 @@ Recover.
 6. GUI, CLI and native boundaries retain explicit `--write`, exact target
    confirmation, identity and final verification controls without an
    environment-variable bypass.
+7. SFS0 is now included in the audited production-writer set and is subject to
+   the same mounted-target refusal, journal/stage binding, durable recovery and
+   final reopened-image verification requirements as the other native writers.
 
 ## Shared Common dependency
 
-The audited 1.8.0-140 release consumed Infiltratr Common 1.15.0 at exact commit
+The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-On 2026-08-29 the post-audit `main` integration was advanced to Infiltratr
+The 1.8.0-141 audit extension validates the current source against Infiltratr
 Common 1.15.4 at exact commit
 `046406bea2aefa539c74e1038b6c20825eca8af7`. CMake, the gitlink and the local
 compiler/installer all verify that same version and commit rather than accepting
@@ -83,8 +90,10 @@ API, rejects an existing tag/release and publishes immutable assets only from
 that exact commit.
 
 Shannon Smith gave the explicit release decision for version 1.8.0-140 on
-2026-08-25. Publication remains contingent on the exact-head Project quality
-gate succeeding for the `Release 1.8.0-140` commit.
+2026-08-25. That decision remains historical and does not authorize publication
+of 1.8.0-141. Version 1.8.0-141 requires a new explicit release decision and a
+separate `Release 1.8.0-141` commit whose exact head passes the Project quality
+gate.
 
 Linux Defragger Test Media is outside the production-operation audit. It is a
 deliberately destructive filesystem-manufacturing utility with independent
