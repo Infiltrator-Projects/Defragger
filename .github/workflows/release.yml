@@ -57,6 +57,14 @@ jobs:
             echo "Audited production/build/package source changed after ${AUDITED_COMMIT}; refresh the safety audit before release." >&2
             exit 1
           fi
+          GOVERNANCE_COMMIT=$(sed -n 's/^Audited release-governance commit: \([0-9a-f]\{40\}\)$/\1/p' docs/AUDIT_STATUS.md)
+          test -n "$GOVERNANCE_COMMIT"
+          git cat-file -e "${GOVERNANCE_COMMIT}^{commit}"
+          git merge-base --is-ancestor "$GOVERNANCE_COMMIT" HEAD
+          if ! git diff --quiet "$GOVERNANCE_COMMIT" HEAD -- ':(top).github/workflows'; then
+            echo "Release-governance workflows changed after ${GOVERNANCE_COMMIT}; refresh the safety audit before release." >&2
+            exit 1
+          fi
           subject=$(git log -1 --format=%s "$head_commit")
           if [[ "$subject" != "Release ${VERSION}" && "$subject" != "Release ${VERSION}:"* ]]; then
             echo "Release commit subject must begin with Release ${VERSION}." >&2
