@@ -884,7 +884,8 @@ static int recover(const char *device, const char *journal_path, char **error) {
             ext_catalogue_free(&verified);
             free(*error); *error = NULL;
         }
-        int direct_fd = open(device, O_RDWR | O_CLOEXEC);
+        int direct_fd = ld_device_open_verified_fd(
+            device, true, state.target_identity, state.physical_bytes);
         if (direct_fd < 0 || flock(direct_fd, LOCK_EX | LOCK_NB) != 0) {
             if (direct_fd >= 0) close(direct_fd);
             sqlite3_close(direct_db);
