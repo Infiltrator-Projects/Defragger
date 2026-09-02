@@ -7,7 +7,8 @@ Completed: 2026-08-25
 Extended: 2026-09-02
 
 Applies to: release version 1.8.0-141
-Audited source commit: be935de2f757921b3cec7847b32efc6a7a8004dd
+Audited source commit: 4f4ff372210eb8ffcb0ff151a70366956271dacd
+Audited release-governance commit: 4f4ff372210eb8ffcb0ff151a70366956271dacd
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -59,6 +60,13 @@ Recover.
 7. SFS0 is now included in the audited production-writer set and is subject to
    the same mounted-target refusal, journal/stage binding, durable recovery and
    final reopened-image verification requirements as the other native writers.
+8. Raw target opens now resolve the canonical path, refuse final-component
+   symlinks, compare the opened descriptor identity with the pre-open object and
+   repeat mounted-device refusal after the descriptor is acquired. NTFS and
+   exFAT apply the same descriptor-identity check in their format-local openers.
+9. Release-governance workflows are independently audit-bound. GitHub release
+   publication remains conditional on the exact successful Project quality gate,
+   while APT publication is a separate retryable workflow.
 
 ## Shared Common dependency
 
@@ -66,9 +74,12 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The 1.8.0-141 audit extension is bound to Defragger source baseline
-`be935de2f757921b3cec7847b32efc6a7a8004dd`. Release qualification rejects any later change beneath the
-runtime, native build, Common or packaging trees until the audit baseline is
-explicitly advanced. That baseline validates Infiltratr Common 1.15.4 at exact commit
+`4f4ff372210eb8ffcb0ff151a70366956271dacd`. Release qualification rejects any later change beneath the
+runtime, native build, Common or packaging trees until the source audit baseline
+is explicitly advanced. Release-governance workflows are independently bound to
+`4f4ff372210eb8ffcb0ff151a70366956271dacd`; changes beneath `.github/workflows`
+likewise require the governance audit baseline to be advanced. The source baseline
+validates Infiltratr Common 1.15.4 at exact commit
 `046406bea2aefa539c74e1038b6c20825eca8af7`. CMake, the gitlink and the local
 compiler/installer all verify that same version and commit rather than accepting
 an unconstrained checkout.
@@ -83,14 +94,19 @@ are shared.
 
 ## Release controls and decision
 
-The active protected main ruleset requires the permanent `quality-gate` status
-check. Repository administrators and the ChatGPT Codex Connector retain an
-explicit direct-main bypass so the repository's main-only workflow remains
-usable; that bypass does not authorize publication. The release workflow still
-requires a successful push-triggered Project quality gate for the exact current
-`main` commit, rechecks `origin/main`, verifies this ruleset through the GitHub
-API, rejects an existing tag/release and publishes immutable assets only from
-that exact commit.
+The active protected-main ruleset enforces deletion protection,
+non-fast-forward protection and linear history. It intentionally does not require
+a branch status check or bypass actor because this repository uses a direct-main
+workflow. Publication safety is enforced separately: the release workflow only
+runs after a successful push-triggered Project quality gate for the exact current
+`main` commit, rechecks `origin/main`, verifies the permanent history rules,
+verifies both audit baselines, rejects an existing tag/release and publishes
+versioned assets only from that exact commit.
+
+APT publication is deliberately separate from GitHub release creation. A
+published release automatically triggers the APT refresh workflow, and the same
+exact version/SHA can be supplied to its manual dispatch path if central
+publication needs to be retried.
 
 Shannon Smith gave the explicit release decision for version 1.8.0-140 on
 2026-08-25. That decision remains historical and does not authorize publication
