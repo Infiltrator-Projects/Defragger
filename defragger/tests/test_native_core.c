@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int fail(const char *message) {
@@ -79,6 +80,33 @@ int main(void) {
     ld_device_close(&target);
     unlink(target_link);
     unlink(target_path);
+
+    char tree_root[] = "/tmp/linux-defragger-secure-tree.XXXXXX";
+    if (mkdtemp(tree_root) == NULL) return fail("secure tree mkdtemp");
+    char safe_parent[PATH_MAX];
+    char safe_child[PATH_MAX];
+    if (snprintf(safe_parent, sizeof(safe_parent), "%s/state", tree_root) < 0 ||
+        snprintf(safe_child, sizeof(safe_child), "%s/state/1000", tree_root) < 0)
+        return fail("secure tree paths");
+    if (ld_path_ensure_trusted_directory_tree(safe_child) != 0)
+        return fail("secure anchored directory creation");
+    struct stat tree_status;
+    if (stat(safe_child, &tree_status) != 0 || !S_ISDIR(tree_status.st_mode))
+        return fail("secure tree result");
+
+    char redirect[PATH_MAX];
+    char redirected_child[PATH_MAX];
+    if (snprintf(redirect, sizeof(redirect), "%s/link", tree_root) < 0 ||
+        snprintf(redirected_child, sizeof(redirected_child), "%s/link/child", tree_root) < 0)
+        return fail("secure symlink paths");
+    if (symlink(safe_parent, redirect) != 0)
+        return fail("secure tree symlink");
+    if (ld_path_ensure_trusted_directory_tree(redirected_child) == 0)
+        return fail("secure tree followed parent symlink");
+    unlink(redirect);
+    rmdir(safe_child);
+    rmdir(safe_parent);
+    rmdir(tree_root);
 
     uint8_t encoded[8] = {0};
     ld_write_le16(encoded, UINT16_C(0xa55a));
