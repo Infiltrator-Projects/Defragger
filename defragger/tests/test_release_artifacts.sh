@@ -25,6 +25,23 @@ if grep -qx 'stale-entry.txt' "$WORK/source-files.txt"; then
 fi
 grep -qx "Defragger-${VERSION}/CMakeLists.txt" "$WORK/source-files.txt"
 grep -qx "Defragger-${VERSION}/packaging/build-source-zip.sh" "$WORK/source-files.txt"
+
+SOURCE_EXTRACTED="$WORK/source-extracted"
+mkdir -p "$SOURCE_EXTRACTED"
+unzip -q "$SOURCE_ZIP" -d "$SOURCE_EXTRACTED"
+EXTRACTED_ROOT="$SOURCE_EXTRACTED/Defragger-${VERSION}"
+EXTRACTED_BUILD="$WORK/source-zip-build"
+cmake -S "$EXTRACTED_ROOT" -B "$EXTRACTED_BUILD" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLD_ENABLE_WERROR=ON \
+    -DBUILD_TESTING=ON >/dev/null
+cmake --build "$EXTRACTED_BUILD" -j2 >/dev/null
+PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH="$EXTRACTED_ROOT/gui:$EXTRACTED_ROOT/tests" \
+LINUX_DEFRAGGER_BUILD_DIR="$EXTRACTED_BUILD" \
+ctest --test-dir "$EXTRACTED_BUILD" --output-on-failure \
+    -E '^linux-defragger-tests$'
+
 if grep -Eq '(^|/)\.git(/|$)' "$WORK/source-files.txt"; then
     printf '%s\n' 'Source archive contains Git worktree metadata.' >&2
     exit 1

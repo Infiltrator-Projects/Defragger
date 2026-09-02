@@ -7,6 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-02
 
 Applies to: release version 1.8.0-141
+Audited source commit: be935de2f757921b3cec7847b32efc6a7a8004dd
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -64,8 +65,10 @@ Recover.
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The 1.8.0-141 audit extension validates the current source against Infiltratr
-Common 1.15.4 at exact commit
+The 1.8.0-141 audit extension is bound to Defragger source baseline
+`be935de2f757921b3cec7847b32efc6a7a8004dd`. Release qualification rejects any later change beneath the
+runtime, native build, Common or packaging trees until the audit baseline is
+explicitly advanced. That baseline validates Infiltratr Common 1.15.4 at exact commit
 `046406bea2aefa539c74e1038b6c20825eca8af7`. CMake, the gitlink and the local
 compiler/installer all verify that same version and commit rather than accepting
 an unconstrained checkout.

@@ -49,6 +49,14 @@ jobs:
           test -n "$VERSION"
           grep -Fq 'Status: **complete**' docs/AUDIT_STATUS.md
           grep -Fqx "Applies to: release version ${VERSION}" docs/AUDIT_STATUS.md
+          AUDITED_COMMIT=$(sed -n 's/^Audited source commit: \([0-9a-f]\{40\}\)$/\1/p' docs/AUDIT_STATUS.md)
+          test -n "$AUDITED_COMMIT"
+          git cat-file -e "${AUDITED_COMMIT}^{commit}"
+          git merge-base --is-ancestor "$AUDITED_COMMIT" HEAD
+          if ! git diff --quiet "$AUDITED_COMMIT" HEAD -- CMakeLists.txt cmake gui src shared packaging; then
+            echo "Audited production/build/package source changed after ${AUDITED_COMMIT}; refresh the safety audit before release." >&2
+            exit 1
+          fi
           subject=$(git log -1 --format=%s "$head_commit")
           if [[ "$subject" != "Release ${VERSION}" && "$subject" != "Release ${VERSION}:"* ]]; then
             echo "Release commit subject must begin with Release ${VERSION}." >&2

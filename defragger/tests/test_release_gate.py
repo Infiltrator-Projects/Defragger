@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,7 @@ def main() -> None:
     harness = (PROJECT_ROOT / "tests" / "run_tests.sh").read_text(encoding="utf-8")
     local_run = (PROJECT_ROOT / "packaging" / "build-local-run.sh").read_text(encoding="utf-8")
     source_zip = (PROJECT_ROOT / "packaging" / "build-source-zip.sh").read_text(encoding="utf-8")
+    release_artifacts = (PROJECT_ROOT / "tests" / "test_release_artifacts.sh").read_text(encoding="utf-8")
     cmake = (PROJECT_ROOT / "cmake" / "project.cmake").read_text(encoding="utf-8")
     design = (PROJECT_ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
     audit = (PROJECT_ROOT / "docs" / "AUDIT_STATUS.md").read_text(encoding="utf-8")
@@ -91,6 +93,8 @@ def main() -> None:
         "RELEASE_SHA256SUMS.txt",
         "Status: **complete**",
         'Applies to: release version ${VERSION}',
+        "Audited source commit:",
+        'git diff --quiet "$AUDITED_COMMIT" HEAD',
         "published releases are immutable",
         "gh release create",
     ):
@@ -102,6 +106,10 @@ def main() -> None:
     assert "GitHub-generated source archive" not in release
 
     assert "__pycache__" in source_zip and ".pyc" in source_zip
+    assert "source-extracted" in release_artifacts
+    assert "-E '^linux-defragger-tests$'" in release_artifacts
+    assert "LD_ENABLE_SANITIZERS=ON" in gate
+    assert "Hosted ASan / UBSan" in gate
     assert "__pycache__/" in gitignore
     assert "*.py[cod]" in gitignore
 
@@ -145,6 +153,41 @@ def main() -> None:
 
     assert f"Applies to: release version {version}" in audit, (
         "completed safety audit does not apply to the current VERSION"
+    )
+
+    audited_commit_match = re.search(
+        r"^Audited source commit:\s*([0-9a-f]{40})$", audit, re.MULTILINE
+    )
+    assert audited_commit_match is not None, (
+        "completed safety audit is not bound to an exact source commit"
+    )
+    audited_commit = audited_commit_match.group(1)
+    subprocess.run(
+        ["git", "cat-file", "-e", f"{audited_commit}^{{commit}}"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "merge-base", "--is-ancestor", audited_commit, "HEAD"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+    audited_paths = (
+        "defragger/CMakeLists.txt",
+        "defragger/cmake",
+        "defragger/gui",
+        "defragger/src",
+        "defragger/shared",
+        "defragger/packaging",
+    )
+    drift = subprocess.run(
+        ["git", "diff", "--quiet", audited_commit, "HEAD", "--", *audited_paths],
+        cwd=REPO_ROOT,
+        check=False,
+    )
+    assert drift.returncode == 0, (
+        "audited production/build/package source changed after the recorded audit "
+        f"baseline {audited_commit}"
     )
 
     writer_assignment = None
