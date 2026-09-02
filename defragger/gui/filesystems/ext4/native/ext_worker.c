@@ -387,7 +387,17 @@ static int commit_stage(const char *device_path, const char *journal_path,
            (double)state->filesystem_bytes / (1024.0 * 1024.0));
     fflush(stdout);
 
-    LdDevice target = ld_device_open(device_path, true);
+    LdDevice target;
+    if (ld_device_try_open(device_path, true, &target) != 0 ||
+        !ld_device_matches_identity(&target, state->target_identity,
+                                    state->physical_bytes)) {
+        if (target.fd >= 0) ld_device_close(&target);
+        ext_set_error(error,
+                      "cannot open the journal-bound EXT target for commit: %s",
+                      strerror(errno == 0 ? ESTALE : errno));
+        ext_range_free(&allocated_ranges);
+        return -1;
+    }
     if (flock(target.fd, LOCK_EX) != 0) {
         ext_set_error(error, "cannot lock EXT target for commit: %s", strerror(errno));
         ext_range_free(&allocated_ranges); ld_device_close(&target); return -1;
