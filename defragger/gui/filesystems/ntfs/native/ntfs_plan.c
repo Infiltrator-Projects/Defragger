@@ -428,9 +428,11 @@ fail:
 }
 
 static int workspace_copy_rows(const char *device, sqlite3 *db, uint32_t cluster_size,
+                               const char *target_identity, uint64_t physical_bytes,
                                const char *query, bool stop_aware,
                                bool record_digest, char **error) {
-    int fd = open(device, O_RDWR | O_CLOEXEC);
+    int fd = ld_device_open_verified_fd(device, true, target_identity,
+                                        physical_bytes);
     if (fd < 0) {
         ntfs_set_error(error, "cannot open NTFS source for terminal-workspace I/O: %s",
                        strerror(errno));
@@ -514,29 +516,37 @@ static int workspace_copy_rows(const char *device, sqlite3 *db, uint32_t cluster
 }
 
 int ntfs_stage_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                         const char *target_identity, uint64_t physical_bytes,
                          char **error) {
-    return workspace_copy_rows(device, db, cluster_size,
+    return workspace_copy_rows(device, db, cluster_size, target_identity,
+                               physical_bytes,
                                "SELECT old,slot FROM workspace ORDER BY old",
                                true, true, error);
 }
 
 int ntfs_place_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                         const char *target_identity, uint64_t physical_bytes,
                          bool stop_aware, char **error) {
-    return workspace_copy_rows(device, db, cluster_size,
+    return workspace_copy_rows(device, db, cluster_size, target_identity,
+                               physical_bytes,
                                "SELECT slot,target FROM workspace ORDER BY old",
                                stop_aware, false, error);
 }
 
 int ntfs_restore_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                           const char *target_identity, uint64_t physical_bytes,
                            char **error) {
-    return workspace_copy_rows(device, db, cluster_size,
+    return workspace_copy_rows(device, db, cluster_size, target_identity,
+                               physical_bytes,
                                "SELECT slot,old FROM workspace ORDER BY old",
                                false, false, error);
 }
 
 int ntfs_verify_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                          const char *target_identity, uint64_t physical_bytes,
                           char **error) {
-    int fd = open(device, O_RDONLY | O_CLOEXEC);
+    int fd = ld_device_open_verified_fd(device, false, target_identity,
+                                        physical_bytes);
     if (fd < 0) {
         ntfs_set_error(error, "cannot open NTFS source to verify terminal workspace: %s",
                        strerror(errno));
