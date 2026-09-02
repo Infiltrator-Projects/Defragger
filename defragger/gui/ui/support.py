@@ -17,11 +17,13 @@ def safe_journal_name(path: str) -> str:
     return cleaned or "volume"
 
 
+STATE_ROOT = Path("/var/lib/linux-defragger/state")
+
+
 def state_dir() -> Path:
-    root = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
-    target = root / "linux-defragger"
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+    """Return the root-worker-owned persistent journal namespace for this UID."""
+
+    return STATE_ROOT / str(os.getuid())
 
 
 def find_mapper() -> str:
