@@ -78,6 +78,33 @@ int main(void) {
         strcmp(target.path, resolved_target) != 0)
         return fail("raw target canonical identity");
     ld_device_close(&target);
+
+    struct stat target_status;
+    if (stat(target_path, &target_status) != 0)
+        return fail("target identity stat");
+    char target_identity[160];
+    if (snprintf(target_identity, sizeof(target_identity), "file:%llu:%llu",
+                 (unsigned long long)target_status.st_dev,
+                 (unsigned long long)target_status.st_ino) < 0)
+        return fail("target identity format");
+    int verified_fd = ld_device_open_verified_fd(
+        target_path, false, target_identity, 8192U);
+    if (verified_fd < 0) return fail("journal-bound target accepted");
+    close(verified_fd);
+
+    char replacement_path[] = "/tmp/linux-defragger-core-replacement.XXXXXX";
+    int replacement_fd = mkstemp(replacement_path);
+    if (replacement_fd < 0 || ftruncate(replacement_fd, 8192) != 0)
+        return fail("replacement target");
+    close(replacement_fd);
+    if (rename(replacement_path, target_path) != 0)
+        return fail("replace target inode");
+    errno = 0;
+    if (ld_device_open_verified_fd(target_path, false,
+                                   target_identity, 8192U) >= 0 ||
+        errno != ESTALE)
+        return fail("journal-bound target substitution refusal");
+
     unlink(target_link);
     unlink(target_path);
 
