@@ -1300,6 +1300,14 @@ int exfat_relayout_recover(const char *device, const char *journal_path,
         manifest_free(&manifest);
         return 1;
     }
+    if (!ld_fd_matches_identity(volume.fd, manifest.target_identity,
+                                manifest.device_size)) {
+        exfat_close_volume(&volume);
+        manifest_free(&manifest);
+        exfat_set_error(error,
+                        "exFAT recovery descriptor does not match the journaled target");
+        return 1;
+    }
     if (volume.serial != manifest.serial ||
         volume.volume_bytes != manifest.volume_bytes ||
         volume.bytes_per_sector != manifest.bytes_per_sector ||
