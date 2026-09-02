@@ -232,8 +232,25 @@ int ntfs_open_volume(const char *path, bool write, NtfsVolume *volume, char **er
     }
     int flags = (write ? O_RDWR : O_RDONLY) | O_CLOEXEC;
     if (write && S_ISBLK(status.st_mode)) flags |= O_EXCL;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
     int fd = open(real, flags);
     if (fd < 0) { ntfs_set_error(error, "cannot open NTFS target: %s", strerror(errno)); free(real); return -1; }
+    struct stat opened;
+    if (fstat(fd, &opened) != 0 ||
+        (status.st_mode & S_IFMT) != (opened.st_mode & S_IFMT) ||
+        status.st_dev != opened.st_dev || status.st_ino != opened.st_ino ||
+        (S_ISBLK(status.st_mode) && status.st_rdev != opened.st_rdev)) {
+        ntfs_set_error(error, "NTFS target identity changed between validation and open");
+        close(fd); free(real); return -1;
+    }
+    if (write && S_ISBLK(opened.st_mode) &&
+        ld_device_number_is_mounted(opened.st_rdev)) {
+        ntfs_set_error(error, "NTFS target became mounted while opening for raw mutation");
+        close(fd); free(real); return -1;
+    }
+    status = opened;
     if (write && flock(fd, LOCK_EX | LOCK_NB) != 0) {
         ntfs_set_error(error, "cannot lock NTFS target exclusively: %s", strerror(errno)); close(fd); free(real); return -1;
     }
