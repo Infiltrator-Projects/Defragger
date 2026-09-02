@@ -186,11 +186,18 @@ int ntfs_permute_stage(const char *stage, sqlite3 *db, uint32_t cluster_size,
 int ntfs_apply_stage_metadata(const char *stage, sqlite3 *db, bool allow_dirty, char **error);
 int ntfs_prepare_workspace_map(sqlite3 *db, uint64_t workspace_start,
                                uint64_t workspace_clusters, char **error);
-int ntfs_stage_workspace(const char *device, sqlite3 *db, uint32_t cluster_size, char **error);
-int ntfs_verify_workspace(const char *device, sqlite3 *db, uint32_t cluster_size, char **error);
+int ntfs_stage_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                         const char *target_identity, uint64_t physical_bytes,
+                         char **error);
+int ntfs_verify_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                          const char *target_identity, uint64_t physical_bytes,
+                          char **error);
 int ntfs_place_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                         const char *target_identity, uint64_t physical_bytes,
                          bool stop_aware, char **error);
-int ntfs_restore_workspace(const char *device, sqlite3 *db, uint32_t cluster_size, char **error);
+int ntfs_restore_workspace(const char *device, sqlite3 *db, uint32_t cluster_size,
+                           const char *target_identity, uint64_t physical_bytes,
+                           char **error);
 int ntfs_verify_stage(const char *stage, sqlite3 *db, bool growth,
                       bool allow_dirty, char **error);
 uint64_t ntfs_plan_move_count(sqlite3 *db, char **error);
