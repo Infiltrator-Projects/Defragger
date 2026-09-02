@@ -16,6 +16,7 @@ REPO_ROOT = PROJECT_ROOT.parent
 def main() -> None:
     gate = (REPO_ROOT / ".github" / "workflows" / "quality-gate.yml").read_text(encoding="utf-8")
     release = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    apt_refresh = (REPO_ROOT / ".github" / "workflows" / "apt-refresh.yml").read_text(encoding="utf-8")
     harness = (PROJECT_ROOT / "tests" / "run_tests.sh").read_text(encoding="utf-8")
     local_run = (PROJECT_ROOT / "packaging" / "build-local-run.sh").read_text(encoding="utf-8")
     source_zip = (PROJECT_ROOT / "packaging" / "build-source-zip.sh").read_text(encoding="utf-8")
@@ -86,10 +87,11 @@ def main() -> None:
         "github.event.workflow_run.event == 'push'",
         "github.event.workflow_run.head_branch == 'main'",
         "startsWith(github.event.workflow_run.head_commit.message, 'Release ')",
-        "Verify permanent main quality-gate protection",
+        "Verify permanent main history protection",
         '"repos/${GITHUB_REPOSITORY}/rules/branches/main"',
-        '"required_status_checks"',
-        '"quality-gate"',
+        "deletion",
+        "non_fast_forward",
+        "required_linear_history",
         "EXPECTED_SHA",
         "origin/main",
         "packaging/build-source-zip.sh",
@@ -99,6 +101,9 @@ def main() -> None:
         'Applies to: release version ${VERSION}',
         "Audited source commit:",
         'git diff --quiet "$AUDITED_COMMIT" HEAD',
+        "Audited release-governance commit:",
+        "GOVERNANCE_COMMIT",
+        ":(top).github/workflows",
         "published releases are immutable",
         "gh release create",
     ):
@@ -108,6 +113,19 @@ def main() -> None:
     assert "--clobber" not in release
     assert "gh release edit" not in release
     assert "GitHub-generated source archive" not in release
+    assert "Refresh and verify Infiltrator APT repository" not in release
+    for required in (
+        "release:",
+        "types: [published]",
+        "workflow_dispatch:",
+        "version:",
+        "release_sha:",
+        "APT_REPOSITORY_DISPATCH_TOKEN",
+        "application-release",
+        "catalogue/apps.json",
+        "Central APT repository did not advertise",
+    ):
+        assert required in apt_refresh, f"APT refresh workflow lost required contract: {required}"
 
     assert "__pycache__" in source_zip and ".pyc" in source_zip
     assert "source-extracted" in release_artifacts
@@ -150,7 +168,8 @@ def main() -> None:
         "Amiga SFS0",
         "HFS+/HFSX",
         "Project quality gate",
-        "protected main",
+        "protected-main",
+        "direct-main",
         "explicit release decision",
     ):
         assert required in audit, f"completed safety audit lost evidence: {required}"
@@ -192,6 +211,43 @@ def main() -> None:
     assert drift.returncode == 0, (
         "audited production/build/package source changed after the recorded audit "
         f"baseline {audited_commit}"
+    )
+
+    governance_match = re.search(
+        r"^Audited release-governance commit:\s*([0-9a-f]{40})$",
+        audit,
+        re.MULTILINE,
+    )
+    assert governance_match is not None, (
+        "completed safety audit is not bound to an exact release-governance commit"
+    )
+    governance_commit = governance_match.group(1)
+    subprocess.run(
+        ["git", "cat-file", "-e", f"{governance_commit}^{{commit}}"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "merge-base", "--is-ancestor", governance_commit, "HEAD"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+    governance_drift = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--quiet",
+            governance_commit,
+            "HEAD",
+            "--",
+            ".github/workflows",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+    )
+    assert governance_drift.returncode == 0, (
+        "release-governance workflows changed after the recorded audit "
+        f"baseline {governance_commit}"
     )
 
     writer_assignment = None
