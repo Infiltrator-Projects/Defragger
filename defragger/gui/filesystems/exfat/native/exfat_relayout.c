@@ -33,6 +33,7 @@
 #include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 
 #define EXFAT_RELAYOUT_MAGIC "LINUX-DEFRAGGER-EXFAT-RELAYOUT-1"
