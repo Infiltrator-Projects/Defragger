@@ -427,6 +427,12 @@ def test_test_media_companion_is_all_c() -> None:
     assert "linux-defragger-testdata" not in install_script
     assert 'cmake --install "$BUILD" --prefix /usr' in install_script
 
+    design = (ROOT / "docs" / "DESIGN.md").read_text()
+    deb_builder = (ROOT / "packaging" / "build-deb.sh").read_text()
+    assert "Amiga SFS0 and HFS+/HFSX are C-owned mutation engines" in design
+    assert "Amiga SFS0 and HFS+/HFSX filesystems" in deb_builder
+    assert "docs/AUDIT_STATUS.md" in cmake
+
 
 def main() -> None:
     test_top_level_cmake_owns_c_only_project_declaration()

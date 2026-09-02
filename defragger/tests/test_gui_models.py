@@ -380,6 +380,8 @@ def test_about_dialog_matches_the_standard_project_identity() -> None:
     assert 'BUILD_LABEL = "@LINUX_DEFRAGGER_BUILD_LABEL@"' in version_template
     assert "Operation engine:" not in source
     assert "hfsutils" not in source
+    assert "COPYING.GPL-3.0" in source
+    assert "LICENSES/GPL-3.0-or-later.txt" not in source
 
 
 def main() -> None:

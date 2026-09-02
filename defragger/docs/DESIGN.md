@@ -84,7 +84,7 @@ not yet completed its C migration. FAT keeps its C implementation in
 not independently registered filesystem plugins. There is deliberately no
 `src/filesystems/` tree and no native filesystem ABI.
 
-FAT, exFAT, NTFS, EXT2/3/4, XFS, Amiga OFS/FFS and HFS+/HFSX are C-owned mutation engines. Their package-local native sources own format parsing, placement planning, metadata rewriting, staged verification and recovery. Python contains no parallel writer/planner implementation for those filesystems.
+FAT, exFAT, NTFS, EXT2/3/4, XFS, Amiga OFS/FFS, Amiga SFS0 and HFS+/HFSX are C-owned mutation engines. Their package-local native sources own format parsing, placement planning, metadata rewriting, staged verification and recovery. Python contains no parallel writer/planner implementation for those filesystems.
 
 XFS is C-owned end to end. `xfs_catalog.c` owns allocation-group, free-space,
 inode-btree and bmbt decoding; `xfs_plan.c` owns canonical placement, payload

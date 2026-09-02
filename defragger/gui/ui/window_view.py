@@ -24,7 +24,7 @@ ABOUT_LICENSE = (
     "Linux Defragger is free software licensed under the GNU General Public "
     "License version 3 or, at your option, any later version "
     "(GPL-3.0-or-later).\n\n"
-    "See LICENSES/GPL-3.0-or-later.txt in the source package and the installed "
+    "See LICENSE in the source package or COPYING.GPL-3.0 in the installed "
     "documentation for the complete licence text."
 )
 

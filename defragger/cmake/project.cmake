@@ -457,7 +457,7 @@ install(FILES packaging/io.github.linuxdefragger.desktop
 install(FILES packaging/io.github.linuxdefragger.svg
         DESTINATION share/icons/hicolor/scalable/apps)
 
-install(FILES README.md docs/DESIGN.md
+install(FILES README.md docs/DESIGN.md docs/AUDIT_STATUS.md
         DESTINATION share/doc/linux-defragger)
 install(FILES LICENSE
         DESTINATION share/doc/linux-defragger RENAME COPYING.GPL-3.0)
