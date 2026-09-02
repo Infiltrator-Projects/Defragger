@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sfs_native.h"
+
+#include "ld_device.h"
 #include "ld_io.h"
 
 #include "infiltratr/endian.h"
@@ -1469,7 +1471,7 @@ int sfs_commit_stage(const char *stage, const char *target, uint64_t *written,
     if (sfs_analyse(stage, &analysis, NULL, 0U, error, error_size) != 0)
         return -1;
     int source_fd = open(stage, O_RDONLY | O_CLOEXEC);
-    int target_fd = open(target, O_RDWR | O_CLOEXEC);
+    int target_fd = ld_device_open_verified_fd(target, true, NULL, 0U);
     if (source_fd < 0 || target_fd < 0) {
         if (source_fd >= 0) (void)close(source_fd);
         if (target_fd >= 0) (void)close(target_fd);
