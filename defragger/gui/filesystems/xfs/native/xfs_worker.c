@@ -393,13 +393,17 @@ static int commit_stage(const char *device_path, const char *journal_path, XfsJo
     }
 
     LdDevice target;
-    if (ld_device_try_open(device_path, true, &target) != 0 ||
-        !ld_device_matches_identity(&target, state->target_identity,
-                                    state->physical_bytes)) {
-        if (target.fd >= 0) ld_device_close(&target);
+    if (ld_device_try_open(device_path, true, &target) != 0) {
         xfs_set_error(error,
                       "cannot open the journal-bound XFS target for commit: %s",
-                      strerror(errno == 0 ? ESTALE : errno));
+                      strerror(errno));
+        return -1;
+    }
+    if (!ld_device_matches_identity(&target, state->target_identity,
+                                    state->physical_bytes)) {
+        ld_device_close(&target);
+        xfs_set_error(error,
+                      "XFS target identity or capacity changed before commit");
         return -1;
     }
     if (flock(target.fd, LOCK_EX) != 0) {
