@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   quality-gate:
-    runs-on: [self-hosted, Linux, X64, linux-native]
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
       run:
