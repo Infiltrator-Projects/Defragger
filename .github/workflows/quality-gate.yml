@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   quality-gate:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 45
     defaults:
       run:
@@ -116,8 +116,8 @@ jobs:
             -E linux-defragger-tests
 
   local-quality:
-    name: Hosted Linux / heavy qualification
-    runs-on: ubuntu-24.04
+    name: Local Linux / heavy qualification
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 45
     defaults:
       run:
