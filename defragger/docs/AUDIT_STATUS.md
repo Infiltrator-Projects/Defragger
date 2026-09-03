@@ -6,7 +6,7 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-02
 
-Applies to: release version 1.8.0-141
+Applies to: release version 1.8.0-142
 Audited source commit: 0d563368cea355d8ae251e853a6c83c5e09b68a0
 Audited release-governance commit: 34ed63336fd0a9c86b5d4688d6afefb28e19577e
 
