@@ -8,7 +8,7 @@ Extended: 2026-09-02
 
 Applies to: release version 1.8.0-141
 Audited source commit: 0d563368cea355d8ae251e853a6c83c5e09b68a0
-Audited release-governance commit: 4f4ff372210eb8ffcb0ff151a70366956271dacd
+Audited release-governance commit: 34ed63336fd0a9c86b5d4688d6afefb28e19577e
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -74,7 +74,8 @@ Recover.
     through directory descriptors using `openat`, `mkdirat`, `O_NOFOLLOW`
     and `fstat`; user-controlled parent symlinks cannot redirect privileged
     recovery files.
-11. Authoritative raw mutation descriptors are now bound to the OS-level target
+11. Release-governance execution was requalified on GitHub-hosted Ubuntu so ordinary qualification no longer depends on the home `linux-native` runner; publication semantics and exact-main gating are unchanged.
+12. Authoritative raw mutation descriptors are now bound to the OS-level target
     identity and physical capacity recorded by the transaction. EXT and XFS
     commit/recovery paths, NTFS workspace/dirty-state/metadata/stage commits,
     exFAT normal commits and torn-boot recovery, and AFFS/SFS0/HFS+ stage commits
@@ -91,7 +92,7 @@ The 1.8.0-141 audit extension is bound to Defragger source baseline
 `0d563368cea355d8ae251e853a6c83c5e09b68a0`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`4f4ff372210eb8ffcb0ff151a70366956271dacd`; changes beneath `.github/workflows`
+`34ed63336fd0a9c86b5d4688d6afefb28e19577e`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.15.4 at exact commit
 `046406bea2aefa539c74e1038b6c20825eca8af7`. CMake, the gitlink and the local
