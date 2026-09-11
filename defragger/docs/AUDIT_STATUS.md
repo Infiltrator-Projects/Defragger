@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-11
 
-Applies to: release version 1.8.0-144
-Audited source commit: a0c726d2c7d06147fe7e304b3b77e3e2271e5c3b
+Applies to: release version 1.8.0-145
+Audited source commit: 423fc2d946f6d5de7ab257b1a04b433cfa99382a
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -107,14 +107,26 @@ Recover.
     now fails if those map colours or dimensions are changed by this presentation
     work. The exact source baseline passed the native/filesystem/GUI suite and
     sanitizer tests before this audit extension was advanced.
+17. The installed desktop launchers now use absolute `/usr/bin` targets and the
+    package refreshes desktop and icon caches after installation. Linux Defragger
+    now owns a GUI-first release updater instead of relying on the distribution
+    Update Manager to discover GitHub-only releases. The updater selects the
+    generic Debian or local native asset to preserve the installed build profile,
+    verifies the published SHA-256 manifest plus GitHub asset digests when
+    available, and invokes the verified installer through the graphical polkit
+    authentication path without a shell. Offline automatic checks fail open to
+    the installed application, and a manual Check for Updates desktop action is
+    provided. Dedicated updater regressions, the complete native/filesystem/GUI
+    suite and the sanitizer lane passed on the exact source baseline before this
+    audit extension was advanced.
 
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-144 audit extension is bound to Defragger source baseline
-`a0c726d2c7d06147fe7e304b3b77e3e2271e5c3b`. Release qualification rejects any later change beneath the
+The current 1.8.0-145 audit extension is bound to Defragger source baseline
+`423fc2d946f6d5de7ab257b1a04b433cfa99382a`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
@@ -148,7 +160,7 @@ published release automatically triggers the APT refresh workflow, and the same
 exact version/SHA can be supplied to its manual dispatch path if central
 publication needs to be retried.
 
-Version 1.8.0-144 is explicitly authorized for release on 2026-09-11. Any later
+Version 1.8.0-145 is explicitly authorized for release on 2026-09-11. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
