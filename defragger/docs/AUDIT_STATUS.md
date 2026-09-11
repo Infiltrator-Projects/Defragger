@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-11
 
 Applies to: release version 1.8.0-143
-Audited source commit: 56c7ff6f639ce3e2a8f3be515a1aaad137f062b8
+Audited source commit: ea4db29458a09031d3ecda827e1af034c72cd68e
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -94,6 +94,10 @@ Recover.
     10% Growth Defrag reserve. Verification exercises the production SFS parser,
     root/bitmap/B-tree accounting and every deterministic payload block. OFS and
     FFS retain their existing first-party raw creators and payload verification.
+15. The allocation-map empty-state Cairo renderer now names the shared MB Corpo
+    family instead of falling back to generic Sans. The change is presentation
+    only; the complete native/filesystem/GUI test suite and sanitizer lane passed
+    before this audit baseline was advanced.
 
 ## Shared Common dependency
 
@@ -101,7 +105,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-143 audit extension is bound to Defragger source baseline
-`56c7ff6f639ce3e2a8f3be515a1aaad137f062b8`. Release qualification rejects any later change beneath the
+`ea4db29458a09031d3ecda827e1af034c72cd68e`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
