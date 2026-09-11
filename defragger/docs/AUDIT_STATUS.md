@@ -6,7 +6,7 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-11
 
-Applies to: release version 1.8.0-142
+Applies to: release version 1.8.0-143
 Audited source commit: 56c7ff6f639ce3e2a8f3be515a1aaad137f062b8
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
@@ -100,7 +100,7 @@ Recover.
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-142 audit extension is bound to Defragger source baseline
+The current 1.8.0-143 audit extension is bound to Defragger source baseline
 `56c7ff6f639ce3e2a8f3be515a1aaad137f062b8`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
@@ -135,10 +135,9 @@ published release automatically triggers the APT refresh workflow, and the same
 exact version/SHA can be supplied to its manual dispatch path if central
 publication needs to be retried.
 
-Version 1.8.0-142 is the latest published audited release. Any later version
-requires a new explicit release decision and a separate `Release <version>`
-commit whose exact head passes the Project quality gate; this audit refresh does
-not itself authorize or trigger a new release.
+Version 1.8.0-143 is explicitly authorized for release on 2026-09-11. Any later
+version requires a new explicit release decision and a separate `Release <version>`
+commit whose exact head passes the Project quality gate.
 
 Linux Defragger Test Media is outside the production-operation audit. It is a
 deliberately destructive filesystem-manufacturing utility with independent
