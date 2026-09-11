@@ -62,7 +62,6 @@ class WindowActions(Protocol):
     def request_stop(self, button: Gtk.Button) -> None: ...
 
 
-
 class WindowView:
     """Own every GTK widget; delegate user intent to the window controller."""
 
@@ -83,21 +82,31 @@ class WindowView:
         self._build()
         self._load_css()
 
+    @staticmethod
+    def _section_label(text: str) -> Gtk.Label:
+        label = Gtk.Label(label=text)
+        label.get_style_context().add_class("section-title")
+        return label
+
     def _build(self) -> None:
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.get_style_context().add_class("app-shell")
         self.window.add(outer)
         outer.pack_start(self._build_menu_bar(), False, False, 0)
 
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        root.set_border_width(12)
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        root.set_border_width(16)
         outer.pack_start(root, True, True, 0)
 
-        title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        title = Gtk.Label()
-        title.set_markup(
-            "<span size='x-large' weight='bold'>Linux Defragger</span>"
-        )
+        title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        title_row.set_border_width(2)
+        title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+
+        title = Gtk.Label(label="Linux Defragger")
         title.set_xalign(0)
+        title.get_style_context().add_class("app-title")
+        title_box.pack_start(title, False, False, 0)
+
         subtitle = Gtk.Label(
             label=(
                 "Analyse allocation, fully pack and defragment supported "
@@ -106,20 +115,29 @@ class WindowView:
         )
         subtitle.set_xalign(0)
         subtitle.set_line_wrap(True)
-        title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-        title_box.pack_start(title, False, False, 0)
+        subtitle.get_style_context().add_class("app-subtitle")
         title_box.pack_start(subtitle, False, False, 0)
         title_row.pack_start(title_box, True, True, 0)
-        version = Gtk.Label(
-            label=f"Engine {self.engine_version} · GUI {self.gui_version}"
-        )
-        version.get_style_context().add_class("dim-label")
-        title_row.pack_end(version, False, False, 0)
+
+        version_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        version_box.set_border_width(8)
+        version_box.get_style_context().add_class("version-badge")
+        version_title = Gtk.Label(label=f"Engine {self.engine_version}")
+        version_title.set_xalign(1)
+        version_title.get_style_context().add_class("version-primary")
+        version_gui = Gtk.Label(label=f"GUI {self.gui_version}")
+        version_gui.set_xalign(1)
+        version_gui.get_style_context().add_class("version-secondary")
+        version_box.pack_start(version_title, False, False, 0)
+        version_box.pack_start(version_gui, False, False, 0)
+        title_row.pack_end(version_box, False, False, 0)
         root.pack_start(title_row, False, False, 0)
 
-        device_frame = Gtk.Frame(label="Volume")
+        device_frame = Gtk.Frame()
+        device_frame.set_label_widget(self._section_label("Volume"))
+        device_frame.get_style_context().add_class("section-panel")
         device_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        device_box.set_border_width(8)
+        device_box.set_border_width(10)
         self.device_combo = Gtk.ComboBoxText()
         self.device_combo.set_hexpand(True)
         self.device_combo.connect("changed", self.controller.on_device_changed)
@@ -139,7 +157,7 @@ class WindowView:
         device_frame.add(device_box)
         root.pack_start(device_frame, False, False, 0)
 
-        cards = Gtk.Grid(column_spacing=8, row_spacing=8)
+        cards = Gtk.Grid(column_spacing=10, row_spacing=10)
         cards.set_column_homogeneous(True)
         self.capacity_card = SummaryCard("Capacity")
         self.free_card = SummaryCard("Free space")
@@ -151,15 +169,26 @@ class WindowView:
         cards.attach(self.fragmented_card, 3, 0, 1, 1)
         root.pack_start(cards, False, False, 0)
 
-        map_frame = Gtk.Frame(label="Allocation map")
-        map_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
-        map_box.set_border_width(8)
+        map_frame = Gtk.Frame()
+        map_frame.set_label_widget(self._section_label("Allocation map"))
+        map_frame.get_style_context().add_class("map-panel")
+        map_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        map_box.set_border_width(10)
+
         self.disk_map = DiskMap()
         self.disk_map.connect(
             "size-allocate", self.controller.on_map_size_allocate
         )
         map_box.pack_start(self.disk_map, True, True, 0)
-        legend = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+
+        legend = Gtk.FlowBox()
+        legend.set_selection_mode(Gtk.SelectionMode.NONE)
+        legend.set_homogeneous(False)
+        legend.set_row_spacing(6)
+        legend.set_column_spacing(14)
+        legend.set_min_children_per_line(2)
+        legend.set_max_children_per_line(7)
+        legend.get_style_context().add_class("legend-strip")
         for label, colour in (
             ("Free", DiskMap.COLORS["free"]),
             ("Outside active filesystem", DiskMap.COLORS["outside"]),
@@ -170,78 +199,117 @@ class WindowView:
             ("Filesystem metadata/reserved", DiskMap.COLORS["bad"]),
         ):
             item = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+            item.get_style_context().add_class("legend-item")
             swatch = Gtk.DrawingArea()
-            swatch.set_size_request(15, 15)
+            swatch.set_size_request(14, 14)
             swatch.connect("draw", self._draw_swatch, colour)
             item.pack_start(swatch, False, False, 0)
             item.pack_start(Gtk.Label(label=label), False, False, 0)
-            legend.pack_start(item, False, False, 0)
+            legend.insert(item, -1)
+        map_box.pack_start(legend, False, False, 0)
+
         self.map_caption = Gtk.Label(
             label="Each square represents a range of filesystem allocation units."
         )
-        self.map_caption.set_xalign(1)
-        self.map_caption.get_style_context().add_class("dim-label")
-        legend.pack_end(self.map_caption, True, True, 0)
-        map_box.pack_start(legend, False, False, 0)
+        self.map_caption.set_xalign(0)
+        self.map_caption.set_line_wrap(True)
+        self.map_caption.get_style_context().add_class("map-caption")
+        map_box.pack_start(self.map_caption, False, False, 0)
+
         map_frame.add(map_box)
         root.pack_start(map_frame, True, True, 0)
+
+        action_frame = Gtk.Frame()
+        action_frame.set_label_widget(self._section_label("Operations"))
+        action_frame.get_style_context().add_class("action-panel")
+        action_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        action_box.set_border_width(10)
 
         action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.analyze_button = Gtk.Button.new_with_label("Analyse")
         self.analyze_button.connect(
             "clicked", lambda _button: self.controller.analyze()
         )
+        self.analyze_button.get_style_context().add_class("primary-action")
         action_row.pack_start(self.analyze_button, False, False, 0)
+
         self.defrag_button = Gtk.Button.new_with_label("Defragment")
         self.defrag_button.connect(
             "clicked",
             lambda _button: self.controller.start_mutation("defrag"),
         )
+        self.defrag_button.get_style_context().add_class("operation-action")
         action_row.pack_start(self.defrag_button, False, False, 0)
+
         self.growth_button = Gtk.Button.new_with_label("Growth Defrag")
         self.growth_button.connect(
             "clicked",
             lambda _button: self.controller.start_mutation("growth-defrag"),
         )
+        self.growth_button.get_style_context().add_class("operation-action")
         action_row.pack_start(self.growth_button, False, False, 0)
+
         self.recover_button = Gtk.Button.new_with_label("Recover")
         self.recover_button.connect(
             "clicked",
             lambda _button: self.controller.start_mutation("recover"),
         )
         action_row.pack_start(self.recover_button, False, False, 0)
+
+        separator = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        action_row.pack_start(separator, False, False, 4)
+
         self.stop_button = Gtk.Button.new_with_label("Stop safely")
         self.stop_button.connect("clicked", self.controller.request_stop)
         self.stop_button.set_sensitive(False)
+        self.stop_button.get_style_context().add_class("destructive-action")
         action_row.pack_start(self.stop_button, False, False, 0)
+        action_box.pack_start(action_row, False, False, 0)
+
         self.progress = Gtk.ProgressBar()
         self.progress.set_hexpand(True)
         self.progress.set_show_text(True)
         self.progress.set_text("Ready")
-        action_row.pack_start(self.progress, True, True, 8)
-        root.pack_start(action_row, False, False, 0)
+        self.progress.get_style_context().add_class("operation-progress")
+        action_box.pack_start(self.progress, False, False, 0)
+        action_frame.add(action_box)
+        root.pack_start(action_frame, False, False, 0)
 
         expander = Gtk.Expander(label="Operation log")
         expander.set_expanded(True)
+        expander.get_style_context().add_class("log-expander")
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_min_content_height(150)
+        scroll.set_min_content_height(145)
+        scroll.get_style_context().add_class("log-scroll")
         self.log_view = Gtk.TextView()
         self.log_view.set_editable(False)
         self.log_view.set_cursor_visible(False)
-        self.log_view.set_monospace(True)
+        self.log_view.set_left_margin(10)
+        self.log_view.set_right_margin(10)
+        self.log_view.set_top_margin(8)
+        self.log_view.set_bottom_margin(8)
+        self.log_view.get_style_context().add_class("log-view")
         self.log_buffer = self.log_view.get_buffer()
         scroll.add(self.log_view)
         expander.add(scroll)
         root.pack_start(expander, False, True, 0)
 
+        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        status_box.set_border_width(6)
+        status_box.get_style_context().add_class("status-strip")
+        status_prefix = Gtk.Label(label="STATUS")
+        status_prefix.get_style_context().add_class("status-prefix")
+        status_box.pack_start(status_prefix, False, False, 0)
         self.status_label = Gtk.Label(label="Ready")
         self.status_label.set_xalign(0)
-        self.status_label.get_style_context().add_class("dim-label")
-        root.pack_start(self.status_label, False, False, 0)
+        self.status_label.get_style_context().add_class("status-text")
+        status_box.pack_start(self.status_label, True, True, 0)
+        root.pack_start(status_box, False, False, 0)
 
     def _build_menu_bar(self) -> Gtk.MenuBar:
         menu_bar = Gtk.MenuBar()
+        menu_bar.get_style_context().add_class("app-menubar")
         file_item = Gtk.MenuItem.new_with_mnemonic("_File")
         file_menu = Gtk.Menu()
         file_item.set_submenu(file_menu)
@@ -283,16 +351,153 @@ class WindowView:
         colour: tuple[float, float, float],
     ) -> bool:
         cr.set_source_rgb(*colour)
-        cr.rectangle(0, 0, 15, 15)
+        cr.rectangle(0, 0, 14, 14)
         cr.fill()
         return False
 
     def _load_css(self) -> None:
         css = b"""
-        .summary-title { color: #68717d; font-size: 10pt; }
-        .summary-value { font-size: 15pt; font-weight: bold; }
-        .dim-label { color: #68717d; }
-        button.suggested-action { font-weight: bold; }
+        .app-title {
+            color: #f7f8f9;
+            font-size: 21pt;
+            font-weight: bold;
+        }
+        .app-subtitle {
+            color: #a8afb5;
+            font-size: 10pt;
+        }
+        .version-badge {
+            background-color: #111416;
+            border: 1px solid #343a3f;
+            border-radius: 4px;
+        }
+        .version-primary {
+            color: #d6dadd;
+            font-size: 9.5pt;
+            font-weight: bold;
+        }
+        .version-secondary {
+            color: #8f979e;
+            font-size: 9pt;
+        }
+        .section-title {
+            color: #c4c9cd;
+            font-size: 10pt;
+            font-weight: bold;
+        }
+        frame.section-panel > border,
+        frame.map-panel > border,
+        frame.action-panel > border,
+        frame.summary-card > border {
+            border: 1px solid #30363b;
+            border-radius: 4px;
+            background-color: #0d0f11;
+        }
+        frame.summary-card > border {
+            border-color: #343a3f;
+        }
+        .summary-title {
+            color: #969ea5;
+            font-size: 9.5pt;
+        }
+        .summary-value {
+            color: #f5f6f7;
+            font-size: 16pt;
+            font-weight: bold;
+        }
+        .legend-item label {
+            color: #c2c7cb;
+            font-size: 9pt;
+        }
+        .map-caption {
+            color: #8e969d;
+            font-size: 9pt;
+        }
+        button.primary-action {
+            background-image: none;
+            background-color: #c8ccd0;
+            color: #090a0b;
+            border-color: #eceeef;
+            font-weight: bold;
+        }
+        button.primary-action:hover {
+            background-color: #e2e5e7;
+            color: #050505;
+        }
+        button.primary-action:active {
+            background-color: #adb3b8;
+            color: #050505;
+        }
+        button.operation-action {
+            border-color: #8a9197;
+            font-weight: bold;
+        }
+        button.destructive-action {
+            border-color: #8f5555;
+        }
+        button.destructive-action:hover {
+            background-color: #4a2525;
+            border-color: #c36a6a;
+        }
+        button.destructive-action:disabled {
+            border-color: #3f4144;
+        }
+        progressbar.operation-progress trough {
+            min-height: 12px;
+            background-color: #15181a;
+            border-color: #3d4348;
+        }
+        progressbar.operation-progress progress {
+            background-color: #b9bec2;
+        }
+        .log-expander {
+            color: #c4c9cd;
+            font-weight: bold;
+        }
+        .log-scroll {
+            border: 1px solid #2f3539;
+            border-radius: 3px;
+        }
+        textview.log-view {
+            background-color: #101214;
+            color: #d9dde0;
+            font-size: 9.5pt;
+        }
+        .status-strip {
+            background-color: #0d0f11;
+            border-top: 1px solid #30363b;
+        }
+        .status-prefix {
+            color: #727b82;
+            font-size: 8.5pt;
+            font-weight: bold;
+        }
+        .status-text {
+            color: #a3aab0;
+            font-size: 9pt;
+        }
+        .about-title {
+            color: #f7f8f9;
+            font-size: 19pt;
+            font-weight: bold;
+        }
+        .about-version {
+            color: #a9b0b6;
+            font-size: 10pt;
+        }
+        .about-copy {
+            color: #d8dcdf;
+            font-size: 10pt;
+        }
+        .about-meta-key {
+            color: #858e95;
+            font-size: 9.5pt;
+            font-weight: bold;
+        }
+        .about-meta-value {
+            color: #d7dbde;
+            font-size: 9.5pt;
+        }
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
@@ -303,7 +508,6 @@ class WindowView:
                 provider,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
             )
-        self.defrag_button.get_style_context().add_class("suggested-action")
 
     def populate_volumes(self, names: list[str], active_index: int) -> None:
         self.device_combo.remove_all()
@@ -370,20 +574,97 @@ class WindowView:
         chooser.destroy()
         return filename
 
+    def _show_license(self, parent: Gtk.Window) -> None:
+        dialog = Gtk.Dialog(
+            title="Linux Defragger licence",
+            transient_for=parent,
+            modal=True,
+        )
+        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+        dialog.set_default_size(520, 300)
+        content = dialog.get_content_area()
+        content.set_border_width(18)
+        content.set_spacing(10)
+        text = Gtk.Label(label=ABOUT_LICENSE)
+        text.set_xalign(0)
+        text.set_yalign(0)
+        text.set_line_wrap(True)
+        text.set_selectable(True)
+        text.get_style_context().add_class("about-copy")
+        content.pack_start(text, True, True, 0)
+        dialog.show_all()
+        dialog.run()
+        dialog.destroy()
 
     def show_about(self) -> None:
-        dialog = Gtk.AboutDialog(transient_for=self.window, modal=True)
-        dialog.set_program_name(APP_NAME)
-        dialog.set_version(self.gui_version)
-        dialog.set_logo_icon_name(APP_ICON_NAME)
-        dialog.set_comments(f"{ABOUT_COMMENTS}\n\nBuild: {self.build_label}")
-        dialog.set_authors(["Shannon Smith — Author and project maintainer"])
-        dialog.set_website(PROJECT_URL)
-        dialog.set_website_label("Website")
-        dialog.set_copyright(COPYRIGHT)
-        dialog.set_license(ABOUT_LICENSE)
-        dialog.set_wrap_license(True)
-        dialog.run()
+        dialog = Gtk.Dialog(
+            title=f"About {APP_NAME}",
+            transient_for=self.window,
+            modal=True,
+        )
+        dialog.set_default_size(540, 470)
+        dialog.add_button("Licence", 1)
+        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+
+        content = dialog.get_content_area()
+        content.set_border_width(24)
+        content.set_spacing(16)
+
+        hero = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
+        image = Gtk.Image.new_from_icon_name(APP_ICON_NAME, Gtk.IconSize.DIALOG)
+        image.set_pixel_size(88)
+        hero.pack_start(image, False, False, 0)
+
+        title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        title = Gtk.Label(label=APP_NAME)
+        title.set_xalign(0)
+        title.get_style_context().add_class("about-title")
+        title_box.pack_start(title, False, False, 0)
+        version = Gtk.Label(label=f"Version {self.gui_version}")
+        version.set_xalign(0)
+        version.get_style_context().add_class("about-version")
+        title_box.pack_start(version, False, False, 0)
+        hero.pack_start(title_box, True, True, 0)
+        content.pack_start(hero, False, False, 0)
+
+        description = Gtk.Label(label=ABOUT_COMMENTS)
+        description.set_xalign(0)
+        description.set_line_wrap(True)
+        description.get_style_context().add_class("about-copy")
+        content.pack_start(description, False, False, 0)
+
+        details = Gtk.Grid(column_spacing=14, row_spacing=8)
+        details.set_hexpand(True)
+        for row, (key, value) in enumerate(
+            (
+                ("Author", "Shannon Smith — Author and project maintainer"),
+                ("Build", self.build_label),
+                ("Engine", self.engine_version),
+                ("Copyright", COPYRIGHT),
+            )
+        ):
+            key_label = Gtk.Label(label=key)
+            key_label.set_xalign(0)
+            key_label.get_style_context().add_class("about-meta-key")
+            value_label = Gtk.Label(label=value)
+            value_label.set_xalign(0)
+            value_label.set_line_wrap(True)
+            value_label.get_style_context().add_class("about-meta-value")
+            details.attach(key_label, 0, row, 1, 1)
+            details.attach(value_label, 1, row, 1, 1)
+        content.pack_start(details, False, False, 0)
+
+        website = Gtk.LinkButton.new_with_label(PROJECT_URL, "Project website")
+        website.set_halign(Gtk.Align.START)
+        content.pack_start(website, False, False, 0)
+
+        dialog.show_all()
+        while True:
+            response = dialog.run()
+            if response == 1:
+                self._show_license(dialog)
+                continue
+            break
         dialog.destroy()
 
     def reset_summary(self) -> None:

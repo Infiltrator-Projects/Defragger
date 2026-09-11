@@ -156,9 +156,10 @@ class DiskMap(Gtk.DrawingArea):
 class SummaryCard(Gtk.Frame):
     def __init__(self, title: str) -> None:
         super().__init__()
-        self.set_shadow_type(Gtk.ShadowType.IN)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        box.set_border_width(10)
+        self.set_shadow_type(Gtk.ShadowType.NONE)
+        self.get_style_context().add_class("summary-card")
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        box.set_border_width(12)
         self.title = Gtk.Label(label=title)
         self.title.set_xalign(0)
         self.title.get_style_context().add_class("summary-title")

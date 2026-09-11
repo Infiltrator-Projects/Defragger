@@ -57,18 +57,33 @@ def apply_mb_theme() -> None:
         color: #f5f6f7;
     }}
     headerbar label, .titlebar label {{ font-weight: bold; }}
+    menubar {{
+        background-color: #101214;
+        border-bottom: 1px solid #30353a;
+        padding: 3px 6px;
+    }}
+    menu {{
+        background-color: #15181a;
+        border: 1px solid #4c5257;
+    }}
+    menuitem {{ padding: 6px 10px; }}
+    menuitem:hover {{ background-color: #2a2e32; }}
     button {{
         background-image: none;
         background-color: #1d2023;
         color: #f2f3f4;
         border: 1px solid #7e858a;
         border-radius: 3px;
-        padding: 6px 12px;
+        padding: 7px 13px;
         box-shadow: none;
     }}
     button:hover {{ background-color: #2a2e32; border-color: #c3c7ca; }}
     button:active, button:checked {{ background-color: #383d42; }}
-    button:disabled {{ color: #6d7276; border-color: #3d4144; background-color: #151719; }}
+    button:disabled {{
+        color: #6d7276;
+        border-color: #3d4144;
+        background-color: #151719;
+    }}
     entry, combobox button, spinbutton, textview, treeview, viewport, scrolledwindow {{
         background-color: #111315;
         color: #eef0f1;
@@ -83,16 +98,25 @@ def apply_mb_theme() -> None:
         border-color: #555b60;
         font-weight: bold;
     }}
+    frame > border {{ border-color: #3f454a; }}
     notebook > header {{ background-color: #0d0f10; border-color: #4f5559; }}
     notebook tab {{ background-color: #141719; padding: 7px 12px; }}
     notebook tab:checked {{ background-color: #292d30; }}
-    progressbar trough {{ background-color: #17191b; border: 1px solid #555b60; }}
+    progressbar trough {{
+        background-color: #17191b;
+        border: 1px solid #555b60;
+        border-radius: 2px;
+    }}
     progressbar progress {{ background-color: #b5b9bc; }}
     progressbar text {{ color: #f8f8f8; }}
     scrollbar slider {{ background-color: #777d82; border-radius: 3px; }}
     scrollbar slider:hover {{ background-color: #a9adb0; }}
     separator {{ background-color: #4b5054; }}
-    tooltip {{ background-color: #202326; color: #f4f4f4; border: 1px solid #777d82; }}
+    tooltip {{
+        background-color: #202326;
+        color: #f4f4f4;
+        border: 1px solid #777d82;
+    }}
     """
     provider = Gtk.CssProvider()
     provider.load_from_data(css.encode("utf-8"))

@@ -63,7 +63,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def __init__(self, application: Gtk.Application) -> None:
         super().__init__(application=application, title=f"{APP_NAME} {VERSION}")
-        self.set_default_size(1050, 760)
+        self.set_default_size(1180, 820)
         self.set_position(Gtk.WindowPosition.CENTER)
 
         self.mapper = find_mapper()
@@ -142,7 +142,6 @@ class MainWindow(Gtk.ApplicationWindow):
     def _authenticate_on_launch(self) -> bool:
         self.runner.authenticate()
         return False
-
 
     def refresh_devices(
         self,
