@@ -93,7 +93,7 @@ class DiskMap(Gtk.DrawingArea):
         cr.fill()
         if not self.cells:
             cr.set_source_rgb(0.38, 0.40, 0.44)
-            cr.select_font_face("Sans", 0, 0)
+            cr.select_font_face("MB Corpo S Title WEB", 0, 0)
             cr.set_font_size(15)
             message = "Select a supported volume and click Analyse"
             extents = cr.text_extents(message)
