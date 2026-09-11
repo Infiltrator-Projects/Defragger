@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Legacy contract note: Exec=linux-defragger-test-media was replaced by the absolute launcher below.
 [Desktop Entry]
 Type=Application
 Name=Linux Defragger Test Media
