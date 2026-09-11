@@ -219,7 +219,7 @@ static void set_worker_controls(LdtmApp *app, gboolean running) {
     if (running) {
         app->completed_rows = 0U;
         gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(app->progress), 0.0);
-        gtk_progress_bar_set_text(GTK_PROGRESS_BAR(app->progress), "0 / 18 — starting…");
+        gtk_progress_bar_set_text(GTK_PROGRESS_BAR(app->progress), "0 / 21 — starting…");
         gtk_label_set_text(GTK_LABEL(app->operation_summary), "Privileged worker starting…");
     } else {
         gtk_label_set_text(GTK_LABEL(app->operation_summary), "Idle");
@@ -550,7 +550,7 @@ static void refresh_devices(LdtmApp *app) {
             removable, readonly,
             system_disk ? "PROTECTED — this disk contains /, /boot or /boot/efi." :
             (!field_media ? "Not accepted as removable/USB/MMC field media." :
-             (!enough ? "Too small for the full 18-partition test layout." :
+             (!enough ? "Too small for the full 21-partition test layout." :
               "✓ Safety pre-check passed. The privileged worker verifies the device again before writing.")));
         gtk_list_store_append(app->device_store, &iter);
         gtk_list_store_set(app->device_store, &iter,
