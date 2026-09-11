@@ -92,7 +92,8 @@ static int test_amiga_formatters_and_payload(void) {
         production_parser_accepts(path, 0U, 0, expected_files, tiny.files, tiny.chunks) != 0 ||
         corrupt_first_payload_block(path) != 0 ||
         ldtm_verify_amiga_payload(path, 0U, &tiny, detail, sizeof(detail)) == 0) {
-        (void)unlink(path); return 1;
+        (void)unlink(path);
+        return 1;
     }
     if (ldtm_format_amiga_volume(path, 1U, "LD_FFS") != 0 ||
         ldtm_validate_amiga_volume(path, 1U) != 0 ||
@@ -103,7 +104,8 @@ static int test_amiga_formatters_and_payload(void) {
         production_parser_accepts(path, 1U, 1, expected_files, tiny.files, tiny.chunks) != 0 ||
         corrupt_first_payload_block(path) != 0 ||
         ldtm_verify_amiga_payload(path, 1U, &tiny, detail, sizeof(detail)) == 0) {
-        (void)unlink(path); return 1;
+        (void)unlink(path);
+        return 1;
     }
     return unlink(path) == 0 ? 0 : 1;
 }
@@ -122,7 +124,8 @@ static int test_sfs_formatter_and_payload(void) {
     fd = mkstemp(path);
     if (fd < 0) return 1;
     if (ftruncate(fd, (off_t)(64U * LDTM_MIB)) != 0 || close(fd) != 0) {
-        (void)unlink(path); return 1;
+        (void)unlink(path);
+        return 1;
     }
     if (ldtm_format_amiga_volume(path, 1U, "LD_SFS") != 0 ||
         ldtm_populate_amiga_volume(path, 1U, &profile) != 0 ||
@@ -130,19 +133,25 @@ static int test_sfs_formatter_and_payload(void) {
         sfs_analyse(path, &analysis, NULL, 0U, error, sizeof(error)) != 0 ||
         analysis.regular_files != 1U || analysis.fragmented_files != 1U ||
         analysis.data_blocks != 6400U || analysis.growth_10_satisfied) {
-        (void)unlink(path); return 1;
+        (void)unlink(path);
+        return 1;
     }
     fd = open(path, O_RDWR | O_CLOEXEC);
     if (fd < 0 || pread(fd, &byte, 1U, (off_t)128U * 4096U) != 1) {
-        if (fd >= 0) (void)close(fd); (void)unlink(path); return 1;
+        if (fd >= 0) (void)close(fd);
+        (void)unlink(path);
+        return 1;
     }
     byte ^= UINT8_C(0xa5);
     if (pwrite(fd, &byte, 1U, (off_t)128U * 4096U) != 1 || fsync(fd) != 0) {
-        (void)close(fd); (void)unlink(path); return 1;
+        (void)close(fd);
+        (void)unlink(path);
+        return 1;
     }
     (void)close(fd);
     if (ldtm_verify_amiga_payload(path, 1U, &profile, detail, sizeof(detail)) == 0) {
-        (void)unlink(path); return 1;
+        (void)unlink(path);
+        return 1;
     }
     return unlink(path) == 0 ? 0 : 1;
 }
