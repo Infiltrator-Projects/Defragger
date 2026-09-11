@@ -50,7 +50,7 @@ if [ -e "$COMMON_DIR/.git" ]; then
     }
 fi
 
-for command_name in tar gzip sha256sum sed; do
+for command_name in tar gzip sha256sum sed python3; do
     command -v "$command_name" >/dev/null 2>&1 || {
         printf 'Required command is missing: %s\n' "$command_name" >&2
         exit 1
@@ -58,7 +58,7 @@ for command_name in tar gzip sha256sum sed; do
 done
 
 [ -f "$TEMPLATE" ] || {
-    printf '%s\n' 'Installer template is missing: %s' "$TEMPLATE" >&2
+    printf 'Installer template is missing: %s\n' "$TEMPLATE" >&2
     exit 1
 }
 
@@ -66,6 +66,8 @@ PARENT=$(dirname -- "$ROOT")
 BASENAME=$(basename -- "$ROOT")
 PAYLOAD_BASENAME="linux-defragger-${VERSION}"
 TAR_PATH="$WORK/source.tar"
+FONT_ARCHIVE="$WORK/mb-corpo-fonts.tar.xz"
+"$ROOT/packaging/vendor-mb-fonts.sh" "$FONT_ARCHIVE" >/dev/null
 
 tar --sort=name --mtime='@1704067200' --owner=0 --group=0 --numeric-owner \
     --exclude-vcs \
@@ -77,8 +79,14 @@ tar --sort=name --mtime='@1704067200' --owner=0 --group=0 --numeric-owner \
     --exclude='*.deb' \
     --exclude='*.run' \
     --exclude='*.zip' \
+    --exclude="$BASENAME/assets/fonts/mb-corpo-fonts.tar.xz" \
     --transform="s,^${BASENAME},${PAYLOAD_BASENAME}," \
     -C "$PARENT" -cf "$TAR_PATH" "$BASENAME"
+FONT_STAGE="$WORK/font-stage/$PAYLOAD_BASENAME/assets/fonts"
+mkdir -p "$FONT_STAGE"
+cp "$FONT_ARCHIVE" "$FONT_STAGE/mb-corpo-fonts.tar.xz"
+tar --mtime='@1704067200' --owner=0 --group=0 --numeric-owner \
+    -C "$WORK/font-stage" -rf "$TAR_PATH" "$PAYLOAD_BASENAME/assets/fonts/mb-corpo-fonts.tar.xz"
 gzip -n -9 "$TAR_PATH"
 PAYLOAD="$TAR_PATH.gz"
 
@@ -90,9 +98,6 @@ sed \
     -e "s/@PAYLOAD_SHA256@/$PAYLOAD_SHA256/g" \
     "$TEMPLATE" >"$OUTPUT"
 
-# The binary payload must begin on the line after the marker. Repair a
-# missing final newline defensively, then verify that the marker is the
-# generated header's final line before appending any binary data.
 if [ -n "$(tail -c 1 "$OUTPUT" 2>/dev/null || true)" ]; then
     printf '\n' >>"$OUTPUT"
 fi
@@ -103,5 +108,4 @@ fi
 
 dd if="$PAYLOAD" of="$OUTPUT" oflag=append conv=notrunc status=none
 chmod 0755 "$OUTPUT"
-
 printf '%s\n' "$OUTPUT"

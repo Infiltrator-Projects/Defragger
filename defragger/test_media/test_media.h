@@ -80,6 +80,7 @@ int ldtm_is_reserved_partition_label(const char *label);
 int ldtm_sanitize_reserved_partitions(const char *device);
 int ldtm_worker_prepare(const char *device, const char *confirmed_device);
 int ldtm_worker_verify(const char *device);
+void ldtm_apply_mb_theme(void);
 int ldtm_gui_main(int argc, char **argv);
 
 #endif

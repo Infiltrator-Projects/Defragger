@@ -25,8 +25,8 @@ static const LdtmFilesystemSpec LDTM_SPECS[LDTM_SPEC_COUNT] = {
      "Amiga Old File System DOS\\0; formatted by the built-in first-party C creator."},
     {"ffs", "LD_FFS", 1024U, 200U, LDTM_CREATOR_AFFS, "",
      "Amiga Fast File System DOS\\1; formatted by the built-in first-party C creator."},
-    {"sfs", "LD_SFS", 1024U, 200U, LDTM_CREATOR_MANUAL, "",
-     "Amiga Smart File System SFS/SFS2 roadmap slot; no Linux Defragger engine or creator yet."},
+    {"sfs", "LD_SFS", 64U, 25U, LDTM_CREATOR_AFFS, "",
+     "Amiga Smart File System SFS0 v3; built-in raw C creator makes a 25 MiB file with 100 extents and an intentionally unsatisfied Growth Defrag reserve."},
     {"pfs3", "LD_PFS3", 1024U, 200U, LDTM_CREATOR_MANUAL, "",
      "Amiga Professional File System PFS3 roadmap slot; no Linux Defragger engine or creator yet."},
     {"hfs", "LD_HFS", 1024U, 200U, LDTM_CREATOR_HFS, "hfsutils", ""},
@@ -77,6 +77,14 @@ LdtmFragmentProfile ldtm_fragment_profile(const LdtmFilesystemSpec *spec) {
         profile.chunk_kib = 128U;
         profile.directory_initial = 128U;
         profile.directory_second = 128U;
+    } else if (spec != NULL && strcmp(spec->key, "sfs") == 0) {
+        profile.anchors = 0U;
+        profile.anchor_kib = 0U;
+        profile.files = 1U;
+        profile.chunks = 100U;
+        profile.chunk_kib = 256U;
+        profile.directory_initial = 0U;
+        profile.directory_second = 0U;
     }
     return profile;
 }
@@ -116,10 +124,6 @@ int ldtm_build_sfdisk_script(char *buffer, size_t capacity) {
 }
 
 int ldtm_transport_is_field_media(int removable, const char *transport) {
-    /* Historical name retained for the internal Test Media API. Eligibility is
-       no longer restricted by transport: fixed secondary SATA/SAS/NVMe/virtio
-       and virtual disks are valid targets. Whole-disk, system/boot-disk,
-       read-only and capacity checks remain authoritative safeguards. */
     (void)removable;
     (void)transport;
     return 1;
@@ -198,8 +202,12 @@ int ldtm_spec_creator_available(const LdtmFilesystemSpec *spec,
         (void)snprintf(detail, detail_capacity, "Built-in raw C creator + payload engine: Amiga DOS\\1 FFS");
         return 1;
     }
+    if (spec->creator == LDTM_CREATOR_AFFS && strcmp(spec->key, "sfs") == 0) {
+        (void)snprintf(detail, detail_capacity, "Built-in raw C creator + payload engine: Amiga SFS0 v3, 100-fragment native fixture");
+        return 1;
+    }
     if (spec->creator == LDTM_CREATOR_MANUAL) {
-        (void)snprintf(detail, detail_capacity, "Manual: %s", spec->note);
+        (void)snprintf(detail, detail_capacity, "Reserved: %s", spec->note);
         return 0;
     }
     program = ldtm_creator_program(spec);

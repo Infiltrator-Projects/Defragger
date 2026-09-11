@@ -3,28 +3,37 @@
 
 pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
 
+set_source_files_properties(test_media/test_media_amiga.c PROPERTIES
+    COMPILE_DEFINITIONS "ldtm_format_amiga_volume=ldtm_format_amiga_volume_affs")
+set_source_files_properties(test_media/test_media_amiga_payload.c PROPERTIES
+    COMPILE_DEFINITIONS "ldtm_populate_amiga_volume=ldtm_populate_amiga_volume_affs;ldtm_verify_amiga_payload=ldtm_verify_amiga_payload_affs")
+
 add_library(linux-defragger-test-media-core STATIC
     test_media/test_media_core.c
     test_media/test_media_worker.c
     test_media/test_media_reserved.c
     test_media/test_media_amiga.c
-    test_media/test_media_amiga_payload.c)
+    test_media/test_media_amiga_payload.c
+    test_media/test_media_amiga_dispatch.c
+    test_media/test_media_sfs.c)
 target_include_directories(linux-defragger-test-media-core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/test_media"
     "${LD_GENERATED_DIR}")
 target_include_directories(linux-defragger-test-media-core PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/affs/native"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/sfs/native"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/ufs/native")
 target_compile_options(linux-defragger-test-media-core PRIVATE ${LD_WARNING_FLAGS})
 target_compile_definitions(linux-defragger-test-media-core PRIVATE
     _FILE_OFFSET_BITS=64 _GNU_SOURCE)
 target_link_libraries(linux-defragger-test-media-core PUBLIC OpenSSL::Crypto)
 target_link_libraries(linux-defragger-test-media-core PRIVATE
-    linux-defragger-affs-native linux-defragger-ufs-native)
+    linux-defragger-affs-native linux-defragger-sfs-native linux-defragger-ufs-native)
 
 add_executable(linux-defragger-test-media
     test_media/test_media_main.c
-    test_media/test_media_gui.c)
+    test_media/test_media_gui.c
+    test_media/test_media_theme.c)
 target_include_directories(linux-defragger-test-media PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/test_media"
     "${LD_GENERATED_DIR}")
@@ -70,12 +79,14 @@ if(BUILD_TESTING)
     add_executable(linux-defragger-test-media-test tests/test_test_media.c)
     target_include_directories(linux-defragger-test-media-test PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/test_media"
-        "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/affs/native")
+        "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/affs/native"
+        "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/sfs/native")
     target_compile_options(linux-defragger-test-media-test PRIVATE ${LD_WARNING_FLAGS})
     target_compile_definitions(linux-defragger-test-media-test PRIVATE
         _FILE_OFFSET_BITS=64 _GNU_SOURCE)
     target_link_libraries(linux-defragger-test-media-test PRIVATE
-        linux-defragger-test-media-core linux-defragger-affs-native OpenSSL::Crypto)
+        linux-defragger-test-media-core linux-defragger-affs-native
+        linux-defragger-sfs-native OpenSSL::Crypto)
     add_test(NAME linux-defragger-test-media-core COMMAND linux-defragger-test-media-test)
     add_test(NAME linux-defragger-test-media-install
         COMMAND "${CMAKE_COMMAND}"

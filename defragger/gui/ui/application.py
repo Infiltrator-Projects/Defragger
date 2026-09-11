@@ -10,6 +10,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
+from .theme import apply_mb_theme
 from .window import MainWindow
 
 
@@ -22,6 +23,7 @@ class LinuxDefraggerApplication(Gtk.Application):
         self.windows: list[MainWindow] = []
 
     def new_window(self) -> None:
+        apply_mb_theme()
         try:
             window = MainWindow(self)
         except Exception as exc:

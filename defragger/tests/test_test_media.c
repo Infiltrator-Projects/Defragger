@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "test_media.h"
 #include "affs_native.h"
+#include "sfs_native.h"
 
 #include <fcntl.h>
 #include <stdint.h>
@@ -34,9 +35,7 @@ static int production_parser_accepts(const char *path, uint8_t dostype, int expe
         }
         if (volume.dostype == dostype && (volume.ffs ? 1 : 0) == expect_ffs &&
             volume.bitmap_blocks.n > 25U && volume.bitmap_ext_blocks.n > 0U &&
-            volume.files.n == expected_files && fragmented == fragmented_targets) {
-            result = 0;
-        }
+            volume.files.n == expected_files && fragmented == fragmented_targets) result = 0;
         affs_close(&volume);
     }
     free(error);
@@ -80,16 +79,10 @@ static int test_amiga_formatters_and_payload(void) {
     char detail[512];
     int fd = mkstemp(path);
     if (fd < 0) return 1;
-    if (ftruncate(fd, (off_t)(128U * LDTM_MIB)) != 0) {
-        (void)close(fd);
+    if (ftruncate(fd, (off_t)(128U * LDTM_MIB)) != 0 || close(fd) != 0) {
         (void)unlink(path);
         return 1;
     }
-    if (close(fd) != 0) {
-        (void)unlink(path);
-        return 1;
-    }
-
     if (ldtm_format_amiga_volume(path, 0U, "LD_OFS") != 0 ||
         ldtm_validate_amiga_volume(path, 0U) != 0 ||
         ldtm_validate_amiga_volume(path, 1U) == 0 ||
@@ -99,10 +92,8 @@ static int test_amiga_formatters_and_payload(void) {
         production_parser_accepts(path, 0U, 0, expected_files, tiny.files, tiny.chunks) != 0 ||
         corrupt_first_payload_block(path) != 0 ||
         ldtm_verify_amiga_payload(path, 0U, &tiny, detail, sizeof(detail)) == 0) {
-        (void)unlink(path);
-        return 1;
+        (void)unlink(path); return 1;
     }
-
     if (ldtm_format_amiga_volume(path, 1U, "LD_FFS") != 0 ||
         ldtm_validate_amiga_volume(path, 1U) != 0 ||
         ldtm_validate_amiga_volume(path, 0U) == 0 ||
@@ -112,80 +103,106 @@ static int test_amiga_formatters_and_payload(void) {
         production_parser_accepts(path, 1U, 1, expected_files, tiny.files, tiny.chunks) != 0 ||
         corrupt_first_payload_block(path) != 0 ||
         ldtm_verify_amiga_payload(path, 1U, &tiny, detail, sizeof(detail)) == 0) {
-        (void)unlink(path);
-        return 1;
+        (void)unlink(path); return 1;
+    }
+    return unlink(path) == 0 ? 0 : 1;
+}
+
+static int test_sfs_formatter_and_payload(void) {
+    char path[] = "/tmp/linux-defragger-sfs-media.XXXXXX";
+    char detail[512];
+    char error[256] = {0};
+    SfsAnalysis analysis;
+    const LdtmFilesystemSpec *sfs = ldtm_find_spec("sfs");
+    LdtmFragmentProfile profile;
+    int fd;
+    unsigned char byte;
+    if (sfs == NULL) return 1;
+    profile = ldtm_fragment_profile(sfs);
+    fd = mkstemp(path);
+    if (fd < 0) return 1;
+    if (ftruncate(fd, (off_t)(64U * LDTM_MIB)) != 0 || close(fd) != 0) {
+        (void)unlink(path); return 1;
+    }
+    if (ldtm_format_amiga_volume(path, 1U, "LD_SFS") != 0 ||
+        ldtm_populate_amiga_volume(path, 1U, &profile) != 0 ||
+        ldtm_verify_amiga_payload(path, 1U, &profile, detail, sizeof(detail)) != 0 ||
+        sfs_analyse(path, &analysis, NULL, 0U, error, sizeof(error)) != 0 ||
+        analysis.regular_files != 1U || analysis.fragmented_files != 1U ||
+        analysis.data_blocks != 6400U || analysis.growth_10_satisfied) {
+        (void)unlink(path); return 1;
+    }
+    fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd < 0 || pread(fd, &byte, 1U, (off_t)128U * 4096U) != 1) {
+        if (fd >= 0) (void)close(fd); (void)unlink(path); return 1;
+    }
+    byte ^= UINT8_C(0xa5);
+    if (pwrite(fd, &byte, 1U, (off_t)128U * 4096U) != 1 || fsync(fd) != 0) {
+        (void)close(fd); (void)unlink(path); return 1;
+    }
+    (void)close(fd);
+    if (ldtm_verify_amiga_payload(path, 1U, &profile, detail, sizeof(detail)) == 0) {
+        (void)unlink(path); return 1;
     }
     return unlink(path) == 0 ? 0 : 1;
 }
 
 int main(void) {
     char script[8192];
-    const LdtmFilesystemSpec *fat12;
-    const LdtmFilesystemSpec *fat16;
-    const LdtmFilesystemSpec *ofs;
-    const LdtmFilesystemSpec *ffs;
-    const LdtmFilesystemSpec *sfs;
-    const LdtmFilesystemSpec *pfs3;
-    const LdtmFilesystemSpec *ufs;
-    const LdtmFilesystemSpec *zfs;
-    const LdtmFilesystemSpec *apfs;
+    const LdtmFilesystemSpec *fat12 = ldtm_find_spec("fat12");
+    const LdtmFilesystemSpec *fat16 = ldtm_find_spec("fat16");
+    const LdtmFilesystemSpec *ofs = ldtm_find_spec("ofs");
+    const LdtmFilesystemSpec *ffs = ldtm_find_spec("ffs");
+    const LdtmFilesystemSpec *sfs = ldtm_find_spec("sfs");
+    const LdtmFilesystemSpec *pfs3 = ldtm_find_spec("pfs3");
+    const LdtmFilesystemSpec *ufs = ldtm_find_spec("ufs");
+    const LdtmFilesystemSpec *zfs = ldtm_find_spec("zfs");
+    const LdtmFilesystemSpec *apfs = ldtm_find_spec("apfs");
     LdtmFragmentProfile small;
     LdtmFragmentProfile normal;
+    LdtmFragmentProfile sfs_profile;
     size_t count = 0U;
     const char *cursor;
 
     CHECK(ldtm_spec_count() == 21U);
-    CHECK(ldtm_allocated_capacity_bytes() == UINT64_C(36416) * LDTM_MIB);
-    CHECK(ldtm_required_capacity_bytes() == (UINT64_C(36416) * LDTM_MIB) + LDTM_GIB);
-
-    fat12 = ldtm_find_spec("fat12");
-    fat16 = ldtm_find_spec("fat16");
-    ofs = ldtm_find_spec("ofs");
-    ffs = ldtm_find_spec("ffs");
-    sfs = ldtm_find_spec("sfs");
-    pfs3 = ldtm_find_spec("pfs3");
-    ufs = ldtm_find_spec("ufs");
-    zfs = ldtm_find_spec("zfs");
-    apfs = ldtm_find_spec("apfs");
-    CHECK(fat12 != NULL && fat16 != NULL);
-    CHECK(ofs != NULL && ffs != NULL && sfs != NULL && pfs3 != NULL);
+    CHECK(ldtm_allocated_capacity_bytes() == UINT64_C(35456) * LDTM_MIB);
+    CHECK(ldtm_required_capacity_bytes() == (UINT64_C(35456) * LDTM_MIB) + LDTM_GIB);
+    CHECK(fat12 != NULL && fat16 != NULL && ofs != NULL && ffs != NULL && sfs != NULL && pfs3 != NULL);
     CHECK(ufs != NULL && zfs != NULL && apfs != NULL);
 
     small = ldtm_fragment_profile(fat12);
     normal = ldtm_fragment_profile(fat16);
+    sfs_profile = ldtm_fragment_profile(sfs);
     CHECK(ldtm_target_payload_bytes(fat12) == UINT64_C(4) * LDTM_MIB);
     CHECK(ldtm_target_payload_bytes(fat16) == UINT64_C(200) * LDTM_MIB);
     CHECK(ldtm_target_payload_bytes(ofs) == UINT64_C(200) * LDTM_MIB);
     CHECK(ldtm_target_payload_bytes(ffs) == UINT64_C(200) * LDTM_MIB);
-    CHECK(small.directory_initial == 128U);
-    CHECK(small.directory_second == 128U);
-    CHECK(normal.chunks == 100U);
-    CHECK(normal.directory_initial == 4096U);
-    CHECK(normal.directory_second == 4096U);
-    CHECK((normal.directory_initial / 2U + normal.directory_second) == 6144U);
-    CHECK((small.directory_initial / 2U + small.directory_second) == 192U);
+    CHECK(ldtm_target_payload_bytes(sfs) == UINT64_C(25) * LDTM_MIB);
+    CHECK(small.directory_initial == 128U && small.directory_second == 128U);
+    CHECK(normal.chunks == 100U && normal.directory_initial == 4096U && normal.directory_second == 4096U);
+    CHECK(sfs_profile.files == 1U && sfs_profile.chunks == 100U && sfs_profile.chunk_kib == 256U);
+    CHECK(sfs_profile.directory_initial == 0U && sfs_profile.directory_second == 0U);
 
     CHECK(ofs->creator == LDTM_CREATOR_AFFS);
     CHECK(ffs->creator == LDTM_CREATOR_AFFS);
+    CHECK(sfs->creator == LDTM_CREATOR_AFFS);
     CHECK(strcmp(ldtm_creator_program(ofs), "/usr/lib/linux-defragger/test-media-mkfs-ofs") == 0);
     CHECK(strcmp(ldtm_creator_program(ffs), "/usr/lib/linux-defragger/test-media-mkfs-ffs") == 0);
-    CHECK(sfs->creator == LDTM_CREATOR_MANUAL);
-    CHECK(pfs3->creator == LDTM_CREATOR_MANUAL);
-    CHECK(strstr(sfs->note, "SFS/SFS2") != NULL);
-    CHECK(strstr(pfs3->note, "PFS3") != NULL);
+    CHECK(ldtm_creator_program(sfs) == NULL);
+    CHECK(strstr(sfs->note, "SFS0") != NULL && strstr(sfs->note, "100 extents") != NULL);
+    CHECK(pfs3->creator == LDTM_CREATOR_MANUAL && strstr(pfs3->note, "PFS3") != NULL);
     CHECK(strcmp(ldtm_creator_program(ufs), "makefs") == 0);
     CHECK(ufs->package_hint != NULL && strcmp(ufs->package_hint, "makefs") == 0);
-    CHECK(strstr(ufs->note, "UFS2") != NULL);
-    CHECK(strstr(ufs->note, "fragmentation is not asserted") != NULL);
+    CHECK(strstr(ufs->note, "UFS2") != NULL && strstr(ufs->note, "fragmentation is not asserted") != NULL);
     CHECK(zfs->package_hint != NULL && strcmp(zfs->package_hint, "zfsutils-linux") == 0);
-    CHECK(apfs->creator == LDTM_CREATOR_MANUAL);
-    CHECK(ldtm_creator_program(apfs) == NULL);
-    CHECK(ldtm_is_reserved_partition_label("LD_SFS") == 1);
+    CHECK(apfs->creator == LDTM_CREATOR_MANUAL && ldtm_creator_program(apfs) == NULL);
+    CHECK(ldtm_is_reserved_partition_label("LD_SFS") == 0);
     CHECK(ldtm_is_reserved_partition_label("LD_PFS3") == 1);
     CHECK(ldtm_is_reserved_partition_label("LD_APFS") == 1);
     CHECK(ldtm_is_reserved_partition_label("LD_OFS") == 0);
     CHECK(ldtm_is_reserved_partition_label("LD_HFSPLUS") == 0);
     CHECK(test_amiga_formatters_and_payload() == 0);
+    CHECK(test_sfs_formatter_and_payload() == 0);
 
     CHECK(ldtm_transport_is_field_media(0, "mmc") == 1);
     CHECK(ldtm_transport_is_field_media(0, "usb") == 1);
@@ -199,19 +216,16 @@ int main(void) {
 
     CHECK(ldtm_build_sfdisk_script(script, sizeof(script)) == 0);
     CHECK(strstr(script, "label: gpt") != NULL);
+    CHECK(strstr(script, "size=64MiB, type=linux, name=\"LD_SFS\"") != NULL);
     CHECK(strstr(script, "name=\"LD_FAT12\"") != NULL);
     CHECK(strstr(script, "name=\"LD_OFS\"") != NULL);
     CHECK(strstr(script, "name=\"LD_FFS\"") != NULL);
-    CHECK(strstr(script, "name=\"LD_SFS\"") != NULL);
     CHECK(strstr(script, "name=\"LD_PFS3\"") != NULL);
     CHECK(strstr(script, "name=\"LD_UFS\"") != NULL);
     CHECK(strstr(script, "name=\"LD_ZFS\"") != NULL);
     CHECK(strstr(script, "type=swap, name=\"LD_SWAP\"") != NULL);
     cursor = script;
-    while ((cursor = strstr(cursor, "name=\"LD_")) != NULL) {
-        ++count;
-        cursor += 6;
-    }
+    while ((cursor = strstr(cursor, "name=\"LD_")) != NULL) { ++count; cursor += 6; }
     CHECK(count == 21U);
 
     puts("test-media core tests passed");

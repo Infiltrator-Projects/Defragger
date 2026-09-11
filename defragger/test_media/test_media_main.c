@@ -2,6 +2,7 @@
 #include "test_media.h"
 #include "version.h"
 
+#include <gtk/gtk.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -36,5 +37,7 @@ int main(int argc, char **argv) {
         usage(argv[0]);
         return 2;
     }
+    gtk_init(&argc, &argv);
+    ldtm_apply_mb_theme();
     return ldtm_gui_main(argc, argv);
 }

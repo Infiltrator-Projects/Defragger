@@ -20,31 +20,14 @@ if [ "$ARCH" != amd64 ]; then
 fi
 
 case "$BUILD_FLAVOR" in
-    generic)
-        FLAVOR_DESCRIPTION='Generic x86-64 build for broad amd64 compatibility.'
-        ;;
-    native)
-        FLAVOR_DESCRIPTION='Locally compiled build optimised for this machine CPU.'
-        ;;
-    *)
-        printf 'Unknown LD_BUILD_FLAVOR: %s\n' "$BUILD_FLAVOR" >&2
-        exit 1
-        ;;
+    generic) FLAVOR_DESCRIPTION='Generic x86-64 build for broad amd64 compatibility.' ;;
+    native) FLAVOR_DESCRIPTION='Locally compiled build optimised for this machine CPU.' ;;
+    *) printf 'Unknown LD_BUILD_FLAVOR: %s\n' "$BUILD_FLAVOR" >&2; exit 1 ;;
 esac
+case "$BUILD_TESTING" in ON|OFF) ;; *) printf 'LD_BUILD_TESTING must be ON or OFF, not %s\n' "$BUILD_TESTING" >&2; exit 1 ;; esac
 
-case "$BUILD_TESTING" in
-    ON|OFF) ;;
-    *)
-        printf 'LD_BUILD_TESTING must be ON or OFF, not %s\n' "$BUILD_TESTING" >&2
-        exit 1
-        ;;
-esac
-
-set -- -S "$ROOT" -B "$BUILD" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DLD_ENABLE_WERROR=ON \
-    -DBUILD_TESTING="$BUILD_TESTING" \
-    -DCMAKE_INSTALL_PREFIX=/usr
+set -- -S "$ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON \
+    -DBUILD_TESTING="$BUILD_TESTING" -DCMAKE_INSTALL_PREFIX=/usr
 if [ "$BUILD_FLAVOR" = generic ]; then
     set -- "$@" -DLD_GENERIC_AMD64=ON -DLD_NATIVE_OPTIMIZATION=OFF
 else
@@ -54,17 +37,24 @@ cmake "$@"
 cmake --build "$BUILD" -j"${BUILD_JOBS:-2}"
 DESTDIR="$STAGE/root" cmake --install "$BUILD"
 
+FONT_ARCHIVE="$STAGE/mb-corpo-fonts.tar.xz"
+if [ -f "$ROOT/assets/fonts/mb-corpo-fonts.tar.xz" ]; then
+    cp "$ROOT/assets/fonts/mb-corpo-fonts.tar.xz" "$FONT_ARCHIVE"
+fi
+"$ROOT/packaging/vendor-mb-fonts.sh" "$FONT_ARCHIVE" >/dev/null
+FONT_WORK="$STAGE/fonts"
+mkdir -p "$FONT_WORK" "$STAGE/root/usr/share/fonts/truetype/linux-defragger"
+tar -xJf "$FONT_ARCHIVE" -C "$FONT_WORK"
+install -m 0644 "$FONT_WORK/mb_corpo_a_cond_regular.ttf" "$STAGE/root/usr/share/fonts/truetype/linux-defragger/"
+install -m 0644 "$FONT_WORK/mb_corpo_s_bold.ttf" "$STAGE/root/usr/share/fonts/truetype/linux-defragger/"
+install -m 0644 "$FONT_WORK/mb_corpo_s_regular.ttf" "$STAGE/root/usr/share/fonts/truetype/linux-defragger/"
+
 mkdir -p "$STAGE/root/DEBIAN"
 INSTALLED_SIZE=$(du -sk "$STAGE/root/usr" | awk '{print $1}')
 {
-    printf 'Package: linux-defragger\n'
-    printf 'Version: %s\n' "$PACKAGE_VERSION"
-    printf 'Section: utils\n'
-    printf 'Priority: optional\n'
-    printf 'Architecture: %s\n' "$ARCH"
-    printf 'Maintainer: Shannon Smith\n'
-    printf 'X-Linux-Defragger-Build: %s\n' "$BUILD_FLAVOR"
-    printf 'Depends: python3, python3-gi, python3-cairo, gir1.2-gtk-3.0, libgtk-3-0t64, policykit-1, udisks2, util-linux, makefs, libext2fs2, libsqlite3-0, libssl3t64\n'
+    printf 'Package: linux-defragger\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: %s\n' "$PACKAGE_VERSION" "$ARCH"
+    printf 'Maintainer: Shannon Smith\nX-Linux-Defragger-Build: %s\n' "$BUILD_FLAVOR"
+    printf 'Depends: python3, python3-gi, python3-cairo, gir1.2-gtk-3.0, libgtk-3-0t64, fontconfig, policykit-1, udisks2, util-linux, makefs, libext2fs2, libsqlite3-0, libssl3t64\n'
     printf 'Installed-Size: %s\n' "$INSTALLED_SIZE"
     printf 'Description: Safe direct filesystem analysis and canonical layout rewriting\n'
     printf ' Linux Defragger analyses filesystem allocation and safely rewrites\n'
@@ -72,13 +62,25 @@ INSTALLED_SIZE=$(du -sk "$STAGE/root/usr" | awk '{print $1}')
     printf ' Amiga SFS0 and HFS+/HFSX filesystems. Btrfs, classic HFS, APFS, Minix, UFS and ZFS\n'
     printf ' remain analysis-only. The package also includes the separate all-C GTK\n'
     printf ' Linux Defragger Test Media program for building sacrificial field-test disks.\n'
+    printf ' The supplied MB Corpo typography is installed for the Defragger interfaces.\n'
     printf ' %s\n' "$FLAVOR_DESCRIPTION"
 } >"$STAGE/root/DEBIAN/control"
-
+cat >"$STAGE/root/DEBIAN/postinst" <<'EOF'
+#!/bin/sh
+set -e
+command -v fc-cache >/dev/null 2>&1 && fc-cache -f >/dev/null 2>&1 || true
+exit 0
+EOF
+cat >"$STAGE/root/DEBIAN/postrm" <<'EOF'
+#!/bin/sh
+set -e
+command -v fc-cache >/dev/null 2>&1 && fc-cache -f >/dev/null 2>&1 || true
+exit 0
+EOF
+chmod 0755 "$STAGE/root/DEBIAN/postinst" "$STAGE/root/DEBIAN/postrm"
 (
     cd "$STAGE/root"
-    find usr -type f -print0 | sort -z |
-        xargs -0 md5sum >DEBIAN/md5sums
+    find usr -type f -print0 | sort -z | xargs -0 md5sum >DEBIAN/md5sums
 )
 chmod 0644 "$STAGE/root/DEBIAN/control" "$STAGE/root/DEBIAN/md5sums"
 dpkg-deb --root-owner-group --build "$STAGE/root" "$OUTPUT"
