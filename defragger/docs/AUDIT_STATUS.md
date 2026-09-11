@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-11
 
-Applies to: release version 1.8.0-143
-Audited source commit: ea4db29458a09031d3ecda827e1af034c72cd68e
+Applies to: release version 1.8.0-144
+Audited source commit: a0c726d2c7d06147fe7e304b3b77e3e2271e5c3b
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -27,7 +27,7 @@ open, mutation loop, Stop handling, recovery and final read-only verification.
 |---|---|
 | FAT12/FAT16/FAT32 | Native mapped relocation journal and replay stages reviewed; FAT12, FAT16 and FAT32 Defragment/Growth Defrag images are reopened and independently checked for payload, directory-reference, contiguity, gap and exact 10% reserve invariants. |
 | EXT2/EXT3/EXT4 | Native direct-workspace and verified-stage paths reviewed; exact UUID/type/target identity, workspace restoration, canonical mapping and final reopened-image scans are enforced. |
-| NTFS | Native terminal-workspace and verified-stage paths reviewed; serial/target identity, stream digests, mapping pairs, bitmap metadata, recovery replay and final reopened-image scans are enforced. |
+| NTFS | Native terminal-workspace and verified-stage fallback reviewed; serial/target identity, stream digests, mapping pairs, bitmap metadata, recovery replay and final reopened-image scans are enforced. |
 | exFAT | Native terminal-workspace manifest and verified-stage fallback reviewed; serial/geometry binding, payload preservation, directory/FAT/bitmap rebuilding, recovery replay and final reopened-image scans are enforced. |
 | XFS | Native v5 planner, CRC/metadata update, clean-log gate, payload relocation, durable checkpoint and recovery path reviewed; unsupported feature combinations fail closed. |
 | Amiga OFS/FFS | Native full-stage digest, volume token, target identity, commit/recovery and reopened-image payload/layout verification reviewed and exercised. |
@@ -98,14 +98,23 @@ Recover.
     family instead of falling back to generic Sans. The change is presentation
     only; the complete native/filesystem/GUI test suite and sanitizer lane passed
     before this audit baseline was advanced.
+16. The main GTK shell now has a deliberate MB black/silver visual hierarchy
+    around the functional allocation map: roomier sections, wrapping legend,
+    clearer analysis/mutation/stop controls, improved log and status treatment,
+    and a composed MB-styled About dialog. The allocation-map semantics are
+    deliberately unchanged: its state colours, 640x260 minimum drawing area,
+    sampling geometry and allocation data remain intact. A GUI regression guard
+    now fails if those map colours or dimensions are changed by this presentation
+    work. The exact source baseline passed the native/filesystem/GUI suite and
+    sanitizer tests before this audit extension was advanced.
 
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-143 audit extension is bound to Defragger source baseline
-`ea4db29458a09031d3ecda827e1af034c72cd68e`. Release qualification rejects any later change beneath the
+The current 1.8.0-144 audit extension is bound to Defragger source baseline
+`a0c726d2c7d06147fe7e304b3b77e3e2271e5c3b`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
@@ -139,7 +148,7 @@ published release automatically triggers the APT refresh workflow, and the same
 exact version/SHA can be supplied to its manual dispatch path if central
 publication needs to be retried.
 
-Version 1.8.0-143 is explicitly authorized for release on 2026-09-11. Any later
+Version 1.8.0-144 is explicitly authorized for release on 2026-09-11. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
