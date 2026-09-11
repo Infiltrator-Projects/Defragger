@@ -366,13 +366,13 @@ def test_about_dialog_matches_the_standard_project_identity() -> None:
         'APP_ICON_NAME = "io.github.linuxdefragger"',
         'COPYRIGHT = "Copyright © 2026 Shannon Smith"',
         'PROJECT_URL = "https://github.com/Infiltrator-Projects/Defragger"',
-        "dialog.set_logo_icon_name(APP_ICON_NAME)",
-        "Build: {self.build_label}",
+        "Gtk.Image.new_from_icon_name(APP_ICON_NAME, Gtk.IconSize.DIALOG)",
+        'Gtk.Label(label=f"Version {self.gui_version}")',
+        '("Build", self.build_label)',
         "Shannon Smith — Author and project maintainer",
-        'dialog.set_website_label("Website")',
-        "dialog.set_copyright(COPYRIGHT)",
-        "dialog.set_license(ABOUT_LICENSE)",
-        "dialog.set_wrap_license(True)",
+        'Gtk.LinkButton.new_with_label(PROJECT_URL, "Project website")',
+        'dialog.add_button("Licence", 1)',
+        "ABOUT_LICENSE",
     ):
         assert required in source
     version_template = (ROOT / "packaging" / "generated" / "version.py.in").read_text()
@@ -384,6 +384,23 @@ def test_about_dialog_matches_the_standard_project_identity() -> None:
     assert "LICENSES/GPL-3.0-or-later.txt" not in source
 
 
+def test_ui_polish_preserves_allocation_map_visual_contract() -> None:
+    source = (GUI / "ui" / "widgets.py").read_text()
+    for required in (
+        '"free": (0.92, 0.94, 0.96)',
+        '"outside": (0.98, 0.98, 0.99)',
+        '"used": (0.13, 0.43, 0.76)',
+        '"fragmented": (0.94, 0.28, 0.22)',
+        '"directory": (0.48, 0.28, 0.72)',
+        '"unknown": (0.38, 0.40, 0.44)',
+        '"bad": (0.08, 0.08, 0.10)',
+        '"grid": (0.74, 0.77, 0.81)',
+        '"background": (0.98, 0.98, 0.99)',
+        "self.set_size_request(640, 260)",
+    ):
+        assert required in source
+
+
 def main() -> None:
     test_catalog_is_validated_immutable_and_instance_owned()
     test_map_presenter_validates_and_normalises_fat_map()
@@ -393,6 +410,7 @@ def main() -> None:
     test_invalid_map_is_rejected_before_widget_state_changes()
     test_result_protocol_replaces_worker_output_text_matching()
     test_about_dialog_matches_the_standard_project_identity()
+    test_ui_polish_preserves_allocation_map_visual_contract()
     print("GUI model and worker-result contract tests passed")
 
 
