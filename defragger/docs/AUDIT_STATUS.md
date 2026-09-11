@@ -4,10 +4,10 @@
 Status: **complete**
 
 Completed: 2026-08-25
-Extended: 2026-09-02
+Extended: 2026-09-11
 
 Applies to: release version 1.8.0-142
-Audited source commit: 0d563368cea355d8ae251e853a6c83c5e09b68a0
+Audited source commit: 56c7ff6f639ce3e2a8f3be515a1aaad137f062b8
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -82,14 +82,26 @@ Recover.
     verify the descriptor that actually receives writes rather than trusting a
     prior pathname check. Regular image replacement between preflight and commit
     therefore fails closed.
+13. Both GTK front ends now apply the same MB black/silver application theme.
+    Packaging pins the MB Corpo archive to the supplied MBLINK source commit,
+    verifies the archive and all three TTF hashes, installs the fonts in the
+    Debian package, embeds the verified archive in the local compiler/installer,
+    and resolves the installed font's actual family through Fontconfig rather
+    than relying on a filename-derived family guess.
+14. Test Media now supplies a first-party SFS0 v3 raw fixture instead of the
+    stale manual roadmap slot. The fixture contains one 25 MiB file split across
+    100 physical extents; its final extent deliberately prevents the required
+    10% Growth Defrag reserve. Verification exercises the production SFS parser,
+    root/bitmap/B-tree accounting and every deterministic payload block. OFS and
+    FFS retain their existing first-party raw creators and payload verification.
 
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The 1.8.0-141 audit extension is bound to Defragger source baseline
-`0d563368cea355d8ae251e853a6c83c5e09b68a0`. Release qualification rejects any later change beneath the
+The current 1.8.0-142 audit extension is bound to Defragger source baseline
+`56c7ff6f639ce3e2a8f3be515a1aaad137f062b8`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
@@ -123,13 +135,14 @@ published release automatically triggers the APT refresh workflow, and the same
 exact version/SHA can be supplied to its manual dispatch path if central
 publication needs to be retried.
 
-Shannon Smith gave the explicit release decision for version 1.8.0-140 on
-2026-08-25. That decision remains historical and does not authorize publication
-of 1.8.0-141. Version 1.8.0-141 requires a new explicit release decision and a
-separate `Release 1.8.0-141` commit whose exact head passes the Project quality
-gate.
+Version 1.8.0-142 is the latest published audited release. Any later version
+requires a new explicit release decision and a separate `Release <version>`
+commit whose exact head passes the Project quality gate; this audit refresh does
+not itself authorize or trigger a new release.
 
 Linux Defragger Test Media is outside the production-operation audit. It is a
 deliberately destructive filesystem-manufacturing utility with independent
-system/boot-disk refusal, canonical-device matching and typed confirmation. It
-must only be pointed at media whose complete erasure is acceptable.
+system/boot-disk refusal, canonical-device matching and typed confirmation. Its
+OFS/FFS/SFS fixtures are regression evidence for the corresponding native
+parsers and writers, but Test Media must only be pointed at media whose complete
+erasure is acceptable.
