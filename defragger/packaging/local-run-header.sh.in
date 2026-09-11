@@ -43,7 +43,8 @@ fi
 
 MISSING=''
 for package in build-essential cmake dpkg-dev python3 python3-gi python3-cairo \
-               gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux makefs \
+               gir1.2-gtk-3.0 libgtk-3-dev policykit-1 ca-certificates \
+               desktop-file-utils udisks2 util-linux makefs \
                libext2fs-dev libsqlite3-dev libssl-dev; do
     if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | \
          grep -q '^install ok installed$'; then
@@ -119,7 +120,7 @@ FINAL_VERSION=$(dpkg-query -W -f='${Version}' linux-defragger 2>/dev/null || tru
 
 printf '\nLinux Defragger %s is installed.\n' "$FINAL_VERSION"
 printf '%s\n' 'The native package replaced the generic package in Debian package management.'
-printf '%s\n' 'A later Linux Defragger release can upgrade it normally through APT.'
+printf '%s\n' 'Future releases are detected by Linux Defragger itself and preserve the native build profile.'
 exit 0
 
 __LINUX_DEFRAGGER_PAYLOAD_BELOW__

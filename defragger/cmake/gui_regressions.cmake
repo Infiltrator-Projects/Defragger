@@ -11,6 +11,10 @@ if(BUILD_TESTING)
         COMMAND "${LD_PYTHON3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_gui_services.py")
     add_test(
+        NAME linux-defragger-gui-update-service
+        COMMAND "${LD_PYTHON3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_update_service.py")
+    add_test(
         NAME linux-defragger-gui-volume-identity
         COMMAND "${LD_PYTHON3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_gui_volume_identity.py")
@@ -26,6 +30,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         linux-defragger-gui-models
         linux-defragger-gui-services
+        linux-defragger-gui-update-service
         linux-defragger-gui-volume-identity
         linux-defragger-gui-ext-display-identity
         linux-defragger-gui-ntfs-live-reset

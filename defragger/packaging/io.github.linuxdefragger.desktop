@@ -3,9 +3,15 @@
 Type=Application
 Name=Linux Defragger
 Comment=Analyse filesystems and create packed or growth-reserved layouts
-Exec=linux-defragger
+TryExec=/usr/bin/linux-defragger
+Exec=/usr/bin/linux-defragger
 Icon=io.github.linuxdefragger
 Terminal=false
 Categories=System;Utility;Filesystem;
 Keywords=defrag;defragment;growth;optimise;filesystem;disk;fat;allocation;
 StartupNotify=true
+Actions=CheckUpdates;
+
+[Desktop Action CheckUpdates]
+Name=Check for Updates
+Exec=/usr/bin/linux-defragger --check-updates

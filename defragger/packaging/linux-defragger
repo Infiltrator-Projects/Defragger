@@ -2,8 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Linux Defragger
 # Author: Shannon Smith
-# Purpose: Launch the installed GTK application without writing Python bytecode.
+# Purpose: Launch the installed GTK application through the GUI-first updater.
 
 export PYTHONDONTWRITEBYTECODE=1
+
+UPDATER=/usr/lib/linux-defragger/ui/update_launcher.py
+if [ -f "$UPDATER" ]; then
+    exec /usr/bin/python3 "$UPDATER" "$@"
+fi
 
 exec /usr/bin/python3 /usr/lib/linux-defragger/linux_defragger_gui.py "$@"

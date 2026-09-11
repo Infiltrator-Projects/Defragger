@@ -59,7 +59,7 @@ INSTALLED_SIZE=$(du -sk "$STAGE/root/usr" | awk '{print $1}')
     printf 'Architecture: %s\n' "$ARCH"
     printf 'Maintainer: Shannon Smith\n'
     printf 'X-Linux-Defragger-Build: %s\n' "$BUILD_FLAVOR"
-    printf 'Depends: python3, python3-gi, python3-cairo, gir1.2-gtk-3.0, libgtk-3-0t64, fontconfig, policykit-1, udisks2, util-linux, makefs, libext2fs2, libsqlite3-0, libssl3t64\n'
+    printf 'Depends: python3, python3-gi, python3-cairo, gir1.2-gtk-3.0, libgtk-3-0t64, fontconfig, policykit-1, ca-certificates, desktop-file-utils, udisks2, util-linux, makefs, libext2fs2, libsqlite3-0, libssl3t64\n'
     printf 'Installed-Size: %s\n' "$INSTALLED_SIZE"
     printf 'Description: Safe direct filesystem analysis and canonical layout rewriting\n'
     printf ' Linux Defragger analyses filesystem allocation and safely rewrites\n'
@@ -74,12 +74,20 @@ cat >"$STAGE/root/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
 command -v fc-cache >/dev/null 2>&1 && fc-cache -f >/dev/null 2>&1 || true
+command -v update-desktop-database >/dev/null 2>&1 && \
+    update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+command -v gtk-update-icon-cache >/dev/null 2>&1 && \
+    gtk-update-icon-cache -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
 exit 0
 EOF
 cat >"$STAGE/root/DEBIAN/postrm" <<'EOF'
 #!/bin/sh
 set -e
 command -v fc-cache >/dev/null 2>&1 && fc-cache -f >/dev/null 2>&1 || true
+command -v update-desktop-database >/dev/null 2>&1 && \
+    update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+command -v gtk-update-icon-cache >/dev/null 2>&1 && \
+    gtk-update-icon-cache -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
 exit 0
 EOF
 chmod 0755 "$STAGE/root/DEBIAN/postinst" "$STAGE/root/DEBIAN/postrm"
