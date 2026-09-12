@@ -33,7 +33,10 @@ class DiskMap(Gtk.DrawingArea):
         self.cells: list[dict[str, int]] = []
         self.unit_label = "clusters"
         self._layout: MapGeometry | None = None
-        self.set_size_request(640, 260)
+        # The map must grow to the window's allocation.  A vertical minimum is
+        # useful, but a requested width can leak into the top-level window's
+        # geometry hints and prevent some GTK3 window managers maximising it.
+        self.set_size_request(-1, 260)
         self.set_has_tooltip(True)
         self.connect("draw", self._draw)
         self.connect("query-tooltip", self._query_tooltip)

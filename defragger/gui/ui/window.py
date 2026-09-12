@@ -64,6 +64,10 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def __init__(self, application: Gtk.Application) -> None:
         super().__init__(application=application, title=f"{APP_NAME} {VERSION}")
+        # Keep the normal size as a startup preference only.  Publishing an
+        # explicit resizable contract prevents window managers from treating
+        # the requested size as a fixed geometry when maximisation is toggled.
+        self.set_resizable(True)
         self.set_default_size(1180, 820)
         self.set_position(Gtk.WindowPosition.CENTER)
 
