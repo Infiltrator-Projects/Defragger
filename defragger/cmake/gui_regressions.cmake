@@ -26,6 +26,10 @@ if(BUILD_TESTING)
         NAME linux-defragger-gui-ntfs-live-reset
         COMMAND "${LD_PYTHON3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_live_map_ntfs_reset.py")
+    add_test(
+        NAME linux-defragger-about-gold-standard
+        COMMAND "${LD_PYTHON3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_about_gold_standard.py")
 
     set_tests_properties(
         linux-defragger-gui-models
@@ -34,6 +38,7 @@ if(BUILD_TESTING)
         linux-defragger-gui-volume-identity
         linux-defragger-gui-ext-display-identity
         linux-defragger-gui-ntfs-live-reset
+        linux-defragger-about-gold-standard
         PROPERTIES
         ENVIRONMENT
             "PYTHONDONTWRITEBYTECODE=1;PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/gui")
