@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-12
 
 Applies to: release version 1.8.0-149
-Audited source commit: e0e58420d43af38c4053905310a3dd1ba006a7d0
+Audited source commit: b80fce9c3c20a866c617d8db213a28b32577bae8
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -164,6 +164,21 @@ Recover.
     changed; the exact source baseline passed the complete hosted and local
     native/filesystem/GUI suites and ASan/UBSan qualification before this audit
     extension was advanced.
+22. Live Test Media qualification exposed and closed four independent boundary
+    defects. The direct EXT path now retains one exclusive raw-device owner
+    while libext2fs performs its internal metadata reopen, releases that owner
+    before post-rollback validation, and no longer turns its own lock into an
+    `EBUSY` failure. HFS+/HFSX obtains Linux block-device capacity through the
+    shared descriptor helper instead of treating block-device `st_size == 0` as
+    a tiny volume. Mutation failure dialogs now show one bounded causal line
+    while the complete transcript remains in the operation log, preventing an
+    oversized modal surface and damaged redraw. XFS proves allocation-tree
+    capacity before its lengthy stage permutation, line-buffers chronological
+    output, and Test Media pins generated XFS qualification volumes to the
+    writer's deterministic CRC-enabled, non-rmapbt feature contract rather than
+    inheriting distro-specific mkfs defaults. The exact source baseline passed
+    all 33 hosted tests, all 19 local native/filesystem/GUI tests and ASan/UBSan
+    qualification before this audit extension was advanced.
 
 ## Shared Common dependency
 
@@ -171,7 +186,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-149 audit extension is bound to Defragger source baseline
-`e0e58420d43af38c4053905310a3dd1ba006a7d0`. Release qualification rejects any later change beneath the
+`b80fce9c3c20a866c617d8db213a28b32577bae8`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
