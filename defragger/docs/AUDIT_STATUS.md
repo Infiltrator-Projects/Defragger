@@ -8,7 +8,7 @@ Extended: 2026-09-12
 
 Applies to: release version 1.8.0-152
 Audited source commit: 62389aafb2d10cb4512b384fa24f862f745942ac
-Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
+Audited release-governance commit: 4d788a0f6badda415d9857f0e02ab41124b64230
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -203,6 +203,15 @@ Recover.
     exercises one map cell per zone and verifies exact used/free accounting;
     the native warnings-as-errors and ASan/UBSan tests pass. The change is
     read-only and does not alter Minix filesystem parsing or allocation data.
+25. APT refresh now follows the successful Build and publish release workflow
+    through a bounded `workflow_run` chain. Releases created with GitHub's
+    workflow token do not emit another workflow-triggering release event, so
+    the previous listener could leave a valid GitHub release unpublished in
+    Update Manager. The refresh resolves exactly one immutable published
+    release for the completed workflow SHA before dispatching and verifying
+    the central catalogue. Manual retry remains available with an exact version
+    and release SHA. The release-contract regression enforces this trigger and
+    identity binding.
 
 ## Shared Common dependency
 
@@ -213,7 +222,7 @@ The current 1.8.0-152 audit extension is bound to Defragger source baseline
 `62389aafb2d10cb4512b384fa24f862f745942ac`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
+`4d788a0f6badda415d9857f0e02ab41124b64230`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.16.0 at exact commit
 `a9db06b11f493c4e6f42bf6c13cc5cc5c73e1fc4`. CMake, the gitlink and the local
@@ -240,9 +249,10 @@ verifies both audit baselines, rejects an existing tag/release and publishes
 versioned assets only from that exact commit.
 
 APT publication is deliberately separate from GitHub release creation. A
-published release automatically triggers the APT refresh workflow, and the same
-exact version/SHA can be supplied to its manual dispatch path if central
-publication needs to be retried.
+successful Build and publish release workflow automatically triggers the APT
+refresh workflow for that exact release SHA, and the same exact version/SHA can
+be supplied to its manual dispatch path if central publication needs to be
+retried.
 
 Version 1.8.0-152 is explicitly authorized for release on 2026-09-12. Any later
 version requires a new explicit release decision and a separate `Release <version>`
