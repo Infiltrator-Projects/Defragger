@@ -675,12 +675,11 @@ int hfsplus_scan(const char *path, bool writable, HfsPlusVolume *volume, char **
         hfsplus_set_error(error, "cannot open HFS+ volume %s: %s", path, strerror(errno));
         return -1;
     }
-    struct stat st;
-    if (fstat(volume->fd, &st)) {
-        hfsplus_set_error(error, "cannot stat HFS+ volume: %s", strerror(errno));
+    if (ld_fd_size_bytes(volume->fd, &volume->bytes) != 0) {
+        hfsplus_set_error(error, "cannot determine HFS+ volume capacity: %s",
+                          strerror(errno));
         hfsplus_close(volume); return -1;
     }
-    volume->bytes = (uint64_t)st.st_size;
     if (volume->bytes < 4096U) {
         hfsplus_set_error(error, "HFS+ volume is too small"); hfsplus_close(volume); return -1;
     }

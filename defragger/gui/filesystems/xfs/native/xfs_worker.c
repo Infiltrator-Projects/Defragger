@@ -583,13 +583,17 @@ static int build_and_commit(const char *device, const char *operation, const cha
     if (journal_phase(journal_path, &state, "arranging", error) != 0) goto precommit_fail;
     printf("Arranging %" PRIu64 " supported XFS regular-file blocks; %" PRIu64 " require relocation.\n",
            state.movable_blocks, move_count); fflush(stdout);
-    if (xfs_permute_payloads(state.stage, db, staged.geometry.block_size, move_count, live_updates, error) != 0 ||
+    /* Prove that the target allocation trees fit before doing the potentially
+       lengthy payload permutation.  The stage is disposable until commit. */
+    if (journal_phase(journal_path, &state, "rebuilding-metadata", error) != 0 ||
+        xfs_rebuild_allocation_metadata(state.stage, &staged, db, error) != 0)
+        goto precommit_fail;
+    if (xfs_permute_payloads(state.stage, db, staged.geometry.block_size,
+                             move_count, live_updates, error) != 0 ||
         xfs_apply_inode_mappings(state.stage, &staged, db, error) != 0) {
         if (ld_stop_requested()) goto stopped;
         goto precommit_fail;
     }
-    if (journal_phase(journal_path, &state, "rebuilding-metadata", error) != 0 ||
-        xfs_rebuild_allocation_metadata(state.stage, &staged, db, error) != 0) goto precommit_fail;
     if (journal_phase(journal_path, &state, "verifying-stage", error) != 0 ||
         xfs_verify_stage(state.stage, db, &staged, strcmp(operation, "growth-defrag") == 0, &verified, error) != 0) goto precommit_fail;
     if (ld_stop_requested()) goto stopped;
@@ -692,6 +696,8 @@ done:
 }
 
 int main(int argc, char **argv) {
+    (void)setvbuf(stdout, NULL, _IOLBF, 0);
+    (void)setvbuf(stderr, NULL, _IOLBF, 0);
     if (argc == 2 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
         usage(stdout);
         return 0;

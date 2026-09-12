@@ -21,6 +21,7 @@ typedef struct {
 bool ld_device_number_is_mounted(dev_t device_number);
 bool ld_path_is_mounted(const char *path);
 int ld_device_try_open(const char *path, bool writable, LdDevice *device);
+int ld_fd_size_bytes(int fd, uint64_t *size_bytes);
 bool ld_device_matches_identity(const LdDevice *device,
                                 const char *expected_identity,
                                 uint64_t expected_size);

@@ -67,6 +67,9 @@ int main(void) {
     int target_fd = mkstemp(target_path);
     if (target_fd < 0) return fail("target mkstemp");
     if (ftruncate(target_fd, 8192) != 0) return fail("target size");
+    uint64_t target_size = 0;
+    if (ld_fd_size_bytes(target_fd, &target_size) != 0 || target_size != 8192U)
+        return fail("descriptor capacity helper");
     close(target_fd);
     char target_link[128];
     if (snprintf(target_link, sizeof(target_link), "%s-link", target_path) < 0)

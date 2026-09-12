@@ -673,7 +673,15 @@ static int format_regular(const LdtmFilesystemSpec *spec, const char *partition)
             const char *const argv[] = {program, "-F", "-L", spec->label, partition, NULL};
             return run_process(argv, NULL, 0);
         }
-        case LDTM_CREATOR_XFS:
+        case LDTM_CREATOR_XFS: {
+            /* Keep generated qualification media inside the raw writer's
+               deterministic feature contract across xfsprogs versions. */
+            const char *const argv[] = {
+                program, "-f", "-m", "crc=1,rmapbt=0,reflink=0",
+                "-L", spec->label, partition, NULL
+            };
+            return run_process(argv, NULL, 0);
+        }
         case LDTM_CREATOR_BTRFS: {
             const char *const argv[] = {program, "-f", "-L", spec->label, partition, NULL};
             return run_process(argv, NULL, 0);

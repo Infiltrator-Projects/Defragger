@@ -176,9 +176,13 @@ int ext_read_geometry(const char *path, ExtGeometry *geometry, char **error) {
     return 0;
 }
 
-int ext_open_fs(const char *path, bool writable, ext2_filsys *fs, char **error) {
+static int ext_open_fs_mode(const char *path, bool writable, bool exclusive,
+                            ext2_filsys *fs, char **error) {
     int flags = EXT2_FLAG_64BITS | EXT2_FLAG_SOFTSUPP_FEATURES;
-    if (writable) flags |= EXT2_FLAG_RW | EXT2_FLAG_EXCLUSIVE;
+    if (writable) {
+        flags |= EXT2_FLAG_RW;
+        if (exclusive) flags |= EXT2_FLAG_EXCLUSIVE;
+    }
     errcode_t code = ext2fs_open(path, flags, 0, 0, unix_io_manager, fs);
     if (code != 0) {
         ext_set_error(error, "opening EXT filesystem %s: %s", path, error_message(code));
@@ -192,6 +196,15 @@ int ext_open_fs(const char *path, bool writable, ext2_filsys *fs, char **error) 
         return -1;
     }
     return 0;
+}
+
+int ext_open_fs(const char *path, bool writable, ext2_filsys *fs, char **error) {
+    return ext_open_fs_mode(path, writable, true, fs, error);
+}
+
+int ext_open_fs_under_lock(const char *path, bool writable, ext2_filsys *fs,
+                           char **error) {
+    return ext_open_fs_mode(path, writable, false, fs, error);
 }
 
 int ext_validate_metadata(ext2_filsys fs, bool verify_inodes, char **error) {

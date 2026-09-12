@@ -654,7 +654,8 @@ static int try_workspace_relayout(const char *device, const char *operation,
     fflush(stdout);
     /* Once direct metadata mutation begins it is intentionally uninterruptible;
        Stop is honoured at the next complete metadata boundary. */
-    if (ext_apply_mappings(device, db, false, error) != 0) goto fail_restore;
+    if (ext_apply_mappings_under_lock(device, db, false, error) != 0)
+        goto fail_restore;
 
     if (journal_phase(journal_path, state, "direct-verifying", error) != 0)
         goto fail_restore;
@@ -691,15 +692,18 @@ static int try_workspace_relayout(const char *device, const char *operation,
 stop_restore:
     {
         char *restore_error = NULL;
-        if (ext_workspace_restore(fd, db, &workspace, &restore_error) != 0 ||
-            validate_restored_ext(device, &restore_error) != 0) {
+        if (ext_workspace_restore(fd, db, &workspace, &restore_error) != 0) {
+            free(*error); *error = restore_error;
+            goto keep_recovery;
+        }
+        (void)flock(fd, LOCK_UN); close(fd); fd = -1;
+        if (validate_restored_ext(device, &restore_error) != 0) {
             free(*error); *error = restore_error;
             goto keep_recovery;
         }
         free(restore_error);
     }
     source_touched = false;
-    (void)flock(fd, LOCK_UN); close(fd); fd = -1;
     sqlite3_close(db); db = NULL;
     transaction_cleanup(journal_path, state);
     puts("Growth/Defrag Stop restored the original EXT allocation from the durable workspace at a complete transaction boundary.");
@@ -709,8 +713,12 @@ stop_restore:
 fail_restore:
     if (source_touched) {
         char *restore_error = NULL;
-        if (ext_workspace_restore(fd, db, &workspace, &restore_error) != 0 ||
-            validate_restored_ext(device, &restore_error) != 0) {
+        if (ext_workspace_restore(fd, db, &workspace, &restore_error) != 0) {
+            free(*error); *error = restore_error;
+            goto keep_recovery;
+        }
+        (void)flock(fd, LOCK_UN); close(fd); fd = -1;
+        if (validate_restored_ext(device, &restore_error) != 0) {
             free(*error); *error = restore_error;
             goto keep_recovery;
         }
@@ -908,14 +916,18 @@ static int recover(const char *device, const char *journal_path, char **error) {
             journal_free(&state);
             return 1;
         }
-        if (ext_workspace_restore(direct_fd, direct_db, &workspace, error) != 0 ||
-            validate_restored_ext(device, error) != 0) {
+        if (ext_workspace_restore(direct_fd, direct_db, &workspace, error) != 0) {
             (void)flock(direct_fd, LOCK_UN); close(direct_fd);
             sqlite3_close(direct_db);
             journal_free(&state);
             return 1;
         }
         (void)flock(direct_fd, LOCK_UN); close(direct_fd);
+        if (validate_restored_ext(device, error) != 0) {
+            sqlite3_close(direct_db);
+            journal_free(&state);
+            return 1;
+        }
         sqlite3_close(direct_db);
         transaction_cleanup(journal_path, &state);
         puts("EXT direct workspace recovery restored the exact original allocated filesystem state.");

@@ -54,6 +54,8 @@ void ext_range_sort_merge(ExtRangeVec *vec);
 
 int ext_read_geometry(const char *path, ExtGeometry *geometry, char **error);
 int ext_open_fs(const char *path, bool writable, ext2_filsys *fs, char **error);
+int ext_open_fs_under_lock(const char *path, bool writable, ext2_filsys *fs,
+                           char **error);
 int ext_validate_metadata(ext2_filsys fs, bool verify_inodes, char **error);
 int ext_scan_catalogue(const char *path, ExtGeometry *geometry,
                        ExtCatalogue *catalogue, char **error);
@@ -73,6 +75,8 @@ int ext_permute_payloads(const char *stage, sqlite3 *db, uint32_t block_size,
                          uint64_t move_count, char **error);
 int ext_apply_mappings(const char *stage, sqlite3 *db, bool allow_stop,
                        char **error);
+int ext_apply_mappings_under_lock(const char *stage, sqlite3 *db,
+                                  bool allow_stop, char **error);
 int ext_verify_stage(const char *stage, sqlite3 *db, const ExtGeometry *geometry,
                      bool growth, ExtCatalogue *verified, char **error);
 

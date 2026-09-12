@@ -459,6 +459,22 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
     xfs_source = workers["xfs"].read_text()
     assert "ld_device_try_open" in xfs_source
     assert "ld_device_matches_identity" in xfs_source
+    assert xfs_source.index("xfs_rebuild_allocation_metadata") < xfs_source.index(
+        "xfs_permute_payloads"
+    ), "XFS metadata capacity must be proven before payload staging"
+
+    ext_plan = (native / "ext4" / "native" / "ext_plan.c").read_text()
+    assert "ext_apply_mappings_under_lock" in ext_plan
+    assert "ext_apply_mappings_under_lock(device" in sources["ext"]
+    assert sources["ext"].count(
+        "(void)flock(fd, LOCK_UN); close(fd); fd = -1;\n"
+        "        if (validate_restored_ext(device"
+    ) >= 2, "EXT rollback validation must run after releasing its raw lock"
+
+    hfsplus_native = (
+        native / "hfsplus" / "native" / "hfsplus_native.c"
+    ).read_text()
+    assert "ld_fd_size_bytes(volume->fd, &volume->bytes)" in hfsplus_native
 
     ntfs_plan = (native / "ntfs" / "native" / "ntfs_plan.c").read_text()
     ntfs_worker = workers["ntfs"].read_text()
@@ -524,6 +540,9 @@ def test_test_media_companion_is_all_c() -> None:
     assert "Create fragmented test data" not in window_view
     assert "linux-defragger-testdata" not in install_script
     assert 'cmake --install "$BUILD" --prefix /usr' in install_script
+
+    media_worker = (source_dir / "test_media_worker.c").read_text()
+    assert '"crc=1,rmapbt=0,reflink=0"' in media_worker
 
     design = (ROOT / "docs" / "DESIGN.md").read_text()
     deb_builder = (ROOT / "packaging" / "build-deb.sh").read_text()

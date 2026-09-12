@@ -67,6 +67,16 @@ WallClock = Callable[[], datetime]
 MonotonicClock = Callable[[], float]
 
 _TIMED_MUTATIONS = {"defrag", "growth-defrag", "recover"}
+_FAILURE_MARKERS = (
+    "failed",
+    "error",
+    "cannot ",
+    "can't ",
+    "refus",
+    "too small",
+    "device or resource busy",
+    " needs ",
+)
 
 
 def _format_timestamp(value: datetime) -> str:
@@ -79,6 +89,25 @@ def _format_elapsed(seconds: float) -> str:
     hours, remainder = divmod(safe_seconds, 3600.0)
     minutes, remaining_seconds = divmod(remainder, 60.0)
     return f"{int(hours):02d}:{int(minutes):02d}:{remaining_seconds:06.3f}"
+
+
+def _failure_summary(output: str, returncode: int) -> str:
+    """Return one bounded diagnostic; the complete transcript stays in the log."""
+
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    candidates = [
+        line
+        for line in lines
+        if not line.startswith("@@")
+        and any(marker in line.lower() for marker in _FAILURE_MARKERS)
+    ]
+    summary = candidates[-1] if candidates else (lines[-1] if lines else "")
+    if not summary:
+        return f"Exit status {returncode}"
+    limit = 420
+    if len(summary) > limit:
+        summary = summary[: limit - 1].rstrip() + "…"
+    return summary
 
 
 class OperationPresenter:
@@ -252,7 +281,7 @@ class OperationPresenter:
         display_name = operation_display_name(purpose)
         self._view.show_error(
             f"{display_name} failed",
-            output.strip() or f"Exit status {returncode}",
+            _failure_summary(output, returncode),
         )
 
     def _append_operation_timing(self, purpose: str) -> None:

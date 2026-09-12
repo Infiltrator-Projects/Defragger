@@ -388,10 +388,13 @@ static int reserve_blocks(ext2_filsys fs, sqlite3 *db, bool allocate, char **err
     return 0;
 }
 
-int ext_apply_mappings(const char *stage, sqlite3 *db, bool allow_stop,
-                       char **error) {
+static int apply_mappings(const char *stage, sqlite3 *db, bool allow_stop,
+                          bool caller_holds_exclusive_lock, char **error) {
     ext2_filsys fs = NULL;
-    if (ext_open_fs(stage, true, &fs, error) != 0) return -1;
+    int opened = caller_holds_exclusive_lock
+        ? ext_open_fs_under_lock(stage, true, &fs, error)
+        : ext_open_fs(stage, true, &fs, error);
+    if (opened != 0) return -1;
     int result = -1;
     sqlite3_stmt *new_targets = NULL;
     if (sqlite3_prepare_v2(db,
@@ -467,6 +470,16 @@ done:
     sqlite3_finalize(new_targets);
     if (ext2fs_close(fs) != 0 && result == 0) { ext_set_error(error, "closing modified EXT working image failed"); result = -1; }
     return result;
+}
+
+int ext_apply_mappings(const char *stage, sqlite3 *db, bool allow_stop,
+                       char **error) {
+    return apply_mappings(stage, db, allow_stop, false, error);
+}
+
+int ext_apply_mappings_under_lock(const char *stage, sqlite3 *db,
+                                  bool allow_stop, char **error) {
+    return apply_mappings(stage, db, allow_stop, true, error);
 }
 
 typedef struct {

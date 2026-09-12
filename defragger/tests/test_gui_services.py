@@ -503,6 +503,26 @@ def test_operation_presenter_owns_transient_window_lifecycle() -> None:
     assert presenter.post_analysis_status is None
     assert cancelled == [1]
 
+    noisy_failure = "\n".join(
+        [f"XFS placement: {index} of 57344 blocks." for index in range(80)]
+        + [
+            "linux-defragger-xfs-worker: XFS AG 0 needs 40 allocation-tree "
+            "blocks but has only 13 existing tree/AGFL reserve blocks",
+            "XFS placement: 57344 of 57344 blocks.",
+        ]
+    )
+    presenter.command_finished(
+        CommandCompletion(1, noisy_failure, "defrag"),
+        on_success=None,
+        raw_completion=None,
+    )
+    assert view.errors[-1] == (
+        "Defragment failed",
+        "linux-defragger-xfs-worker: XFS AG 0 needs 40 allocation-tree "
+        "blocks but has only 13 existing tree/AGFL reserve blocks",
+    )
+    assert len(view.errors[-1][1]) < 420
+
     assert presenter.defer_close_while_busy()
     assert runner.stop_calls == 1
     assert "Close postponed" in view.status_label.text

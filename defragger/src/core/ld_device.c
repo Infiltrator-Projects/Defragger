@@ -283,22 +283,12 @@ int ld_device_try_open(const char *path, bool writable, LdDevice *device) {
     }
 
     uint64_t size = 0;
-    if (block) {
-        if (ioctl(fd, BLKGETSIZE64, &size) != 0) {
-            const int failure = errno;
-            (void)close(fd);
-            free(resolved);
-            errno = failure;
-            return -1;
-        }
-    } else {
-        if (opened.st_size < 0) {
-            (void)close(fd);
-            free(resolved);
-            errno = EOVERFLOW;
-            return -1;
-        }
-        size = (uint64_t)opened.st_size;
+    if (ld_fd_size_bytes(fd, &size) != 0) {
+        const int failure = errno;
+        (void)close(fd);
+        free(resolved);
+        errno = failure;
+        return -1;
     }
 
     *device = (LdDevice){
@@ -312,6 +302,28 @@ int ld_device_try_open(const char *path, bool writable, LdDevice *device) {
         .inode = opened.st_ino,
     };
     return 0;
+}
+
+int ld_fd_size_bytes(int fd, uint64_t *size_bytes) {
+    if (fd < 0 || size_bytes == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    struct stat status;
+    if (fstat(fd, &status) != 0) return -1;
+    if (S_ISREG(status.st_mode)) {
+        if (status.st_size < 0) {
+            errno = EOVERFLOW;
+            return -1;
+        }
+        *size_bytes = (uint64_t)status.st_size;
+        return 0;
+    }
+    if (!S_ISBLK(status.st_mode)) {
+        errno = EINVAL;
+        return -1;
+    }
+    return ioctl(fd, BLKGETSIZE64, size_bytes);
 }
 
 bool ld_device_matches_identity(const LdDevice *device,
