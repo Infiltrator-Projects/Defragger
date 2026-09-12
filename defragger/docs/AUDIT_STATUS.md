@@ -6,7 +6,7 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-12
 
-Applies to: release version 1.8.0-149
+Applies to: release version 1.8.0-150
 Audited source commit: b80fce9c3c20a866c617d8db213a28b32577bae8
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
@@ -185,7 +185,7 @@ Recover.
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-149 audit extension is bound to Defragger source baseline
+The current 1.8.0-150 audit extension is bound to Defragger source baseline
 `b80fce9c3c20a866c617d8db213a28b32577bae8`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
@@ -220,7 +220,7 @@ published release automatically triggers the APT refresh workflow, and the same
 exact version/SHA can be supplied to its manual dispatch path if central
 publication needs to be retried.
 
-Version 1.8.0-149 is explicitly authorized for release on 2026-09-12. Any later
+Version 1.8.0-150 is explicitly authorized for release on 2026-09-12. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
