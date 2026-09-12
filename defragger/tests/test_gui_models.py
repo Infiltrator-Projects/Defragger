@@ -396,20 +396,25 @@ def test_ui_polish_preserves_allocation_map_visual_contract() -> None:
         '"bad": (0.08, 0.08, 0.10)',
         '"grid": (0.74, 0.77, 0.81)',
         '"background": (0.98, 0.98, 0.99)',
-        "self.set_size_request(-1, 260)",
+        "self.set_size_request(-1, 180)",
     ):
         assert required in source
 
 
 def test_main_window_remains_resizable_and_maximisable() -> None:
     window_source = (GUI / "ui" / "window.py").read_text()
+    view_source = (GUI / "ui" / "window_view.py").read_text()
     widgets_source = (GUI / "ui" / "widgets.py").read_text()
 
     assert "self.set_resizable(True)" in window_source
     assert "self.set_default_size(1180, 820)" in window_source
     assert "self.set_resizable(False)" not in window_source
     assert "set_geometry_hints" not in window_source
-    assert "self.set_size_request(-1, 260)" in widgets_source
+    assert 'self.connect("realize", self._publish_window_manager_functions)' in window_source
+    assert "native_window.set_functions(Gdk.WMFunction.ALL)" in window_source
+    assert "self.window.add(outer)" in view_source
+    assert "scroll.set_min_content_height(110)" in view_source
+    assert "self.set_size_request(-1, 180)" in widgets_source
     assert "self.set_size_request(640, 260)" not in widgets_source
 
 

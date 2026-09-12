@@ -221,7 +221,9 @@ class PrivilegeSession:
 
         message_id = message.get("id")
         if message_type == "started" and message_id == self._active_id:
-            self._emit(RunnerEvent("started", purpose))
+            # CommandRunner emitted the one request-lifecycle event when it
+            # accepted this command.  The helper acknowledgement must not
+            # restart presentation timing or duplicate the timestamp.
             return False
         if message_type == "progress" and message_id == self._active_id:
             try:

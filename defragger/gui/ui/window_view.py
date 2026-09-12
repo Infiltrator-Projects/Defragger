@@ -280,7 +280,10 @@ class WindowView:
         expander.get_style_context().add_class("log-expander")
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_min_content_height(145)
+        # Leave enough vertical flexibility for the top-level frame to resize
+        # below the desktop work area.  The allocation map receives surplus
+        # height first, so the log stays useful without fixing window geometry.
+        scroll.set_min_content_height(110)
         scroll.get_style_context().add_class("log-scroll")
         self.log_view = Gtk.TextView()
         self.log_view.set_editable(False)

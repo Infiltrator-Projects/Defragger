@@ -299,7 +299,7 @@ def test_command_runner_owns_process_and_emits_typed_events() -> None:
     assert not runner.busy
     assert completions[0].returncode == 0
     assert completions[0].output == "ordinary output\n"
-    assert any(event.kind == "started" for event in events)
+    assert sum(event.kind == "started" for event in events) == 1
     assert any(event.kind == "output" for event in events)
     assert any(event.kind == "engine" for event in events)
 
@@ -339,6 +339,7 @@ def test_privilege_session_owns_allowlist_and_protocol_state() -> None:
     )
     session._active_request = request
     session._active_id = 7
+    session._handle_message({"type": "started", "id": 7})
     session._handle_message({"type": "progress", "id": 7, "percent": 25})
     session._handle_message({"type": "output", "id": 7, "line": "working"})
     session._handle_message(
@@ -353,6 +354,7 @@ def test_privilege_session_owns_allowlist_and_protocol_state() -> None:
     )
     session._handle_message({"type": "finished", "id": 7, "returncode": 0})
     assert completions[0].output == "working\n"
+    assert not any(event.kind == "started" for event in events)
     assert any(event.kind == "progress" and event.percent == 25 for event in events)
     assert any(event.kind == "engine" for event in events)
 
@@ -469,6 +471,7 @@ def test_operation_presenter_owns_transient_window_lifecycle() -> None:
         monotonic_clock=lambda: next(monotonic_times),
     )
     presenter.on_runner_event(RunnerEvent("started", "growth-defrag"))
+    presenter.on_runner_event(RunnerEvent("started", "growth-defrag"))
     assert view.progress.text == "Growth Defrag in progress…"
     assert scheduled[1][0] == 120
 
@@ -493,7 +496,9 @@ def test_operation_presenter_owns_transient_window_lifecycle() -> None:
         raw_completion=None,
     )
     assert completed == [""]
-    assert "Growth Defrag request started: 2026-09-12 21:30:00 AEST" in view.logs
+    assert view.logs.count(
+        "Growth Defrag request started: 2026-09-12 21:30:00 AEST"
+    ) == 1
     assert "Growth Defrag request finished: 2026-09-12 21:30:02 AEST" in view.logs
     assert "Growth Defrag end-to-end elapsed: 00:00:02.347" in view.logs
     assert view.progress.text == "Not needed"

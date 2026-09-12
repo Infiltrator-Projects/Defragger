@@ -70,6 +70,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_resizable(True)
         self.set_default_size(1180, 820)
         self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("realize", self._publish_window_manager_functions)
 
         self.mapper = find_mapper()
         self.operation_engine = find_operation_engine()
@@ -123,6 +124,13 @@ class MainWindow(Gtk.ApplicationWindow):
         self.connect("destroy", lambda *_args: self.runner.shutdown())
         self.refresh_devices()
         GLib.timeout_add(150, self._authenticate_on_launch)
+
+    def _publish_window_manager_functions(self, _window: Gtk.Widget) -> None:
+        """Advertise the complete native resize/maximise contract after realise."""
+
+        native_window = self.get_window()
+        if native_window is not None:
+            native_window.set_functions(Gdk.WMFunction.ALL)
 
     @property
     def current_volume(self) -> Volume | None:

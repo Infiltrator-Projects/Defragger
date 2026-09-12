@@ -192,6 +192,15 @@ class OperationPresenter:
         self._controls_changed()
 
     def _set_operation_started(self, purpose: str) -> None:
+        if (
+            purpose in _TIMED_MUTATIONS
+            and purpose == self._timed_purpose
+            and self._operation_started_wall is not None
+            and self._operation_started_monotonic is not None
+        ):
+            # Treat repeated transport acknowledgements as idempotent.  The
+            # request acceptance event owns the wall-clock start boundary.
+            return
         self.operation_result = None
         self._determinate_progress = False
         self._view.progress.set_fraction(0.0)
