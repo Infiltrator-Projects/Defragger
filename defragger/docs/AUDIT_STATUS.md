@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-12
 
 Applies to: release version 1.8.0-151
-Audited source commit: 231c9d9c8e31813deae624da30170bebce44c960
+Audited source commit: 62389aafb2d10cb4512b384fa24f862f745942ac
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -196,6 +196,13 @@ Recover.
     tests, all 19 local native/filesystem/GUI tests and ASan/UBSan qualification
     before this audit extension was advanced. No filesystem analyser, writer,
     journal, recovery or allocation-map data semantics changed.
+24. Minix allocation-map accounting now locates the cell containing each zone
+    with a bounded binary search over the ordered map cells. The previous
+    linear lookup made a full-resolution 1 GiB Minix map quadratic: roughly
+    262,144 zones multiplied by 262,144 cells. A sparse 1 GiB regression now
+    exercises one map cell per zone and verifies exact used/free accounting;
+    the native warnings-as-errors and ASan/UBSan tests pass. The change is
+    read-only and does not alter Minix filesystem parsing or allocation data.
 
 ## Shared Common dependency
 
@@ -203,7 +210,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-151 audit extension is bound to Defragger source baseline
-`231c9d9c8e31813deae624da30170bebce44c960`. Release qualification rejects any later change beneath the
+`62389aafb2d10cb4512b384fa24f862f745942ac`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
