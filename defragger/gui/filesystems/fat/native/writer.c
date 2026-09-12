@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "ld_device.h"
@@ -28,6 +29,7 @@
 #include "ld_runtime.h"
 #include "ld_stop.h"
 #include "infiltratr/core.h"
+#include "infiltratr/posix.h"
 #include "version.h"
 #include "fat_analysis.h"
 #include "fat_directory.h"
@@ -44,6 +46,12 @@
 static FatIoConfig g_io;
 static bool g_verbose = false;
 static FILE *g_diagnostic_log = NULL;
+
+static double elapsed_since(double started) {
+    double finished = infiltratr_monotonic_seconds();
+    if (started <= 0.0 || finished < started) return 0.0;
+    return finished - started;
+}
 
 static void detail_log(const char *format, ...) {
     va_list args;
@@ -1306,6 +1314,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                                        unsigned requested_percent,
                                        size_t batch_clusters) {
     FatRelayoutStats stats = {0};
+    double preflight_started = infiltratr_monotonic_seconds();
     const char *layout_name = requested_percent == 0 ? "Defragment" : "Growth Defrag";
     if (requested_percent > 25) {
         ld_die("growth reserve percentage must be between 0 and 25");
@@ -1337,6 +1346,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
             fs, &initial_objects, requested_percent, &existing_reserve);
     }
     if (canonical_verified) {
+        stats.preflight_seconds = elapsed_since(preflight_started);
         stats.already_satisfied = true;
         stats.canonical_layout_verified = canonical_verified;
         stats.applied_percent = requested_percent;
@@ -1375,6 +1385,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         fat_relayout_print_preflight_failure(&preflight, requested_percent, layout_name);
     }
     fat_relayout_preflight_free(&preflight);
+    stats.preflight_seconds = elapsed_since(preflight_started);
 
     if (initial_objects.len == 0 || regular_files == 0) {
         fat_relayout_object_list_free(&initial_objects);
@@ -1438,6 +1449,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
 
     uint32_t workspace_start =
         fs->max_cluster - (uint32_t)workspace_clusters + 1;
+    double preparation_started = infiltratr_monotonic_seconds();
     fprintf(stderr,
             "%s phase 1: creating a %zu-cluster terminal safety workspace "
             "from a %zu-cluster RAM budget.\n",
@@ -1454,6 +1466,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         preparation_batch_clusters);
     stats.packing_clusters = packing_stats.clusters_moved;
     stats.packing_transactions = packing_stats.transactions;
+    stats.preparation_seconds = elapsed_since(preparation_started);
     if (ld_stop_requested()) {
         stats.interrupted = true;
         fprintf(stderr,
@@ -1498,6 +1511,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
     stats.applied_percent = applied_percent;
     stats.reserve_clusters = reserve_total;
     stats.layout_started = true;
+    double layout_started = infiltratr_monotonic_seconds();
     fprintf(stderr,
             "%s phase 2: rewriting %zu regular file%s and %zu director%s into the canonical layout%s.\n",
             layout_name, regular_files, regular_files == 1 ? "" : "s",
@@ -1523,6 +1537,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
         fat32_sync(fs);
         fat_relayout_object_list_free(&objects);
+        stats.layout_seconds = elapsed_since(layout_started);
         return stats;
     }
     fprintf(stderr,
@@ -1537,6 +1552,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
         fat32_sync(fs);
         fat_relayout_object_list_free(&objects);
+        stats.layout_seconds = elapsed_since(layout_started);
         return stats;
     }
     fprintf(stderr,
@@ -1551,6 +1567,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
         fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
         fat32_sync(fs);
         fat_relayout_object_list_free(&objects);
+        stats.layout_seconds = elapsed_since(layout_started);
         return stats;
     }
     fprintf(stderr,
@@ -1862,6 +1879,7 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
     fat_relocation_update_fsinfo(fs, fat_relocation_first_free_hint(fs));
     fat32_sync(fs);
     fat_relayout_object_list_free(&objects);
+    stats.layout_seconds = elapsed_since(layout_started);
     return stats;
 }
 
@@ -1954,12 +1972,63 @@ static void print_io_statistics(void) {
            write_mb, g_io.write_extents, g_io.write_extents == 1 ? "" : "s");
 }
 
+static void format_wall_time(time_t value, char *buffer, size_t size) {
+    struct tm local = {0};
+    if (buffer == NULL || size == 0) return;
+    buffer[0] = '\0';
+    if (localtime_r(&value, &local) == NULL ||
+        strftime(buffer, size, "%Y-%m-%d %H:%M:%S %z", &local) == 0) {
+        snprintf(buffer, size, "unavailable");
+    }
+}
+
+static void print_relayout_timing(const char *layout_name,
+                                  time_t wall_started,
+                                  double engine_started,
+                                  double setup_analysis_seconds,
+                                  const FatRelayoutStats *stats,
+                                  double verification_seconds) {
+    time_t wall_finished = time(NULL);
+    char started_text[64];
+    char finished_text[64];
+    format_wall_time(wall_started, started_text, sizeof(started_text));
+    format_wall_time(wall_finished, finished_text, sizeof(finished_text));
+    double total_seconds = elapsed_since(engine_started);
+    double io_seconds = stats->preparation_seconds + stats->layout_seconds;
+    double read_rate = 0.0;
+    double write_rate = 0.0;
+    bool have_read_rate = infiltratr_u64_counter_rate(
+        g_io.bytes_read, 0, 1.0L, io_seconds, &read_rate);
+    bool have_write_rate = infiltratr_u64_counter_rate(
+        g_io.bytes_written, 0, 1.0L, io_seconds, &write_rate);
+
+    printf("%s engine started:      %s\n", layout_name, started_text);
+    printf("%s engine finished:     %s\n", layout_name, finished_text);
+    printf("%s phase timings:\n", layout_name);
+    printf("  Setup and initial analysis: %.3f s\n", setup_analysis_seconds);
+    printf("  Read-only preflight/planning: %.3f s\n", stats->preflight_seconds);
+    printf("  Safety workspace preparation: %.3f s\n", stats->preparation_seconds);
+    printf("  Canonical layout: %.3f s\n", stats->layout_seconds);
+    printf("  Post-layout verification: %.3f s\n", verification_seconds);
+    printf("%s engine elapsed:      %.3f s\n", layout_name, total_seconds);
+    if (have_read_rate && have_write_rate) {
+        printf("Buffered read throughput:  %.1f MiB/s\n",
+               read_rate / (1024.0 * 1024.0));
+        printf("Buffered write throughput: %.1f MiB/s\n",
+               write_rate / (1024.0 * 1024.0));
+    } else {
+        printf("Buffered I/O throughput:   unavailable (no relocation phase elapsed)\n");
+    }
+}
+
 static void emit_result_event(const char *operation, const char *status) {
     printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"\"}\n",
            operation, status);
 }
 
 int main(int argc, char **argv) {
+    (void)setvbuf(stdout, NULL, _IOLBF, 0);
+    (void)setvbuf(stderr, NULL, _IOLBF, 0);
     ld_runtime_set_program_name(PROGRAM_NAME);
     ld_stop_clear();
     if (atexit(close_diagnostic_log) != 0) ld_die("cannot register diagnostic-log cleanup");
@@ -2056,6 +2125,13 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    bool relayout_operation = strcmp(command, "defrag") == 0 ||
+                              strcmp(command, "growth-defrag") == 0;
+    double engine_started = relayout_operation
+                                ? infiltratr_monotonic_seconds()
+                                : 0.0;
+    time_t engine_wall_started = relayout_operation ? time(NULL) : (time_t)0;
+
     if (diagnostic_log_path != NULL) {
         g_diagnostic_log = fopen(diagnostic_log_path, "a");
         if (g_diagnostic_log == NULL) ld_die_errno("open diagnostic log");
@@ -2131,11 +2207,17 @@ int main(int argc, char **argv) {
 
     const char *result_operation = NULL;
     const char *result_status = NULL;
+    double setup_analysis_seconds = relayout_operation
+                                        ? elapsed_since(engine_started)
+                                        : 0.0;
+    double verification_seconds = 0.0;
+    FatRelayoutStats operation_stats = {0};
     if (strcmp(command, "defrag") == 0) {
         result_operation = "defrag";
         filelist_free(&files);
         dirreflist_free(&dir_refs);
         FatRelayoutStats packed = fat_relayout_volume(&fs, journal_path, 0, batch_clusters);
+        operation_stats = packed;
         if (packed.already_satisfied) {
             result_status = "not-needed";
             printf("Defragment status:        Not needed; canonical packed layout verified\n");
@@ -2164,14 +2246,17 @@ int main(int argc, char **argv) {
                    packed.clusters_copied + packed.packing_clusters,
                    transactions, transactions == 1 ? "" : "s");
         }
+        double verification_started = infiltratr_monotonic_seconds();
         files = scan_files(&fs, NULL);
         fat_analysis_print(&fs, &files);
         if (!packed.interrupted) fat_analysis_verify_layout_policy(&fs, 0);
+        verification_seconds = elapsed_since(verification_started);
     } else if (strcmp(command, "growth-defrag") == 0) {
         result_operation = "growth-defrag";
         filelist_free(&files);
         dirreflist_free(&dir_refs);
         FatRelayoutStats growth = fat_relayout_volume(&fs, journal_path, growth_percent, batch_clusters);
+        operation_stats = growth;
         if (growth.already_satisfied) {
             result_status = "not-needed";
             printf("Growth Defrag status:          Not needed; layout already satisfies %u%% reserve\n",
@@ -2223,13 +2308,21 @@ int main(int argc, char **argv) {
                    growth.clusters_copied, growth.transactions,
                    growth.transactions == 1 ? "" : "s");
         }
+        double verification_started = infiltratr_monotonic_seconds();
         files = scan_files(&fs, NULL);
         fat_analysis_print(&fs, &files);
         if (!growth.interrupted) {
             fat_analysis_verify_layout_policy(&fs, growth_percent);
         }
+        verification_seconds = elapsed_since(verification_started);
     }
     if (mutating) print_io_statistics();
+    if (relayout_operation) {
+        print_relayout_timing(
+            strcmp(command, "defrag") == 0 ? "Defragment" : "Growth Defrag",
+            engine_wall_started, engine_started, setup_analysis_seconds,
+            &operation_stats, verification_seconds);
+    }
     if (result_operation != NULL && result_status != NULL) {
         emit_result_event(result_operation, result_status);
     }

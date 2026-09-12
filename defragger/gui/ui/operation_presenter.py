@@ -10,6 +10,8 @@ small callbacks for control-state refresh and post-operation analysis.
 
 from __future__ import annotations
 
+from datetime import datetime
+import time
 from typing import Any, Callable, Protocol
 
 from core.protocol import OperationResult
@@ -61,6 +63,22 @@ VoidCallback = Callable[[], None]
 AnalysisCallback = Callable[[], None]
 SuccessCallback = Callable[[str], None]
 RawCompletionCallback = Callable[[int, str], None]
+WallClock = Callable[[], datetime]
+MonotonicClock = Callable[[], float]
+
+_TIMED_MUTATIONS = {"defrag", "growth-defrag", "recover"}
+
+
+def _format_timestamp(value: datetime) -> str:
+    localized = value if value.tzinfo is not None else value.astimezone()
+    return localized.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+def _format_elapsed(seconds: float) -> str:
+    safe_seconds = max(0.0, seconds)
+    hours, remainder = divmod(safe_seconds, 3600.0)
+    minutes, remaining_seconds = divmod(remainder, 60.0)
+    return f"{int(hours):02d}:{int(minutes):02d}:{remaining_seconds:06.3f}"
 
 
 class OperationPresenter:
@@ -76,6 +94,8 @@ class OperationPresenter:
         scheduler: Schedule,
         cancel_scheduled: CancelScheduled,
         controls_changed: VoidCallback,
+        wall_clock: WallClock | None = None,
+        monotonic_clock: MonotonicClock | None = None,
     ) -> None:
         self._view = view
         self._runner = runner
@@ -84,12 +104,17 @@ class OperationPresenter:
         self._scheduler = scheduler
         self._cancel_scheduled = cancel_scheduled
         self._controls_changed = controls_changed
+        self._wall_clock = wall_clock or (lambda: datetime.now().astimezone())
+        self._monotonic_clock = monotonic_clock or time.monotonic
         self.operation_result: OperationResult | None = None
         self.post_analysis_status: str | None = None
         self.post_analysis_progress_text: str | None = None
         self._pulse_id: Any | None = None
         self._determinate_progress = False
         self._live_redraw_id: Any | None = None
+        self._timed_purpose: str | None = None
+        self._operation_started_wall: datetime | None = None
+        self._operation_started_monotonic: float | None = None
 
     def on_runner_event(self, event: RunnerEvent) -> None:
         """Apply one typed command event to the view."""
@@ -143,6 +168,14 @@ class OperationPresenter:
         self._view.progress.set_fraction(0.0)
         display_name = operation_display_name(purpose)
         self._view.progress.set_text(f"{display_name} in progress…")
+        if purpose in _TIMED_MUTATIONS:
+            self._timed_purpose = purpose
+            self._operation_started_wall = self._wall_clock()
+            self._operation_started_monotonic = self._monotonic_clock()
+            self._view.append_log(
+                f"{display_name} request started: "
+                f"{_format_timestamp(self._operation_started_wall)}"
+            )
         if self._pulse_id is None:
             self._pulse_id = self._scheduler(120, self._pulse_progress)
 
@@ -169,6 +202,7 @@ class OperationPresenter:
         self._determinate_progress = False
         self._cancel_live_redraw()
         self._cancel_pulse()
+        self._append_operation_timing(purpose)
 
         stopped_safely = returncode == 130
         self._view.progress.set_fraction(
@@ -220,6 +254,28 @@ class OperationPresenter:
             f"{display_name} failed",
             output.strip() or f"Exit status {returncode}",
         )
+
+    def _append_operation_timing(self, purpose: str) -> None:
+        """Record wall-clock bounds and end-to-end elapsed time for mutations."""
+
+        if (
+            purpose != self._timed_purpose
+            or self._operation_started_wall is None
+            or self._operation_started_monotonic is None
+        ):
+            return
+        finished_wall = self._wall_clock()
+        elapsed = self._monotonic_clock() - self._operation_started_monotonic
+        display_name = operation_display_name(purpose)
+        self._view.append_log(
+            f"{display_name} request finished: {_format_timestamp(finished_wall)}"
+        )
+        self._view.append_log(
+            f"{display_name} end-to-end elapsed: {_format_elapsed(elapsed)}"
+        )
+        self._timed_purpose = None
+        self._operation_started_wall = None
+        self._operation_started_monotonic = None
 
     def apply_post_analysis_status(self) -> None:
         """Apply and clear status retained across a map refresh."""

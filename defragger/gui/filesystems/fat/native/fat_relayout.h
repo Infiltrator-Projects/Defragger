@@ -45,6 +45,9 @@ typedef struct {
     bool canonical_layout_verified;
     size_t checked_files;
     size_t checked_directories;
+    double preflight_seconds;
+    double preparation_seconds;
+    double layout_seconds;
 } FatRelayoutStats;
 
 typedef enum {

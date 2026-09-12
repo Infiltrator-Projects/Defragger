@@ -7,6 +7,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -447,6 +448,15 @@ def test_operation_presenter_owns_transient_window_lifecycle() -> None:
         scheduled[token] = (delay, callback)
         return token
 
+    aest = timezone(timedelta(hours=10), "AEST")
+    wall_times = iter(
+        (
+            datetime(2026, 9, 12, 21, 30, 0, tzinfo=aest),
+            datetime(2026, 9, 12, 21, 30, 2, tzinfo=aest),
+        )
+    )
+    monotonic_times = iter((100.0, 102.347))
+
     presenter = OperationPresenter(
         view=view,
         runner=runner,
@@ -455,6 +465,8 @@ def test_operation_presenter_owns_transient_window_lifecycle() -> None:
         scheduler=schedule,
         cancel_scheduled=cancelled.append,
         controls_changed=lambda: control_changes.append(True),
+        wall_clock=lambda: next(wall_times),
+        monotonic_clock=lambda: next(monotonic_times),
     )
     presenter.on_runner_event(RunnerEvent("started", "growth-defrag"))
     assert view.progress.text == "Growth Defrag in progress…"
@@ -481,6 +493,9 @@ def test_operation_presenter_owns_transient_window_lifecycle() -> None:
         raw_completion=None,
     )
     assert completed == [""]
+    assert "Growth Defrag request started: 2026-09-12 21:30:00 AEST" in view.logs
+    assert "Growth Defrag request finished: 2026-09-12 21:30:02 AEST" in view.logs
+    assert "Growth Defrag end-to-end elapsed: 00:00:02.347" in view.logs
     assert view.progress.text == "Not needed"
     assert presenter.post_analysis_status is not None
     presenter.apply_post_analysis_status()

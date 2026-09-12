@@ -23,6 +23,18 @@ python3 "$ROOT/tests/make_fragmented_image.py" "$WORK/fragmented.img" >/dev/null
     --write --confirm "$WORK/fragmented.img" --journal "$WORK/fragmented.journal" \
     >"$WORK/fragmented.log" 2>&1
 python3 "$ROOT/tests/verify_defragged_image.py" "$WORK/fragmented.img"
+grep -Eq '^Defragment engine started: +[0-9]{4}-[0-9]{2}-[0-9]{2} ' \
+    "$WORK/fragmented.log" || fail "Defragment did not record its engine start time"
+grep -Eq '^Defragment engine finished: +[0-9]{4}-[0-9]{2}-[0-9]{2} ' \
+    "$WORK/fragmented.log" || fail "Defragment did not record its engine finish time"
+grep -q '^Defragment phase timings:$' "$WORK/fragmented.log" || \
+    fail "Defragment did not record phase timings"
+grep -Eq '^Defragment engine elapsed: +[0-9]+\.[0-9]{3} s$' \
+    "$WORK/fragmented.log" || fail "Defragment did not record total engine duration"
+grep -Eq '^Buffered read throughput: +[0-9]+\.[0-9] MiB/s$' \
+    "$WORK/fragmented.log" || fail "Defragment did not record read throughput"
+grep -Eq '^Buffered write throughput: +[0-9]+\.[0-9] MiB/s$' \
+    "$WORK/fragmented.log" || fail "Defragment did not record write throughput"
 
 python3 "$ROOT/tests/make_fragmented_directory_image.py" "$WORK/directories.img" >/dev/null
 "$FAT_WORKER" defrag "$WORK/directories.img" \
@@ -41,6 +53,10 @@ python3 "$ROOT/tests/make_growth_defrag_image.py" "$WORK/growth.img" >/dev/null
     --write --confirm "$WORK/growth.img" --journal "$WORK/growth.journal" \
     --growth-percent 10 >"$WORK/growth.log" 2>&1
 python3 "$ROOT/tests/verify_growth_defrag.py" "$WORK/growth.img"
+grep -q '^Growth Defrag phase timings:$' "$WORK/growth.log" || \
+    fail "Growth Defrag did not record phase timings"
+grep -Eq '^Growth Defrag engine elapsed: +[0-9]+\.[0-9]{3} s$' \
+    "$WORK/growth.log" || fail "Growth Defrag did not record total engine duration"
 
 # FAT12 and FAT16 are not separate relocation implementations.  For the small
 # generated images the RAM/workspace budget must resolve Growth Defrag without
