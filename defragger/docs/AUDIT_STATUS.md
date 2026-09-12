@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-12
 
 Applies to: release version 1.8.0-147
-Audited source commit: f512d7d6e96b2530b426ddbd644574ffa738087b
+Audited source commit: 650df5d0e4492601adc83739e7da5079d18bbb30
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -139,6 +139,19 @@ Recover.
     changed, and the tested source baseline passed the complete hosted suite,
     local native/filesystem/GUI tests and sanitizer qualification before this
     audit extension was advanced.
+20. Mutation operation logs now record local wall-clock request start and finish
+    times plus monotonic end-to-end elapsed time for Defragment, Growth Defrag
+    and Recover, including safe-stop and failure completions. The FAT worker
+    line-buffers its merged output so configuration, analysis and phase messages
+    retain chronological order; it additionally reports setup/analysis,
+    read-only preflight/planning, safety-workspace preparation, canonical-layout
+    and post-layout-verification durations, total engine elapsed time and
+    buffered read/write throughput. Timing uses Infiltratr Common's monotonic
+    clock and checked counter-rate primitive and does not alter relocation,
+    journal, verification or allocation-map semantics. Deterministic GUI timing
+    regressions, FAT12/FAT16/FAT32 integration assertions, the complete hosted
+    and local native/filesystem/GUI suites, and ASan/UBSan qualification passed
+    on the exact source baseline before this audit extension was advanced.
 
 ## Shared Common dependency
 
@@ -146,7 +159,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-147 audit extension is bound to Defragger source baseline
-`f512d7d6e96b2530b426ddbd644574ffa738087b`. Release qualification rejects any later change beneath the
+`650df5d0e4492601adc83739e7da5079d18bbb30`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
