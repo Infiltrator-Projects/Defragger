@@ -115,8 +115,12 @@ def main() -> None:
     assert "GitHub-generated source archive" not in release
     assert "Refresh and verify Infiltrator APT repository" not in release
     for required in (
-        "release:",
-        "types: [published]",
+        "workflow_run:",
+        'workflows: ["Build and publish release"]',
+        "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.head_branch == 'main'",
+        "github.event.workflow_run.head_sha",
+        "expected exactly one published release",
         "workflow_dispatch:",
         "version:",
         "release_sha:",
