@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-12
 
-Applies to: release version 1.8.0-146
-Audited source commit: bc8545674d8a70304a4c67f4d120e34462bbacae
+Applies to: release version 1.8.0-147
+Audited source commit: 968a3ed85c6bceccb566a45267f6b579fd660fd1
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -119,22 +119,34 @@ Recover.
     provided. Dedicated updater regressions, the complete native/filesystem/GUI
     suite and the sanitizer lane passed on the exact source baseline before this
     audit extension was advanced.
-18. The MB theme has received a second presentation-only polish pass for both
-    GTK front ends. Disabled primary controls no longer render as bright active
-    controls, the operation log now styles the actual TextView text surface
-    instead of inheriting Mint's grey child surface, summary cards and version
-    badges use a quieter graphite/silver hierarchy, operation controls have
-    consistent hover/disabled states, and progress/status/legend surfaces are
-    visually integrated. The functional allocation map itself remains unchanged:
-    its colour contract, dimensions, geometry and data semantics are untouched.
+18. The MB theme received a second presentation-only polish pass for both GTK
+    front ends. Disabled primary controls no longer render as bright active
+    controls, the operation log styles the actual TextView text surface instead
+    of inheriting Mint's grey child surface, summary cards and version badges use
+    a quieter graphite/silver hierarchy, operation controls have consistent
+    hover/disabled states, and progress/status/legend surfaces are visually
+    integrated. The functional allocation map itself remains unchanged: its
+    colour contract, dimensions, geometry and data semantics are untouched.
+19. The main About surface now consumes the same LINK-style `AboutInfo` contract
+    used by the MBLINK/InfiltratorFS family instead of maintaining a Defragger-
+    specific hand-built metadata grid. It renders through native `GtkAboutDialog`
+    with the shared `link-about-dialog` style hook, 96 px product emblem,
+    standardized subtitle/description/authors/website/licence handling and the
+    established 560x520 / 520x480 Linux sizing contract. A dedicated regression
+    asserts that the runtime window is routed through the LINK-standard view and
+    cannot silently fall back to the old custom About implementation. This is a
+    presentation-only change; no allocation-map or filesystem mutation code was
+    changed, and the tested source baseline passed the complete hosted suite,
+    local native/filesystem/GUI tests and sanitizer qualification before this
+    audit extension was advanced.
 
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-146 audit extension is bound to Defragger source baseline
-`bc8545674d8a70304a4c67f4d120e34462bbacae`. Release qualification rejects any later change beneath the
+The current 1.8.0-147 audit extension is bound to Defragger source baseline
+`968a3ed85c6bceccb566a45267f6b579fd660fd1`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
@@ -168,7 +180,7 @@ published release automatically triggers the APT refresh workflow, and the same
 exact version/SHA can be supplied to its manual dispatch path if central
 publication needs to be retried.
 
-Version 1.8.0-146 is explicitly authorized for release on 2026-09-12. Any later
+Version 1.8.0-147 is explicitly authorized for release on 2026-09-12. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
