@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-12
 
 Applies to: release version 1.8.0-147
-Audited source commit: 968a3ed85c6bceccb566a45267f6b579fd660fd1
+Audited source commit: f512d7d6e96b2530b426ddbd644574ffa738087b
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -146,13 +146,13 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-147 audit extension is bound to Defragger source baseline
-`968a3ed85c6bceccb566a45267f6b579fd660fd1`. Release qualification rejects any later change beneath the
+`f512d7d6e96b2530b426ddbd644574ffa738087b`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
-validates Infiltratr Common 1.15.4 at exact commit
-`046406bea2aefa539c74e1038b6c20825eca8af7`. CMake, the gitlink and the local
+validates Infiltratr Common 1.16.0 at exact commit
+`a9db06b11f493c4e6f42bf6c13cc5cc5c73e1fc4`. CMake, the gitlink and the local
 compiler/installer all verify that same version and commit rather than accepting
 an unconstrained checkout.
 
