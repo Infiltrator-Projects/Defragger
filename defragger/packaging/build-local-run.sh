@@ -11,9 +11,9 @@ TEMPLATE="$ROOT/packaging/local-run-header.sh.in"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-run-build.XXXXXX")
 COMMON_DIR="$ROOT/shared/infiltratr-common"
 COMMON_URL="https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git"
-COMMON_TAG="v1.15.4"
-COMMON_VERSION="1.15.4"
-COMMON_COMMIT="046406bea2aefa539c74e1038b6c20825eca8af7"
+COMMON_TAG="v1.16.0"
+COMMON_VERSION="1.16.0"
+COMMON_COMMIT="a9db06b11f493c4e6f42bf6c13cc5cc5c73e1fc4"
 COMMON_TEMP=0
 cleanup() {
     rm -rf "$WORK"

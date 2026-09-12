@@ -56,8 +56,8 @@ Filesystem-neutral C mechanics are implemented once:
 - generated version ownership.
 
 Generic C primitives that are also useful to other Infiltrator applications are
-not reimplemented here. Linux Defragger pins Infiltratr Common 1.15.4 at
-exact commit `046406bea2aefa539c74e1038b6c20825eca8af7` and links the canonical
+not reimplemented here. Linux Defragger pins Infiltratr Common 1.16.0 at
+exact commit `a9db06b11f493c4e6f42bf6c13cc5cc5c73e1fc4` and links the canonical
 `InfiltratrCommon::Common` CMake target. Common owns strict integer parsing and
 range validation, bounded strings, line-end trimming, checked and saturating
 arithmetic, endian byte access, exact interruption-safe positioned I/O, bounded
