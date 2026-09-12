@@ -233,20 +233,21 @@ static void consume_hole(uint64_t *remaining, uint64_t span)
         *remaining = 0U;
 }
 
-static MinixMapCell *cell_for_zone(MinixVisit *visit, uint32_t zone)
+static MinixMapCell *cell_for_unit(MinixMapCell *cells, uint64_t cell_count,
+                                   uint64_t unit)
 {
-    if (visit->cells == NULL || visit->cell_count == 0U)
+    if (cells == NULL || cell_count == 0U)
         return NULL;
     uint64_t lo = 0U;
-    uint64_t hi = visit->cell_count;
+    uint64_t hi = cell_count;
     while (lo < hi) {
         const uint64_t mid = lo + (hi - lo) / 2U;
-        if ((uint64_t)zone < visit->cells[mid].start)
+        if (unit < cells[mid].start)
             hi = mid;
-        else if ((uint64_t)zone > visit->cells[mid].end)
+        else if (unit > cells[mid].end)
             lo = mid + 1U;
         else
-            return &visit->cells[mid];
+            return &cells[mid];
     }
     return NULL;
 }
@@ -265,7 +266,8 @@ static int visit_data_zone(const MinixWalk *walk, uint32_t zone,
     visit->previous = zone;
     visit->count++;
 
-    MinixMapCell *cell = cell_for_zone(visit, zone);
+    MinixMapCell *cell =
+        cell_for_unit(visit->cells, visit->cell_count, zone);
     if (cell != NULL) {
         if (visit->mark_fragmented)
             cell->fragmented_count++;
@@ -463,18 +465,6 @@ static void init_cells(MinixMapCell *cells, uint64_t cell_count,
     }
 }
 
-static MinixMapCell *analysis_cell(MinixMapCell *cells, uint64_t cell_count,
-                                   uint64_t unit)
-{
-    if (cells == NULL || cell_count == 0U)
-        return NULL;
-    for (uint64_t index = 0U; index < cell_count; ++index) {
-        if (unit >= cells[index].start && unit <= cells[index].end)
-            return &cells[index];
-    }
-    return NULL;
-}
-
 static int scan_allocation(const MinixSummary *summary, const uint8_t *zmap,
                            size_t zmap_bytes, MinixAnalysis *analysis,
                            MinixMapCell *cells, uint64_t cell_count,
@@ -484,7 +474,7 @@ static int scan_allocation(const MinixSummary *summary, const uint8_t *zmap,
     uint64_t used_zones = summary->first_data_zone;
 
     for (uint64_t unit = 0U; unit < summary->first_data_zone; ++unit) {
-        MinixMapCell *cell = analysis_cell(cells, cell_count, unit);
+        MinixMapCell *cell = cell_for_unit(cells, cell_count, unit);
         if (cell != NULL)
             cell->used_count++;
     }
@@ -492,7 +482,7 @@ static int scan_allocation(const MinixSummary *summary, const uint8_t *zmap,
     for (uint32_t zone = summary->first_data_zone;
          zone < summary->zone_count; ++zone) {
         const bool allocated = zone_allocated(summary, zmap, zmap_bytes, zone);
-        MinixMapCell *cell = analysis_cell(cells, cell_count, zone);
+        MinixMapCell *cell = cell_for_unit(cells, cell_count, zone);
         if (allocated) {
             used_zones++;
             if (cell != NULL)

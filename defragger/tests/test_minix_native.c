@@ -10,6 +10,10 @@
 
 #define IMAGE_BYTES 65536U
 #define SUPER_OFFSET 1024U
+#define LARGE_BLOCK_SIZE 4096U
+#define LARGE_ZONE_COUNT 262144U
+#define LARGE_FIRST_DATA_ZONE 12U
+#define LARGE_IMAGE_BYTES ((uint64_t)LARGE_BLOCK_SIZE * LARGE_ZONE_COUNT)
 
 #define CHECK(expr)                                                           \
     do {                                                                      \
@@ -216,6 +220,60 @@ static void test_exact_analysis(void)
     CHECK(unlink(path) == 0);
 }
 
+static void test_full_size_map_analysis(void)
+{
+    char path[64];
+    (void)snprintf(path, sizeof(path), "/tmp/linux-defragger-minix-large-XXXXXX");
+    const int fd = mkstemp(path);
+    CHECK(fd >= 0);
+    CHECK(ftruncate(fd, (off_t)LARGE_IMAGE_BYTES) == 0);
+
+    uint8_t superblock[64] = {0};
+    put32(superblock + 0U, 16U, 1);
+    put16(superblock + 6U, 1U, 1);
+    put16(superblock + 8U, 8U, 1);
+    put16(superblock + 10U, LARGE_FIRST_DATA_ZONE, 1);
+    put16(superblock + 12U, 0U, 1);
+    put32(superblock + 16U, 0x01000000U, 1);
+    put32(superblock + 20U, LARGE_ZONE_COUNT, 1);
+    put16(superblock + 24U, 0x4d5aU, 1);
+    put16(superblock + 28U, LARGE_BLOCK_SIZE, 1);
+    CHECK(pwrite(fd, superblock, sizeof(superblock), SUPER_OFFSET) ==
+          (ssize_t)sizeof(superblock));
+
+    uint8_t imap[LARGE_BLOCK_SIZE] = {0};
+    set_little_bit(imap, 0U);
+    CHECK(pwrite(fd, imap, sizeof(imap), 2U * LARGE_BLOCK_SIZE) ==
+          (ssize_t)sizeof(imap));
+
+    const size_t zmap_bytes = 8U * LARGE_BLOCK_SIZE;
+    uint8_t *zmap = calloc(1U, zmap_bytes);
+    CHECK(zmap != NULL);
+    set_little_bit(zmap, 0U);
+    CHECK(pwrite(fd, zmap, zmap_bytes, 3U * LARGE_BLOCK_SIZE) ==
+          (ssize_t)zmap_bytes);
+    free(zmap);
+    CHECK(close(fd) == 0);
+
+    MinixMapCell *cells = calloc(LARGE_ZONE_COUNT, sizeof(*cells));
+    CHECK(cells != NULL);
+    MinixAnalysis analysis;
+    char error[160];
+    CHECK(minix_analyse(path, &analysis, cells, LARGE_ZONE_COUNT,
+                        error, sizeof(error)) == 0);
+    CHECK(analysis.total_units == LARGE_ZONE_COUNT);
+    CHECK(analysis.used_zones == LARGE_FIRST_DATA_ZONE);
+    CHECK(analysis.free_zones ==
+          LARGE_ZONE_COUNT - LARGE_FIRST_DATA_ZONE);
+    CHECK(cells[0].used_count == 1U);
+    CHECK(cells[LARGE_FIRST_DATA_ZONE - 1U].used_count == 1U);
+    CHECK(cells[LARGE_FIRST_DATA_ZONE].free_count == 1U);
+    CHECK(cells[LARGE_ZONE_COUNT - 1U].free_count == 1U);
+
+    free(cells);
+    CHECK(unlink(path) == 0);
+}
+
 int main(void)
 {
     uint8_t image[IMAGE_BYTES];
@@ -268,6 +326,7 @@ int main(void)
     (void)unlink(path);
 
     test_exact_analysis();
+    test_full_size_map_analysis();
     (void)puts("Minix summary and exact allocation/fragmentation tests passed");
     return 0;
 }
