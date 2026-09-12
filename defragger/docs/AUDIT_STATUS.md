@@ -179,14 +179,31 @@ Recover.
     inheriting distro-specific mkfs defaults. The exact source baseline passed
     all 33 hosted tests, all 19 local native/filesystem/GUI tests and ASan/UBSan
     qualification before this audit extension was advanced.
+23. Live Linux Mint qualification showed that the earlier static resizable
+    property check did not prove a usable native maximise path: the frame's
+    combined map/log minimum height could exceed the desktop work area, and the
+    window manager could remove the maximise control without changing the
+    window geometry. The realised GTK window now explicitly publishes the full
+    native window-manager function set, while compact 180-pixel map and
+    110-pixel log minima leave a genuine resize range; both surfaces still
+    expand into surplus height. The request lifecycle also has exactly one
+    timing owner: CommandRunner records acceptance, the privileged helper's
+    process-start acknowledgement cannot emit a second start event, and the
+    presenter defensively treats repeated acknowledgements as idempotent.
+    Deterministic regressions assert the native function advertisement,
+    flexible geometry and one start timestamp across both transport and
+    presentation boundaries. The exact source baseline passed all 33 hosted
+    tests, all 19 local native/filesystem/GUI tests and ASan/UBSan qualification
+    before this audit extension was advanced. No filesystem analyser, writer,
+    journal, recovery or allocation-map data semantics changed.
 
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-150 audit extension is bound to Defragger source baseline
-`b80fce9c3c20a866c617d8db213a28b32577bae8`. Release qualification rejects any later change beneath the
+The current 1.8.0-151 audit extension is bound to Defragger source baseline
+`231c9d9c8e31813deae624da30170bebce44c960`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
@@ -220,7 +237,7 @@ published release automatically triggers the APT refresh workflow, and the same
 exact version/SHA can be supplied to its manual dispatch path if central
 publication needs to be retried.
 
-Version 1.8.0-150 is explicitly authorized for release on 2026-09-12. Any later
+Version 1.8.0-151 is explicitly authorized for release on 2026-09-12. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
