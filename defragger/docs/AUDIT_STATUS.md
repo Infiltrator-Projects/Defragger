@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-12
 
 Applies to: release version 1.8.0-148
-Audited source commit: 650df5d0e4492601adc83739e7da5079d18bbb30
+Audited source commit: e0e58420d43af38c4053905310a3dd1ba006a7d0
 Audited release-governance commit: 3937218c33317772e52716a65684d29b4f08472c
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -102,11 +102,13 @@ Recover.
     around the functional allocation map: roomier sections, wrapping legend,
     clearer analysis/mutation/stop controls, improved log and status treatment,
     and a composed MB-styled About dialog. The allocation-map semantics are
-    deliberately unchanged: its state colours, 640x260 minimum drawing area,
-    sampling geometry and allocation data remain intact. A GUI regression guard
-    now fails if those map colours or dimensions are changed by this presentation
-    work. The exact source baseline passed the native/filesystem/GUI suite and
-    sanitizer tests before this audit extension was advanced.
+    deliberately unchanged: its state colours, 260 px vertical minimum drawing
+    area, sampling geometry and allocation data remain intact. Its horizontal
+    allocation is fluid so it cannot impose a fixed-width top-level geometry.
+    A GUI regression guard fails if those map colours or sizing contracts are
+    changed by presentation work. The exact source baseline passed the native/
+    filesystem/GUI suite and sanitizer tests before this audit extension was
+    advanced.
 17. The installed desktop launchers now use absolute `/usr/bin` targets and the
     package refreshes desktop and icon caches after installation. Linux Defragger
     now owns a GUI-first release updater instead of relying on the distribution
@@ -152,6 +154,16 @@ Recover.
     regressions, FAT12/FAT16/FAT32 integration assertions, the complete hosted
     and local native/filesystem/GUI suites, and ASan/UBSan qualification passed
     on the exact source baseline before this audit extension was advanced.
+21. The main GTK window now explicitly publishes a user-resizable contract, and
+    the allocation map retains only its vertical drawing minimum instead of a
+    horizontal size request. The 1180x820 normal size remains an initial
+    preference, while the desktop window manager can expand the shell across the
+    monitor when its native maximise control is selected. A regression rejects
+    a fixed main-window contract or a restored map width request. No analyser,
+    filesystem writer, journal, recovery or allocation-map data semantics were
+    changed; the exact source baseline passed the complete hosted and local
+    native/filesystem/GUI suites and ASan/UBSan qualification before this audit
+    extension was advanced.
 
 ## Shared Common dependency
 
@@ -159,7 +171,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-148 audit extension is bound to Defragger source baseline
-`650df5d0e4492601adc83739e7da5079d18bbb30`. Release qualification rejects any later change beneath the
+`e0e58420d43af38c4053905310a3dd1ba006a7d0`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `3937218c33317772e52716a65684d29b4f08472c`; changes beneath `.github/workflows`
