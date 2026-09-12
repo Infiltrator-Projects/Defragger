@@ -34,6 +34,7 @@ except (ImportError, ValueError) as exc:
 from version import BUILD_LABEL, VERSION
 from backends.base import CAP_DEFRAG, CAP_GROWTH_DEFRAG, CAP_RECOVER
 
+from .about import LinkStandardWindowView
 from .command_runner import CommandRunner
 from .devices import Volume
 from .engine_client import (
@@ -55,7 +56,7 @@ from .support import (
 )
 from .volume_coordinator import VolumeCoordinator
 from .widgets import MAX_MAP_CELLS, MIN_MAP_CELLS
-from .window_view import APP_NAME, WindowView
+from .window_view import APP_NAME
 
 
 class MainWindow(Gtk.ApplicationWindow):
@@ -74,7 +75,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
         self.volumes = VolumeCoordinator(self.backend_catalog)
 
-        self.view = WindowView(
+        self.view = LinkStandardWindowView(
             self,
             self,
             gui_version=VERSION,
