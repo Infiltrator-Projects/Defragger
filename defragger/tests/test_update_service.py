@@ -19,6 +19,7 @@ from ui.update_service import (
     release_from_payload,
     version_key,
 )
+from ui.update_service import UPDATE_HELPER
 
 
 def _release_payload(version: str) -> dict:
@@ -107,17 +108,32 @@ def test_installer_commands_never_use_a_shell() -> None:
 
     deb = Path("/tmp/linux-defragger_1.8.0-145_amd64.deb")
     run = Path("/tmp/linux-defragger-1.8.0-145-local-folder.run")
-    assert installer_command(generic, deb) == (
+    digest = "a" * 64
+    assert installer_command(generic, deb, digest) == (
         "/usr/bin/pkexec",
-        "/usr/bin/apt-get",
-        "install",
-        "-y",
+        UPDATE_HELPER,
+        "deb",
         str(deb),
+        digest,
     )
-    assert installer_command(native, run) == (
+    assert installer_command(native, run, "b" * 64) == (
         "/usr/bin/pkexec",
+        UPDATE_HELPER,
+        "run",
         str(run),
+        "b" * 64,
     )
+
+
+def test_root_update_helper_is_packaged_and_has_fixed_installers() -> None:
+    helper = (ROOT / "gui" / "update_helper.py").read_text()
+    package_builder = (ROOT / "cmake" / "project.cmake").read_text()
+    assert "O_NOFOLLOW" in helper
+    assert "os.fstat" in helper
+    assert "os.fsync" in helper
+    assert '"/usr/bin/apt-get", "install", "-y"' in helper
+    assert "subprocess.run(command" in helper
+    assert "gui/update_helper.py" in package_builder
 
 
 def test_desktop_launchers_are_absolute_and_update_aware() -> None:
@@ -144,5 +160,6 @@ if __name__ == "__main__":
     test_release_selection_rejects_missing_or_invalid_assets()
     test_checksum_manifest_uses_exact_asset_name()
     test_installer_commands_never_use_a_shell()
+    test_root_update_helper_is_packaged_and_has_fixed_installers()
     test_desktop_launchers_are_absolute_and_update_aware()
     print("Linux Defragger update-service tests passed")

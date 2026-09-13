@@ -175,14 +175,14 @@ def _install_with_progress(Gtk, GLib, release) -> None:
 
     def worker() -> None:
         try:
-            package_path = download_update(release, VERSION)
+            package_path, expected_sha256 = download_update(release, VERSION)
             outcome["path"] = package_path
             GLib.idle_add(
                 label.set_text,
                 "Release verified. Waiting for administrator authentication "
                 "and installing the update…",
             )
-            install_update(release, package_path)
+            install_update(release, package_path, expected_sha256)
         except Exception as exc:
             outcome["error"] = exc
         finally:

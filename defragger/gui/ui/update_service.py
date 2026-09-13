@@ -39,6 +39,9 @@ class UpdateRelease:
     installer_kind: str
 
 
+UPDATE_HELPER = "/usr/lib/linux-defragger/update_helper.py"
+
+
 def version_key(value: str) -> tuple[int, int, int, int]:
     match = _VERSION_RE.fullmatch(value.strip())
     if match is None:
@@ -154,7 +157,7 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def download_update(release: UpdateRelease, current_version: str) -> Path:
+def download_update(release: UpdateRelease, current_version: str) -> tuple[Path, str]:
     directory = Path(tempfile.mkdtemp(prefix="linux-defragger-update-"))
     package_path = directory / release.asset_name
     checksum_path = directory / "RELEASE_SHA256SUMS.txt"
@@ -188,28 +191,35 @@ def download_update(release: UpdateRelease, current_version: str) -> Path:
             )
         if release.installer_kind == "run":
             package_path.chmod(0o700)
-        return package_path
+        # Return the digest taken from the verified, published manifest.  The
+        # privileged helper verifies the same digest while copying the source
+        # into a root-owned staging file, closing the verify-to-pkexec race.
+        return package_path, expected
     except Exception:
         shutil.rmtree(directory, ignore_errors=True)
         raise
 
 
-def installer_command(release: UpdateRelease, package_path: Path) -> tuple[str, ...]:
-    if release.installer_kind == "run":
-        return ("/usr/bin/pkexec", str(package_path))
-    if release.installer_kind == "deb":
-        return (
-            "/usr/bin/pkexec",
-            "/usr/bin/apt-get",
-            "install",
-            "-y",
-            str(package_path),
-        )
-    raise UpdateError(f"Unknown update installer kind: {release.installer_kind}")
+def installer_command(
+    release: UpdateRelease, package_path: Path, expected_sha256: str
+) -> tuple[str, ...]:
+    if release.installer_kind not in {"run", "deb"}:
+        raise UpdateError(f"Unknown update installer kind: {release.installer_kind}")
+    if not _SHA256_RE.fullmatch(expected_sha256):
+        raise UpdateError("The update digest is invalid.")
+    return (
+        "/usr/bin/pkexec",
+        UPDATE_HELPER,
+        release.installer_kind,
+        str(package_path),
+        expected_sha256.lower(),
+    )
 
 
-def install_update(release: UpdateRelease, package_path: Path) -> None:
-    command = installer_command(release, package_path)
+def install_update(
+    release: UpdateRelease, package_path: Path, expected_sha256: str
+) -> None:
+    command = installer_command(release, package_path, expected_sha256)
     try:
         completed = subprocess.run(
             command,

@@ -15,6 +15,7 @@ REPO_ROOT = PROJECT_ROOT.parent
 
 def main() -> None:
     gate = (REPO_ROOT / ".github" / "workflows" / "quality-gate.yml").read_text(encoding="utf-8")
+    local_quality = (REPO_ROOT / ".github" / "workflows" / "local-quality.yml").read_text(encoding="utf-8")
     release = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     apt_refresh = (REPO_ROOT / ".github" / "workflows" / "apt-refresh.yml").read_text(encoding="utf-8")
     harness = (PROJECT_ROOT / "tests" / "run_tests.sh").read_text(encoding="utf-8")
@@ -42,6 +43,15 @@ def main() -> None:
     assert "pull_request:" not in gate, "quality gate must not require PR branches"
     assert "merge_group:" not in gate, "quality gate must not require merge branches"
     assert '"c-first-*"' not in gate, "quality gate must run from main only"
+    assert "local-quality" not in gate, "home-runner qualification must not gate hosted release publication"
+    for required in (
+        "runs-on: [self-hosted, Linux, X64, linux-native]",
+        "Verify local qualification dependencies",
+        "Self-hosted runner is missing commands",
+        "Self-hosted runner is missing pkg-config packages",
+        "workflow_dispatch:",
+    ):
+        assert required in local_quality, f"local qualification lost required check: {required}"
     assert "run: ctest --test-dir build --output-on-failure" in gate, (
         "primary quality gate must run the complete aggregate project suite"
     )
@@ -104,7 +114,9 @@ def main() -> None:
         "Audited release-governance commit:",
         "GOVERNANCE_COMMIT",
         ":(top).github/workflows",
-        "published releases are immutable",
+        "points at ${tag_commit}, not the tested commit",
+        "tag_exists=false",
+        "if [ \"$tag_exists\" = false ]",
         "gh release create",
     ):
         assert required in release, f"release workflow lost required contract: {required}"

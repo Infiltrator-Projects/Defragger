@@ -442,6 +442,7 @@ install(PROGRAMS
     gui/linux_defragger_gui.py
     gui/allocation_mapper.py
     gui/privileged_helper.py
+    gui/update_helper.py
     gui/operation_engine.py
     DESTINATION lib/linux-defragger)
 install(FILES "${LD_GENERATED_DIR}/version.py" DESTINATION lib/linux-defragger)
