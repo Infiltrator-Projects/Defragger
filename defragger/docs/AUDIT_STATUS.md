@@ -7,8 +7,8 @@ Completed: 2026-08-25
 Extended: 2026-09-12
 
 Applies to: release version 1.8.0-154
-Audited source commit: 0f73183cbe1c4f54b41197b6535dd1130d608b41
-Audited release-governance commit: 0f73183cbe1c4f54b41197b6535dd1130d608b41
+Audited source commit: 656c6babb68dacb7f67bb6b98df11d397f98fd89
+Audited release-governance commit: 656c6babb68dacb7f67bb6b98df11d397f98fd89
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -231,10 +231,10 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-154 audit extension is bound to Defragger source baseline
-`0f73183cbe1c4f54b41197b6535dd1130d608b41`. Release qualification rejects any later change beneath the
+`656c6babb68dacb7f67bb6b98df11d397f98fd89`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`0f73183cbe1c4f54b41197b6535dd1130d608b41`; changes beneath `.github/workflows`
+`656c6babb68dacb7f67bb6b98df11d397f98fd89`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.16.0 at exact commit
 `a9db06b11f493c4e6f42bf6c13cc5cc5c73e1fc4`. CMake, the gitlink and the local
@@ -257,8 +257,8 @@ a branch status check or bypass actor because this repository uses a direct-main
 workflow. Publication safety is enforced separately: the release workflow only
 runs after a successful push-triggered Project quality gate for the exact current
 `main` commit, rechecks `origin/main`, verifies the permanent history rules,
-verifies both audit baselines, rejects an existing tag/release and publishes
-versioned assets only from that exact commit.
+verifies both audit baselines, rejects mismatched tags or an existing release,
+and publishes versioned assets only from that exact commit.
 
 APT publication is deliberately separate from GitHub release creation. A
 successful Build and publish release workflow automatically triggers the APT
@@ -266,7 +266,7 @@ refresh workflow for that exact release SHA, and the same exact version/SHA can
 be supplied to its manual dispatch path if central publication needs to be
 retried.
 
-Version 1.8.0-153 is explicitly authorized for release on 2026-09-12. Any later
+Version 1.8.0-154 is explicitly authorized for release on 2026-09-13. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
