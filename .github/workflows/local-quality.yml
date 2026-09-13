@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          commands=(cmake cc make dpkg-deb pkg-config zip unzip python3)
+          commands=(cmake cc make dpkg-deb pkg-config zip unzip python3 makefs udisksctl pkexec)
           missing=()
           for command_name in "${commands[@]}"; do
             command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
@@ -52,9 +52,6 @@ jobs:
             exit 1
           fi
           python3 -c 'import gi, cairo'
-          for path in /usr/bin/makefs /usr/bin/udisksctl /usr/bin/pkexec; do
-            test -x "$path" || { printf 'Self-hosted runner is missing executable: %s\n' "$path" >&2; exit 1; }
-          done
 
       - name: Build all first-party C with warnings as errors
         run: |
