@@ -333,9 +333,8 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     The only remaining gate failure was the intentional stale-audit-baseline
     assertion that this extension advances.
 
-36. The product-branding completion removes the retired
-    "Linux Defragger" and standalone "Defragger" product labels from
-    user-facing source, GUI messages, plugin warnings, engineering
+36. The product-branding completion removes the retired pre-1.8.0-166
+    product labels from user-facing source, GUI messages, plugin warnings, engineering
     documentation and release metadata. Public source archives are now named
     `Defragmenter-<version>.zip`. Stable compatibility identifiers remain
     unchanged where renaming would break upgrades, persisted state or external
