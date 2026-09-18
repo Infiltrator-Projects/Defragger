@@ -379,7 +379,7 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     `Defragmenter-<version>-local-folder.run` and
     `Defragmenter-<version>.zip`; the About/project link targets the renamed
     `Infiltrator-Projects/Defragmenter` repository; and Defragmenter Test Media
-    no longer displays the retired Linux Defragger name or creates a
+    no longer displays the retired pre-1.8.0-167 product name or creates a
     `LinuxDefragger-TestData` directory. The Debian package identity,
     installed executable family, application ID, state paths, environment
     variables and journal formats remain unchanged for upgrade and persisted
