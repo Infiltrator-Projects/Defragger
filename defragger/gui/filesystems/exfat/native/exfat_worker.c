@@ -8,6 +8,7 @@
 
 #include "infiltratr/core.h"
 #include "infiltratr/posix.h"
+#include "infiltratr/quantity.h"
 #include "ld_stop.h"
 #include "version.h"
 
@@ -580,27 +581,17 @@ commit_fail:
 
 static size_t parse_ram_bytes(const char *text) {
     if (strcmp(text, "auto") == 0) return ld_default_ram_limit();
-    errno = 0;
-    char *end = NULL;
-    unsigned long long value = strtoull(text, &end, 10);
-    if (errno != 0 || end == text) return 0U;
-    uint64_t multiplier = 1U;
-    if (*end == '\0' || strcmp(end, "B") == 0 || strcmp(end, "b") == 0) multiplier = 1U;
-    else if (strcasecmp(end, "K") == 0 || strcasecmp(end, "KB") == 0) multiplier = UINT64_C(1024);
-    else if (strcasecmp(end, "M") == 0 || strcasecmp(end, "MB") == 0) multiplier = UINT64_C(1024) * 1024U;
-    else if (strcasecmp(end, "G") == 0 || strcasecmp(end, "GB") == 0) multiplier = UINT64_C(1024) * 1024U * 1024U;
-    else return 0U;
-    if ((uint64_t)value > UINT64_MAX / multiplier) return 0U;
-    uint64_t bytes = (uint64_t)value * multiplier;
-    if (bytes == 0U || bytes > SIZE_MAX) return 0U;
+    uint64_t bytes = 0U;
+    if (!infiltratr_parse_binary_quantity_u64(text, &bytes) ||
+        bytes == 0U || bytes > SIZE_MAX)
+        return 0U;
     return (size_t)bytes;
 }
 
 static size_t parse_batch_clusters(const char *text) {
-    errno = 0;
-    char *end = NULL;
-    unsigned long long value = strtoull(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0' || value > SIZE_MAX) return 0U;
+    uint64_t value = 0U;
+    if (!infiltratr_parse_u64_range(text, 10U, 1U, (uint64_t)SIZE_MAX, &value))
+        return 0U;
     return (size_t)value;
 }
 
