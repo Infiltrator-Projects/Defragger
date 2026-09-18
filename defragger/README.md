@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Defragmenter
 
-> **Safety status:** The version 1.8.0-167 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
+> **Safety status:** The version 1.8.0-168 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
 
 Defragmenter is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 
@@ -80,15 +80,15 @@ The permanent GitHub quality gate performs a warnings-as-errors C build and runs
 
 ## Release downloads
 
-Each numbered release uses three project deliverables:
+Each numbered release publishes two installable project deliverables plus a checksum manifest:
 
 | File | Purpose |
 |---|---|
 | `Defragmenter-${VERSION}-amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
 | `Defragmenter-${VERSION}-local-folder.run` | Hardware-optimised local compile-and-install program (`-march=native -mtune=native`). |
-| `Defragmenter-${VERSION}.zip` | Clean source archive built and tested from the exact release commit. |
+| `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for the Debian package and native installer. |
 
-Release publication is gated: the release workflow only publishes the requested version after the reusable project quality gate succeeds. GitHub's automatic tag source links may also be displayed, but `Defragmenter-${VERSION}.zip` is the project's verified source deliverable.
+Release publication is gated: the release workflow only publishes the requested version after the reusable project quality gate succeeds. GitHub supplies the standard tag `Source code (zip)` and `Source code (tar.gz)` links automatically; Defragmenter does not upload a duplicate custom source archive.
 
 ## Engineering documentation
 

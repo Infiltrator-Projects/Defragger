@@ -20,7 +20,6 @@ def main() -> None:
     apt_refresh = (REPO_ROOT / ".github" / "workflows" / "apt-refresh.yml").read_text(encoding="utf-8")
     harness = (PROJECT_ROOT / "tests" / "run_tests.sh").read_text(encoding="utf-8")
     local_run = (PROJECT_ROOT / "packaging" / "build-local-run.sh").read_text(encoding="utf-8")
-    source_zip = (PROJECT_ROOT / "packaging" / "build-source-zip.sh").read_text(encoding="utf-8")
     release_artifacts = (PROJECT_ROOT / "tests" / "test_release_artifacts.sh").read_text(encoding="utf-8")
     cmake = (PROJECT_ROOT / "cmake" / "project.cmake").read_text(encoding="utf-8")
     design = (PROJECT_ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
@@ -104,8 +103,6 @@ def main() -> None:
         "required_linear_history",
         "EXPECTED_SHA",
         "origin/main",
-        "packaging/build-source-zip.sh",
-        'Defragmenter-${VERSION}.zip',
         "RELEASE_SHA256SUMS.txt",
         "Status: **complete**",
         'Applies to: release version ${VERSION}',
@@ -124,7 +121,9 @@ def main() -> None:
     assert "if: ${{ false }}" not in release
     assert "--clobber" not in release
     assert "gh release edit" not in release
-    assert "GitHub-generated source archive" not in release
+    assert "packaging/build-source-zip.sh" not in release
+    assert 'Defragmenter-${VERSION}.zip' not in release
+    assert not (PROJECT_ROOT / "packaging" / "build-source-zip.sh").exists()
     assert "Refresh and verify Infiltrator APT repository" not in release
     for required in (
         "workflow_run:",
@@ -143,9 +142,6 @@ def main() -> None:
     ):
         assert required in apt_refresh, f"APT refresh workflow lost required contract: {required}"
 
-    assert "__pycache__" in source_zip and ".pyc" in source_zip
-    assert "source-extracted" in release_artifacts
-    assert "-E linux-defragger-tests" in release_artifacts
     assert "LD_ENABLE_SANITIZERS=ON" in gate
     assert "Hosted ASan / UBSan" in gate
     assert "__pycache__/" in gitignore

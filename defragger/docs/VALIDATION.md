@@ -126,9 +126,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 The aggregate harness is also available through CTest and the GitHub-hosted
-quality workflow. Release artifacts are rebuilt from the exact release commit;
-the source archive, Debian package, native local installer and SHA-256 manifest
-are then published together.
+quality workflow. The Debian package and native local installer are rebuilt from
+the exact release commit and published with their SHA-256 manifest. GitHub
+supplies its standard source-code archives for the immutable release tag.
 
 ## Validation limits and residual risk
 

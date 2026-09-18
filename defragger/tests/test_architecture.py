@@ -629,15 +629,13 @@ def test_user_facing_branding_is_defragmenter() -> None:
     desktop = (ROOT / "packaging" / "io.github.linuxdefragger.desktop").read_text()
     assert "Name=Defragmenter" in desktop
 
-    source_builder = (ROOT / "packaging" / "build-source-zip.sh").read_text()
     release_workflow = (ROOT.parent / ".github" / "workflows" / "release.yml").read_text()
-    assert 'ARCHIVE_BASENAME="Defragmenter-${VERSION}"' in source_builder
-    assert "Defragmenter-${VERSION}.zip" in release_workflow
+    assert not (ROOT / "packaging" / "build-source-zip.sh").exists()
+    assert "Defragmenter-${VERSION}.zip" not in release_workflow
     assert "Defragmenter-${VERSION}-amd64.deb" in release_workflow
     assert "Defragmenter-${VERSION}-local-folder.run" in release_workflow
     assert "linux-defragger_${VERSION}_amd64.deb" not in release_workflow
     assert "linux-defragger-${VERSION}-local-folder.run" not in release_workflow
-    assert "Defragger-${VERSION}.zip" not in source_builder
     assert "Defragger-${VERSION}.zip" not in release_workflow
 
     test_media_user_facing = (

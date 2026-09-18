@@ -7,53 +7,16 @@ VERSION=$(tr -d '\r\n' <"$ROOT/VERSION")
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-artifact-test.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 RUN="$WORK/Defragmenter-${VERSION}-local-folder.run"
-SOURCE_ZIP="$WORK/Defragmenter-${VERSION}.zip"
+if [ -e "$ROOT/packaging/build-source-zip.sh" ]; then
+    printf '%s\n' 'Custom source ZIP builder must remain removed.' >&2
+    exit 1
+fi
 
 sh -n "$ROOT/packaging/build-deb.sh"
 sh -n "$ROOT/packaging/build-local-run.sh"
-sh -n "$ROOT/packaging/build-source-zip.sh"
 grep -Fq 'OUTPUT=${OUTPUT_PATH:-"$ROOT/Defragmenter-${PACKAGE_VERSION}-${ARCH}.deb"}' "$ROOT/packaging/build-deb.sh"
 grep -Fq 'OUTPUT=${1:-"$ROOT/Defragmenter-${VERSION}-local-folder.run"}' "$ROOT/packaging/build-local-run.sh"
 "$ROOT/packaging/build-local-run.sh" "$RUN" >/dev/null
-"$ROOT/packaging/build-source-zip.sh" "$SOURCE_ZIP" >/dev/null
-[ -f "$SOURCE_ZIP" ]
-printf '%s\n' stale >"$WORK/stale-entry.txt"
-(cd "$WORK" && zip -q "$SOURCE_ZIP" stale-entry.txt)
-"$ROOT/packaging/build-source-zip.sh" "$SOURCE_ZIP" >/dev/null
-unzip -Z1 "$SOURCE_ZIP" >"$WORK/source-files.txt"
-if grep -qx 'stale-entry.txt' "$WORK/source-files.txt"; then
-    printf '%s\n' 'Source archive rebuild retained a stale entry.' >&2
-    exit 1
-fi
-grep -qx "Defragmenter-${VERSION}/CMakeLists.txt" "$WORK/source-files.txt"
-grep -qx "Defragmenter-${VERSION}/packaging/build-source-zip.sh" "$WORK/source-files.txt"
-
-SOURCE_EXTRACTED="$WORK/source-extracted"
-mkdir -p "$SOURCE_EXTRACTED"
-unzip -q "$SOURCE_ZIP" -d "$SOURCE_EXTRACTED"
-EXTRACTED_ROOT="$SOURCE_EXTRACTED/Defragmenter-${VERSION}"
-EXTRACTED_BUILD="$WORK/source-zip-build"
-cmake -S "$EXTRACTED_ROOT" -B "$EXTRACTED_BUILD" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DLD_ENABLE_WERROR=ON \
-    -DBUILD_TESTING=ON >/dev/null
-cmake --build "$EXTRACTED_BUILD" -j2 >/dev/null
-PYTHONDONTWRITEBYTECODE=1 \
-PYTHONPATH="$EXTRACTED_ROOT/gui:$EXTRACTED_ROOT/tests" \
-LINUX_DEFRAGGER_BUILD_DIR="$EXTRACTED_BUILD" \
-ctest --test-dir "$EXTRACTED_BUILD" --output-on-failure \
-    -E linux-defragger-tests
-
-if grep -Eq '(^|/)\.git(/|$)' "$WORK/source-files.txt"; then
-    printf '%s\n' 'Source archive contains Git worktree metadata.' >&2
-    exit 1
-fi
-if grep -Eq '(^|/)linux-defragger-[^/]*-local-source\.zip$' "$WORK/source-files.txt"; then
-    printf '%s\n' 'Source archive contains the obsolete local-source ZIP name.' >&2
-    exit 1
-fi
-grep -Fq 'OUTPUT=${1:-"$PARENT/${ARCHIVE_BASENAME}.zip"}' "$ROOT/packaging/build-source-zip.sh"
-grep -Fq 'ARCHIVE_BASENAME="Defragmenter-${VERSION}"' "$ROOT/packaging/build-source-zip.sh"
 
 MARKER_LINE=$(grep -an '^__LINUX_DEFRAGGER_PAYLOAD_BELOW__$' "$RUN" | \
     head -1 | cut -d: -f1)
@@ -71,7 +34,6 @@ tail -n +"$PAYLOAD_LINE" "$RUN" | tar -tzf - >"$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/CMakeLists.txt" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/packaging/build-deb.sh" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/packaging/build-local-run.sh" "$WORK/files.txt"
-grep -qx "linux-defragger-${VERSION}/packaging/build-source-zip.sh" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/LICENSE" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/shared/infiltratr-common/VERSION" "$WORK/files.txt"
 grep -qx "linux-defragger-${VERSION}/shared/infiltratr-common/src/core.c" "$WORK/files.txt"
@@ -114,4 +76,4 @@ fi
 
 "$ROOT/tests/test_local_installer_end_to_end.sh" "$RUN"
 
-printf '%s\n' 'Three-file release packaging tests passed.'
+printf '%s\n' 'Installable release packaging tests passed.'

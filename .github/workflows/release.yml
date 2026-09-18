@@ -101,7 +101,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential cmake dpkg-dev pkg-config zip unzip python3 python3-gi python3-cairo \
+            build-essential cmake dpkg-dev pkg-config python3 python3-gi python3-cairo \
             gir1.2-gtk-3.0 libgtk-3-dev policykit-1 udisks2 util-linux makefs \
             libext2fs-dev libsqlite3-dev libssl-dev
 
@@ -118,16 +118,13 @@ jobs:
           VERSION=$(tr -d '\r\n' < VERSION)
           ./packaging/build-deb.sh
           ./packaging/build-local-run.sh "Defragmenter-${VERSION}-local-folder.run"
-          ./packaging/build-source-zip.sh "$PWD/Defragmenter-${VERSION}.zip"
           test -f "Defragmenter-${VERSION}-amd64.deb"
           test -f "Defragmenter-${VERSION}-local-folder.run"
-          test -f "Defragmenter-${VERSION}.zip"
           ./tests/test_local_installer_end_to_end.sh \
             "./Defragmenter-${VERSION}-local-folder.run"
           sha256sum \
             "Defragmenter-${VERSION}-amd64.deb" \
-            "Defragmenter-${VERSION}-local-folder.run" \
-            "Defragmenter-${VERSION}.zip" > RELEASE_SHA256SUMS.txt
+            "Defragmenter-${VERSION}-local-folder.run" > RELEASE_SHA256SUMS.txt
 
       - name: Publish immutable versioned release
         shell: bash
@@ -165,30 +162,28 @@ jobs:
           cat > release-body.md <<BODY
           Defragmenter ${VERSION}.
 
-          Verified release artefacts:
+          Verified project release artefacts:
           - Generic AMD64 Debian package
           - Hardware-optimised local compile-and-install program
-          - Clean source archive built and tested from this exact commit
-          - SHA-256 manifest for all release artefacts
+          - SHA-256 manifest for both project release artefacts
 
-          GitHub also displays its automatic tag source links; the versioned
-          Defragmenter-${VERSION}.zip asset below is the project's tested source deliverable.
+          GitHub separately displays its automatic Source code (zip) and
+          Source code (tar.gz) links for the immutable release tag. No duplicate
+          custom source archive is uploaded.
           BODY
 
           gh release create "$TAG" \
             "Defragmenter-${VERSION}-amd64.deb" \
             "Defragmenter-${VERSION}-local-folder.run" \
-            "Defragmenter-${VERSION}.zip" \
             "RELEASE_SHA256SUMS.txt" \
             --verify-tag \
             --target "$EXPECTED_SHA" \
             --title "Defragmenter ${VERSION}" \
             --notes-file release-body.md
 
-          expected_assets=$(printf '%s\n%s\n%s\n%s\n' \
+          expected_assets=$(printf '%s\n%s\n%s\n' \
             "Defragmenter-${VERSION}-amd64.deb" \
             "Defragmenter-${VERSION}-local-folder.run" \
-            "Defragmenter-${VERSION}.zip" \
             "RELEASE_SHA256SUMS.txt" | sort)
           published_assets=$(gh release view "$TAG" --json assets --jq '.assets[].name' | sort)
           if [[ "$published_assets" != "$expected_assets" ]]; then

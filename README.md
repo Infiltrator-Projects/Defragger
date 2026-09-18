@@ -6,13 +6,13 @@
 
 Defragmenter is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-167
+**Current version:** 1.8.0-168
 
 **Platform:** Linux
 
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** The version 1.8.0-166 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
+> **Safety status:** The version 1.8.0-168 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
 
 ## Appearance
 
@@ -62,8 +62,9 @@ A numbered release publishes:
 | --- | --- |
 | `Defragmenter-<version>-amd64.deb` | Generic amd64 Debian package. |
 | `Defragmenter-<version>-local-folder.run` | Hardware-native local compile/install program. |
-| `Defragmenter-<version>.zip` | Tested source archive from the exact release commit. |
-| `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for published artifacts. |
+| `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for the two project release artifacts. |
+
+GitHub automatically provides its standard `Source code (zip)` and `Source code (tar.gz)` links for every release tag. Defragmenter does not upload a duplicate custom source archive.
 
 ## Repository and release policy
 
