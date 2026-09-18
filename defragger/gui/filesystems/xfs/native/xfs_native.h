@@ -7,6 +7,15 @@
 #include <stdint.h>
 
 #include <sqlite3.h>
+/*
+ * Native XFS v5 representation contract.
+ *
+ * XfsRange is half-open [start, end) in filesystem blocks. AG-relative block
+ * numbers remain AG-relative only where a structure explicitly says so;
+ * catalogue extents and plans use data-device block numbers. Hard traversal
+ * limits are defensive bounds against corrupt/adversarial metadata, not XFS
+ * format maxima.
+ */
 
 #define XFS_NATIVE_MAX_BTREE_LEVEL 16U
 #define XFS_NATIVE_MAX_BTREE_BLOCKS UINT64_C(8000000)
