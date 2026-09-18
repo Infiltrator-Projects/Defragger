@@ -204,12 +204,12 @@ def test_build_and_path_registry_install_native_workers() -> None:
 
 def test_infiltratr_common_integration() -> None:
     common = ROOT / "shared" / "infiltratr-common"
-    assert (common / "VERSION").read_text().strip() == "1.19.1"
+    assert (common / "VERSION").read_text().strip() == "1.19.2"
     gitmodules = (ROOT / ".gitmodules").read_text()
     assert "shared/infiltratr-common" in gitmodules
     assert "Infiltrator-Libraries.git" in gitmodules
     cmake = _cmake_source()
-    assert "f7674047a270422862ec8d459b5646a81fe1bfa2" in cmake
+    assert "44409af17c89b6ece6b4bcb2c0c133213c695c23" in cmake
     assert "add_subdirectory(" in cmake
     assert "InfiltratrCommon::Common" in cmake
     assert "set(INFILTRATR_COMMON_BUILD_TESTS OFF)" in cmake
@@ -217,8 +217,8 @@ def test_infiltratr_common_integration() -> None:
     assert '${INFILTRATR_COMMON_DIR}/src/core.c' not in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/posix.c' not in cmake
     local_installer = (ROOT / "packaging" / "build-local-run.sh").read_text()
-    assert 'COMMON_VERSION="1.19.1"' in local_installer
-    assert 'COMMON_COMMIT="f7674047a270422862ec8d459b5646a81fe1bfa2"' in local_installer
+    assert 'COMMON_VERSION="1.19.2"' in local_installer
+    assert 'COMMON_COMMIT="44409af17c89b6ece6b4bcb2c0c133213c695c23"' in local_installer
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
     assert "infiltratr_realpath_copy" in device
     assert "infiltratr_read_u64_file" in device
