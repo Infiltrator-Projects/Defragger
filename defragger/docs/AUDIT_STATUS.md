@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-18
 
 Applies to: release version 1.8.0-169
-Audited source commit: d37b197eeb6a11d05b182f6578a64274e7c7c350
+Audited source commit: 5ae632a7c4d8489167a399da48249355cf6b0014
 Audited release-governance commit: 0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -407,11 +407,12 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     the desktop launcher, main GTK window and LINK-standard About dialog all
     resolve that same icon identity. The superseded SVG is removed and
     regressions enforce both the installed PNG and explicit main-window icon
-    binding, and the binary icon carries the project-required GPL-3.0-or-later
-    sidecar licence declaration. This is presentation/packaging-only: no filesystem analyser,
+    binding. Project CI no longer imposes per-file SPDX/licence metadata or a
+    binary sidecar requirement. This is presentation/packaging-only: no filesystem analyser,
     planner, writer, transaction, recovery, target-safety or compatibility
     identifier semantics changed. Exact source baseline
-    `d37b197eeb6a11d05b182f6578a64274e7c7c350` contains the icon integration.
+    `5ae632a7c4d8489167a399da48249355cf6b0014` contains the icon integration and
+    removal of project licence-enforcement checks.
 
 ## Shared Common dependency
 
@@ -419,7 +420,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-169 audit extension is bound to Defragmenter source baseline
-`d37b197eeb6a11d05b182f6578a64274e7c7c350`. Release qualification rejects any later change beneath the
+`5ae632a7c4d8489167a399da48249355cf6b0014`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2`; changes beneath `.github/workflows`
