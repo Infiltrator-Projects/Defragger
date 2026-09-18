@@ -10,7 +10,7 @@ ARCH=${DEB_HOST_ARCH:-$(dpkg --print-architecture)}
 BUILD_FLAVOR=${LD_BUILD_FLAVOR:-generic}
 BUILD_TESTING=${LD_BUILD_TESTING:-ON}
 BUILD=${BUILD_DIR:-"$ROOT/build-deb-$BUILD_FLAVOR"}
-OUTPUT=${OUTPUT_PATH:-"$ROOT/linux-defragger_${PACKAGE_VERSION}_${ARCH}.deb"}
+OUTPUT=${OUTPUT_PATH:-"$ROOT/Defragmenter-${PACKAGE_VERSION}-${ARCH}.deb"}
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-deb.XXXXXX")
 trap 'rm -rf "$STAGE"' EXIT HUP INT TERM
 

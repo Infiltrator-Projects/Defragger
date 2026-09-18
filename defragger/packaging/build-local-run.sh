@@ -6,7 +6,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VERSION=$(tr -d '\r\n' <"$ROOT/VERSION")
 NATIVE_PACKAGE_VERSION="${VERSION}+native1"
-OUTPUT=${1:-"$ROOT/linux-defragger-${VERSION}-local-folder.run"}
+OUTPUT=${1:-"$ROOT/Defragmenter-${VERSION}-local-folder.run"}
 TEMPLATE="$ROOT/packaging/local-run-header.sh.in"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-run-build.XXXXXX")
 COMMON_DIR="$ROOT/shared/infiltratr-common"
