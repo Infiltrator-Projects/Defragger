@@ -3,6 +3,7 @@
 
 #include "ld_runtime.h"
 
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/posix_io.h"
 
 #include <com_err.h>
@@ -51,11 +52,10 @@ static int compare_range(const void *left, const void *right) {
 
 void ext_range_push(ExtRangeVec *vec, uint64_t start, uint64_t end) {
     if (end <= start) return;
-    if (vec->count == vec->capacity) {
-        size_t next = vec->capacity == 0 ? 32U : vec->capacity * 2U;
-        vec->items = ld_xrealloc(vec->items, next * sizeof(*vec->items));
-        vec->capacity = next;
-    }
+    if (vec->count == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&vec->items, &vec->capacity,
+                                  sizeof(*vec->items), vec->count + 1U, 32U))
+        ld_die("cannot grow EXT range vector");
     vec->items[vec->count++] = (ExtRange){.start = start, .end = end};
 }
 
