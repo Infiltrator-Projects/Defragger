@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "test_media.h"
 
+#include "infiltratr/core.h"
+
 #include <gtk/gtk.h>
 #include <signal.h>
 #include <stdint.h>
@@ -513,7 +515,9 @@ static void refresh_devices(LdtmApp *app) {
         char *transport;
         char *rm_text;
         char *ro_text;
-        unsigned long long bytes;
+        uint64_t bytes = 0U;
+        uint64_t removable_value = 0U;
+        uint64_t readonly_value = 0U;
         int removable;
         int readonly;
         gboolean system_disk;
@@ -531,9 +535,12 @@ static void refresh_devices(LdtmApp *app) {
         transport = pair_value(lines[index], "TRAN");
         rm_text = pair_value(lines[index], "RM");
         ro_text = pair_value(lines[index], "RO");
-        bytes = strtoull(size_text, NULL, 10);
-        removable = atoi(rm_text);
-        readonly = atoi(ro_text);
+        if (!infiltratr_parse_u64(size_text, 10U, &bytes) ||
+            !infiltratr_parse_u64_range(rm_text, 10U, 0U, 1U, &removable_value) ||
+            !infiltratr_parse_u64_range(ro_text, 10U, 0U, 1U, &readonly_value))
+            continue;
+        removable = (int)removable_value;
+        readonly = (int)readonly_value;
         system_disk = ldtm_is_system_disk(path) != 0;
         field_media = ldtm_transport_is_field_media(removable, transport) != 0;
         enough = bytes >= ldtm_required_capacity_bytes();
