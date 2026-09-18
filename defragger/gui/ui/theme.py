@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Runtime theme policy for Linux Defragger.
 
-Three explicit modes are supported:
-- system: keep GTK/Cinnamon colours and apply only Infiltrator typography;
-- day: force the light Infiltrator palette;
-- night: force the graphite/silver Infiltrator palette.
-
-The preference is per-user and shared by every Defragger window.
+Common owns semantic Day/Night palette values. This module owns only GTK
+selector mechanics, user preference persistence and the platform-authoritative
+Follow system mode.
 """
 
 from __future__ import annotations
@@ -21,6 +18,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
+
+from .theme_tokens import DAY, NIGHT
 
 _FONT = Path("/usr/share/fonts/truetype/linux-defragger/mb_corpo_s_regular.ttf")
 _CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "linux-defragger"
@@ -99,78 +98,84 @@ def _base_css(family: str) -> str:
 
 
 def _night_css() -> str:
-    return """
-    window, dialog, .background, .app-shell { background-color: #050608; color: #e8ecef; }
-    headerbar, .titlebar { background-image: none; background-color: #101318; color: #eef1f3; border-bottom: 1px solid #353a40; }
-    menubar, .app-menubar { background-color: #0d1014; border-bottom: 1px solid #353a40; }
-    menu { background-color: #101318; border: 1px solid #454b50; }
-    menuitem:hover { background-color: #2b3137; }
-    .app-title, .about-title, .summary-value { color: #eef1f3; }
-    .app-subtitle, .summary-title, .map-caption, .status-text { color: #899198; }
-    .section-title, .legend-item label, .log-expander { color: #aeb6bd; }
+    p = NIGHT
+    return f"""
+    window, dialog, .background, .app-shell {{ background-color: {p["background"]}; color: {p["text"]}; }}
+    headerbar, .titlebar {{ background-image: none; background-color: {p["panel"]}; color: {p["title"]}; border-bottom: 1px solid {p["border"]}; }}
+    menubar, .app-menubar {{ background-color: {p["surface"]}; border-bottom: 1px solid {p["border"]}; }}
+    menu {{ background-color: {p["panel"]}; border: 1px solid {p["border"]}; }}
+    menuitem:hover {{ background-color: {p["operation_hover"]}; }}
+    .app-title, .about-title, .summary-value {{ color: {p["title"]}; }}
+    .app-subtitle, .summary-title, .map-caption, .status-text {{ color: {p["subtle"]}; }}
+    .section-title, .legend-item label, .log-expander {{ color: {p["muted"]}; }}
     .version-badge, frame.section-panel > border, frame.map-panel > border,
-    frame.action-panel > border, frame.summary-card > border {
-        background-color: #0d1014; border: 1px solid #353a40;
-    }
-    button, combobox button, entry, spinbutton {
-        background-image: none; background-color: #171b20; color: #e8ecef;
-        border: 1px solid #5f666c; box-shadow: none;
-    }
-    button:hover { background-color: #22272d; border-color: #9da3a8; }
-    button:active, button:checked { background-color: #2b3137; border-color: #bec7cf; }
-    button:disabled { color: #59636c; border-color: #2a2e31; background-color: #0e1115; }
-    button.primary-action { background-color: #d7dde2; color: #111418; border-color: #eef1f3; }
-    button.primary-action:hover { background-color: #eef1f3; color: #111418; }
-    button.destructive-action { border-color: #8f5555; color: #d8c5c5; }
-    button.destructive-action:hover { background-color: #4a2525; border-color: #c36a6a; }
-    progressbar trough { background-color: #101318; border: 1px solid #353a40; }
-    progressbar progress { background-color: #bec7cf; }
-    textview, textview text, treeview, viewport, scrolledwindow {
-        background-color: #0e1115; color: #e8ecef; border-color: #353a40;
-    }
-    textview.log-view, textview.log-view text { background-color: #090b0d; color: #d9dde0; }
-    entry selection, textview text selection, treeview.view:selected { background-color: #2b3137; color: #eef1f3; }
-    .status-strip { background-color: #0d1014; border-top: 1px solid #353a40; }
-    scrollbar slider { background-color: #555d63; }
-    tooltip { background-color: #171b20; color: #eef1f3; border: 1px solid #5d646a; }
+    frame.action-panel > border, frame.summary-card > border {{
+        background-color: {p["surface"]}; border: 1px solid {p["border"]};
+    }}
+    button, combobox button, entry, spinbutton {{
+        background-image: none; background-color: {p["card"]}; color: {p["text"]};
+        border: 1px solid {p["neutral_accent"]}; box-shadow: none;
+    }}
+    button:hover {{ background-color: {p["card_hover"]}; border-color: {p["neutral_accent"]}; }}
+    button:active, button:checked {{ background-color: {p["selection_background"]}; border-color: {p["neutral_accent"]}; }}
+    button:disabled {{ color: {p["subtle"]}; border-color: {p["border"]}; background-color: {p["input"]}; }}
+    button.primary-action {{ background-color: {p["button_background"]}; color: {p["button_foreground"]}; border-color: {p["button_background"]}; }}
+    button.primary-action:hover {{ background-color: {p["equals_hover"]}; color: {p["button_foreground"]}; }}
+    button.destructive-action {{ border-color: {p["fault"]}; color: {p["fault"]}; }}
+    button.destructive-action:hover {{ background-color: {p["surface_hover"]}; border-color: {p["fault"]}; }}
+    progressbar trough {{ background-color: {p["panel"]}; border: 1px solid {p["border"]}; }}
+    progressbar progress {{ background-color: {p["neutral_accent"]}; }}
+    textview, textview text, treeview, viewport, scrolledwindow {{
+        background-color: {p["input"]}; color: {p["text"]}; border-color: {p["border"]};
+    }}
+    textview.log-view, textview.log-view text {{ background-color: {p["background"]}; color: {p["text"]}; }}
+    entry selection, textview text selection, treeview.view:selected {{
+        background-color: {p["selection_background"]}; color: {p["selection_foreground"]};
+    }}
+    .status-strip {{ background-color: {p["surface"]}; border-top: 1px solid {p["border"]}; }}
+    scrollbar slider {{ background-color: {p["neutral_accent"]}; }}
+    tooltip {{ background-color: {p["card"]}; color: {p["title"]}; border: 1px solid {p["border"]}; }}
     """
 
 
 def _day_css() -> str:
-    return """
-    window, dialog, .background, .app-shell { background-color: #f4f5f7; color: #20252b; }
-    headerbar, .titlebar { background-image: none; background-color: #ffffff; color: #111418; border-bottom: 1px solid #c7cdd3; }
-    menubar, .app-menubar { background-color: #ffffff; border-bottom: 1px solid #c7cdd3; }
-    menu { background-color: #ffffff; border: 1px solid #c7cdd3; }
-    menuitem:hover { background-color: #eceff2; }
-    .app-title, .about-title, .summary-value { color: #111418; }
-    .app-subtitle, .summary-title, .map-caption, .status-text { color: #737d86; }
-    .section-title, .legend-item label, .log-expander { color: #59636c; }
+    p = DAY
+    return f"""
+    window, dialog, .background, .app-shell {{ background-color: {p["background"]}; color: {p["text"]}; }}
+    headerbar, .titlebar {{ background-image: none; background-color: {p["panel"]}; color: {p["title"]}; border-bottom: 1px solid {p["border"]}; }}
+    menubar, .app-menubar {{ background-color: {p["panel"]}; border-bottom: 1px solid {p["border"]}; }}
+    menu {{ background-color: {p["panel"]}; border: 1px solid {p["border"]}; }}
+    menuitem:hover {{ background-color: {p["surface"]}; }}
+    .app-title, .about-title, .summary-value {{ color: {p["title"]}; }}
+    .app-subtitle, .summary-title, .map-caption, .status-text {{ color: {p["subtle"]}; }}
+    .section-title, .legend-item label, .log-expander {{ color: {p["muted"]}; }}
     .version-badge, frame.section-panel > border, frame.map-panel > border,
-    frame.action-panel > border, frame.summary-card > border {
-        background-color: #ffffff; border: 1px solid #c7cdd3;
-    }
-    button, combobox button, entry, spinbutton {
-        background-image: none; background-color: #f8f9fa; color: #20252b;
-        border: 1px solid #aeb6bd; box-shadow: none;
-    }
-    button:hover { background-color: #eceff2; border-color: #6f7881; }
-    button:active, button:checked { background-color: #dde2e7; border-color: #6f7881; }
-    button:disabled { color: #9aa2a9; border-color: #d8dde2; background-color: #f4f5f7; }
-    button.primary-action { background-color: #20252b; color: #ffffff; border-color: #20252b; }
-    button.primary-action:hover { background-color: #343b42; color: #ffffff; }
-    button.destructive-action { border-color: #b54848; color: #8f3636; }
-    button.destructive-action:hover { background-color: #f7e5e5; border-color: #b54848; }
-    progressbar trough { background-color: #eceff2; border: 1px solid #c7cdd3; }
-    progressbar progress { background-color: #6f7881; }
-    textview, textview text, treeview, viewport, scrolledwindow {
-        background-color: #ffffff; color: #20252b; border-color: #c7cdd3;
-    }
-    textview.log-view, textview.log-view text { background-color: #ffffff; color: #20252b; }
-    entry selection, textview text selection, treeview.view:selected { background-color: #dde2e7; color: #111418; }
-    .status-strip { background-color: #ffffff; border-top: 1px solid #c7cdd3; }
-    scrollbar slider { background-color: #aeb6bd; }
-    tooltip { background-color: #ffffff; color: #20252b; border: 1px solid #aeb6bd; }
+    frame.action-panel > border, frame.summary-card > border {{
+        background-color: {p["panel"]}; border: 1px solid {p["border"]};
+    }}
+    button, combobox button, entry, spinbutton {{
+        background-image: none; background-color: {p["card"]}; color: {p["text"]};
+        border: 1px solid {p["neutral_accent"]}; box-shadow: none;
+    }}
+    button:hover {{ background-color: {p["card_hover"]}; border-color: {p["neutral_accent"]}; }}
+    button:active, button:checked {{ background-color: {p["selection_background"]}; border-color: {p["neutral_accent"]}; }}
+    button:disabled {{ color: {p["subtle"]}; border-color: {p["border"]}; background-color: {p["background"]}; }}
+    button.primary-action {{ background-color: {p["button_background"]}; color: {p["button_foreground"]}; border-color: {p["button_background"]}; }}
+    button.primary-action:hover {{ background-color: {p["equals_hover"]}; color: {p["button_foreground"]}; }}
+    button.destructive-action {{ border-color: {p["fault"]}; color: {p["fault"]}; }}
+    button.destructive-action:hover {{ background-color: {p["surface_hover"]}; border-color: {p["fault"]}; }}
+    progressbar trough {{ background-color: {p["surface"]}; border: 1px solid {p["border"]}; }}
+    progressbar progress {{ background-color: {p["neutral_accent"]}; }}
+    textview, textview text, treeview, viewport, scrolledwindow {{
+        background-color: {p["panel"]}; color: {p["text"]}; border-color: {p["border"]};
+    }}
+    textview.log-view, textview.log-view text {{ background-color: {p["panel"]}; color: {p["text"]}; }}
+    entry selection, textview text selection, treeview.view:selected {{
+        background-color: {p["selection_background"]}; color: {p["selection_foreground"]};
+    }}
+    .status-strip {{ background-color: {p["panel"]}; border-top: 1px solid {p["border"]}; }}
+    scrollbar slider {{ background-color: {p["neutral_accent"]}; }}
+    tooltip {{ background-color: {p["panel"]}; color: {p["text"]}; border: 1px solid {p["border"]}; }}
     """
 
 
