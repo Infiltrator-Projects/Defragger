@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-159
-Audited source commit: fa1b5537292e27fa0f6bd519f6fa3d0921496223
+Applies to: release version 1.8.0-160
+Audited source commit: bab7b42bf057ef3e08e39748425a70d8f5eae20f
 Audited release-governance commit: 0e6deda16fbf01a882bed0e45ee33df2622e87eb
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -109,18 +109,14 @@ Recover.
     changed by presentation work. The exact source baseline passed the native/
     filesystem/GUI suite and sanitizer tests before this audit extension was
     advanced.
-17. The installed desktop launchers now use absolute `/usr/bin` targets and the
-    package refreshes desktop and icon caches after installation. Linux Defragger
-    now owns a GUI-first release updater instead of relying on the distribution
-    Update Manager to discover GitHub-only releases. The updater selects the
-    generic Debian or local native asset to preserve the installed build profile,
-    verifies the published SHA-256 manifest plus GitHub asset digests when
-    available, and invokes the verified installer through the graphical polkit
-    authentication path without a shell. Offline automatic checks fail open to
-    the installed application, and a manual Check for Updates desktop action is
-    provided. Dedicated updater regressions, the complete native/filesystem/GUI
-    suite and the sanitizer lane passed on the exact source baseline before this
-    audit extension was advanced.
+17. Linux Defragger is again strictly package-manager updated. The application
+    launcher now starts the installed GTK program directly, the private GitHub
+    release downloader/pkexec installer and manual Check for Updates desktop
+    action have been removed, and the Debian package remains the sole installed
+    update unit. New releases are published into the configured Infiltrator APT
+    repository and are discovered and installed by the normal distribution
+    Update Manager. A regression test now fails if an application-owned updater
+    is reintroduced into the packaged launcher, desktop entry or install set.
 18. The MB theme received a second presentation-only polish pass for both GTK
     front ends. Disabled primary controls no longer render as bright active
     controls, the operation log styles the actual TextView text surface instead
