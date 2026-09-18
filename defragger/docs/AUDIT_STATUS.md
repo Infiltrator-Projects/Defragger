@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-169
-Audited source commit: 5ae632a7c4d8489167a399da48249355cf6b0014
+Applies to: release version 1.8.0-170
+Audited source commit: 7b041922a1d0097e1c29f67dc1554ff209f19bf0
 Audited release-governance commit: 0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -414,13 +414,25 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     `5ae632a7c4d8489167a399da48249355cf6b0014` contains the icon integration and
     removal of project licence-enforcement checks.
 
+43. Defragmenter 1.8.0-170 corrects the Linux icon integration using the exact
+    user-supplied black/electric-blue artwork rather than a substituted render.
+    Packaging now installs that PNG in the 256x256 hicolor application slot,
+    the desktop launcher and main GTK window retain the established icon name,
+    and the About dialog loads the packaged PNG directly at 96 px before using
+    the icon-theme fallback. The application also publishes the same icon name
+    as GTK's default window icon. Regression tests enforce the packaged path,
+    direct About-dialog load and application/window bindings. No filesystem
+    analyser, planner, writer, transaction, recovery or target-safety semantics
+    changed. Exact source baseline
+    `7b041922a1d0097e1c29f67dc1554ff209f19bf0` contains the correction.
+
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-169 audit extension is bound to Defragmenter source baseline
-`5ae632a7c4d8489167a399da48249355cf6b0014`. Release qualification rejects any later change beneath the
+The current 1.8.0-170 audit extension is bound to Defragmenter source baseline
+`7b041922a1d0097e1c29f67dc1554ff209f19bf0`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2`; changes beneath `.github/workflows`
@@ -457,7 +469,7 @@ refresh workflow for that exact release SHA, and the same exact version/SHA can
 be supplied to its manual dispatch path if central publication needs to be
 retried.
 
-Version 1.8.0-169 is explicitly authorized for release on 2026-09-18. Any later
+Version 1.8.0-170 is explicitly authorized for release on 2026-09-18. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
