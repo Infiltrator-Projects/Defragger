@@ -120,7 +120,7 @@ FINAL_VERSION=$(dpkg-query -W -f='${Version}' linux-defragger 2>/dev/null || tru
 
 printf '\nLinux Defragger %s is installed.\n' "$FINAL_VERSION"
 printf '%s\n' 'The native package replaced the generic package in Debian package management.'
-printf '%s\n' 'Future releases are detected by Linux Defragger itself and preserve the native build profile.'
+printf '%s\n' 'Future releases are delivered through the configured Infiltrator APT repository and the normal system updater.'
 exit 0
 
 __LINUX_DEFRAGGER_PAYLOAD_BELOW__

@@ -11,7 +11,7 @@ if(BUILD_TESTING)
         COMMAND "${LD_PYTHON3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_gui_services.py")
     add_test(
-        NAME linux-defragger-gui-update-service
+        NAME linux-defragger-system-update-contract
         COMMAND "${LD_PYTHON3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_update_service.py")
     add_test(
@@ -34,7 +34,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         linux-defragger-gui-models
         linux-defragger-gui-services
-        linux-defragger-gui-update-service
+        linux-defragger-system-update-contract
         linux-defragger-gui-volume-identity
         linux-defragger-gui-ext-display-identity
         linux-defragger-gui-ntfs-live-reset

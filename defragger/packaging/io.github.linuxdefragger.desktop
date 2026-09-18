@@ -10,8 +10,3 @@ Terminal=false
 Categories=System;Utility;Filesystem;
 Keywords=defrag;defragment;growth;optimise;filesystem;disk;fat;allocation;
 StartupNotify=true
-Actions=CheckUpdates;
-
-[Desktop Action CheckUpdates]
-Name=Check for Updates
-Exec=/usr/bin/linux-defragger --check-updates
