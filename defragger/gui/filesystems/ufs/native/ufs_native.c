@@ -2,6 +2,7 @@
 #include "ufs_native.h"
 
 #include "ld_io.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/endian.h"
 
 #include <errno.h>
@@ -141,16 +142,21 @@ static void decode_ufs2_allocation(const uint8_t *window, size_t length,
         fragments_per_block == 0U || fragments_per_block > 8U ||
         fragment_size > UINT32_MAX / fragments_per_block ||
         fragment_size * fragments_per_block != block_size ||
-        data_fragments == 0U || filesystem_fragments < data_fragments ||
-        free_blocks > UINT64_MAX / fragments_per_block)
+        data_fragments == 0U || filesystem_fragments < data_fragments)
         return;
 
-    const uint64_t free_data_fragments =
-        free_blocks * fragments_per_block + free_fragments;
-    if (free_data_fragments < free_fragments ||
+    uint64_t free_block_fragments = 0U;
+    uint64_t free_data_fragments = 0U;
+    uint64_t data_bytes = 0U;
+    if (!infiltratr_u64_multiply_checked(free_blocks, fragments_per_block,
+                                         &free_block_fragments) ||
+        !infiltratr_u64_add_checked(free_block_fragments, free_fragments,
+                                    &free_data_fragments) ||
         free_data_fragments > data_fragments ||
-        data_fragments > UINT64_MAX / fragment_size)
+        !infiltratr_u64_multiply_checked(data_fragments, fragment_size,
+                                         &data_bytes))
         return;
+    (void)data_bytes;
 
     summary->allocation_totals_known = true;
     summary->block_size = block_size;
@@ -399,13 +405,15 @@ int ufs_analyse_allocation(const char *path, LdUfsAnalysis *analysis,
         }
         const uint64_t cg_fragment =
             group_base + summary->cylinder_block_fragment;
-        if (cg_fragment > UINT64_MAX / summary->fragment_size) {
+        uint64_t cg_offset = 0U;
+        if (!infiltratr_u64_multiply_checked(cg_fragment,
+                                             summary->fragment_size,
+                                             &cg_offset)) {
             free(cg);
             (void)close(fd);
             ufs_error(error, error_size, "UFS2 cylinder group offset overflows");
             return -1;
         }
-        const uint64_t cg_offset = cg_fragment * summary->fragment_size;
         if (cg_offset > physical ||
             summary->cylinder_group_size > physical - cg_offset ||
             read_exact_at(fd, cg, summary->cylinder_group_size, cg_offset,
