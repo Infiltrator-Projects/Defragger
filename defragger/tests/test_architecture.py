@@ -225,6 +225,8 @@ def test_infiltratr_common_integration() -> None:
     assert "infiltratr_string_starts_with" in device
     fat = (GUI / "filesystems" / "fat" / "native" / "writer.c").read_text()
     assert "infiltratr_parse_u64_range" in fat
+    assert "infiltratr_parse_binary_quantity_u64" in fat
+    assert "strtoull(" not in fat
     fat_journal = (GUI / "filesystems" / "fat" / "native" / "fat_journal.c").read_text()
     assert "infiltratr_parse_u64" in fat_journal
     assert "infiltratr_parse_u64_range" in fat_journal
@@ -265,6 +267,12 @@ def test_infiltratr_common_integration() -> None:
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
         assert "infiltratr_parse_u64" in source
         assert "infiltratr_trim_line_end" in source
+    exfat = (GUI / "filesystems" / "exfat" / "native" / "exfat_worker.c").read_text()
+    assert "infiltratr_parse_binary_quantity_u64" in exfat
+    assert "strtoull(" not in exfat
+    sfs_native = (GUI / "filesystems" / "sfs" / "native" / "sfs_native.c").read_text()
+    assert "infiltratr_array_reserve" in sfs_native
+    assert "realloc(" not in sfs_native
     for filesystem, worker in (("affs", "affs_worker.c"), ("sfs", "sfs_worker.c"),
                                ("hfsplus", "hfsplus_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
