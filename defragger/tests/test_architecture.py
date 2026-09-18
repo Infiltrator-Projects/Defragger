@@ -603,6 +603,40 @@ def test_version_and_registry_are_dynamic() -> None:
     assert len(launcher_lines) < 20
 
 
+def test_user_facing_branding_is_defragmenter() -> None:
+    repository_identifier = "Infiltrator-Projects/Defragger"
+    user_facing = (
+        ROOT.parent / "README.md",
+        ROOT / "README.md",
+        ROOT / "docs" / "DESIGN.md",
+        ROOT / "docs" / "AUDIT_STATUS.md",
+        GUI / "allocation_mapper.py",
+        GUI / "privileged_helper.py",
+        GUI / "backends" / "registry.py",
+        GUI / "ui" / "window.py",
+        GUI / "ui" / "window_view.py",
+        GUI / "ui" / "operation_planner.py",
+    )
+    for candidate in user_facing:
+        source = candidate.read_text().replace(repository_identifier, "")
+        assert "Linux Defragger" not in source, (
+            f"{candidate.relative_to(ROOT.parent)} retained the retired product name"
+        )
+        assert re.search(r"\bDefragger\b", source) is None, (
+            f"{candidate.relative_to(ROOT.parent)} retained standalone Defragger branding"
+        )
+
+    desktop = (ROOT / "packaging" / "io.github.linuxdefragger.desktop").read_text()
+    assert "Name=Defragmenter" in desktop
+
+    source_builder = (ROOT / "packaging" / "build-source-zip.sh").read_text()
+    release_workflow = (ROOT.parent / ".github" / "workflows" / "release.yml").read_text()
+    assert 'ARCHIVE_BASENAME="Defragmenter-${VERSION}"' in source_builder
+    assert "Defragmenter-${VERSION}.zip" in release_workflow
+    assert "Defragger-${VERSION}.zip" not in source_builder
+    assert "Defragger-${VERSION}.zip" not in release_workflow
+
+
 def test_test_media_companion_is_all_c() -> None:
     source_dir = ROOT / "test_media"
     assert source_dir.is_dir()
@@ -656,6 +690,7 @@ def main() -> None:
     test_core_remains_filesystem_neutral()
     test_production_write_safety_is_enforced_at_every_boundary()
     test_test_media_companion_is_all_c()
+    test_user_facing_branding_is_defragmenter()
     test_version_and_registry_are_dynamic()
     print("current C-first single-plugin architecture tests passed")
 
