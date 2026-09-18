@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Reusable administrator-session transport for Linux Defragger.
+"""Reusable administrator-session transport for Defragmenter.
 
 This module owns ``pkexec``, the privileged-helper process and its JSON
 protocol.  It knows nothing about GTK widgets or ordinary subprocesses.

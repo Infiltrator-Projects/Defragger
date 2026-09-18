@@ -105,7 +105,7 @@ def main() -> None:
         "EXPECTED_SHA",
         "origin/main",
         "packaging/build-source-zip.sh",
-        'Defragger-${VERSION}.zip',
+        'Defragmenter-${VERSION}.zip',
         "RELEASE_SHA256SUMS.txt",
         "Status: **complete**",
         'Applies to: release version ${VERSION}',

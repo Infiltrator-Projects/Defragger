@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Thin GUI adapter for the authoritative native C EXT2/3/4 engine.
 

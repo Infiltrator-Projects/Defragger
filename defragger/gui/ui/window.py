@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Compose the GTK view, volume model, command runner and worker events.
 
@@ -24,7 +24,7 @@ try:
     from gi.repository import Gdk, GLib, Gtk
 except (ImportError, ValueError) as exc:
     print(
-        "Linux Defragger requires GTK 3 Python bindings.\n"
+        "Defragmenter requires GTK 3 Python bindings.\n"
         "Install them on Linux Mint with:\n"
         "  sudo apt install python3-gi python3-cairo gir1.2-gtk-3.0",
         file=sys.stderr,

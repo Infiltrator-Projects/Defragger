@@ -66,7 +66,7 @@ static int mark_system_inode(ext2_filsys fs, ext2_ino_t ino,
 static int build_metadata_bitmap(ext2_filsys fs, ext2fs_block_bitmap *metadata)
 {
     errcode_t code = ext2fs_allocate_block_bitmap(
-        fs, "Linux Defragger EXT metadata map", metadata);
+        fs, "Defragmenter EXT metadata map", metadata);
     if (code != 0)
         return (int)code;
 

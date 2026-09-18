@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Thin GUI adapter for native C APFS container identification and geometry.
 

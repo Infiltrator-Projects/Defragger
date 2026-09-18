@@ -118,16 +118,16 @@ jobs:
           VERSION=$(tr -d '\r\n' < VERSION)
           ./packaging/build-deb.sh
           ./packaging/build-local-run.sh "linux-defragger-${VERSION}-local-folder.run"
-          ./packaging/build-source-zip.sh "$PWD/Defragger-${VERSION}.zip"
+          ./packaging/build-source-zip.sh "$PWD/Defragmenter-${VERSION}.zip"
           test -f "linux-defragger_${VERSION}_amd64.deb"
           test -f "linux-defragger-${VERSION}-local-folder.run"
-          test -f "Defragger-${VERSION}.zip"
+          test -f "Defragmenter-${VERSION}.zip"
           ./tests/test_local_installer_end_to_end.sh \
             "./linux-defragger-${VERSION}-local-folder.run"
           sha256sum \
             "linux-defragger_${VERSION}_amd64.deb" \
             "linux-defragger-${VERSION}-local-folder.run" \
-            "Defragger-${VERSION}.zip" > RELEASE_SHA256SUMS.txt
+            "Defragmenter-${VERSION}.zip" > RELEASE_SHA256SUMS.txt
 
       - name: Publish immutable versioned release
         shell: bash
@@ -172,13 +172,13 @@ jobs:
           - SHA-256 manifest for all release artefacts
 
           GitHub also displays its automatic tag source links; the versioned
-          Defragger-${VERSION}.zip asset below is the project's tested source deliverable.
+          Defragmenter-${VERSION}.zip asset below is the project's tested source deliverable.
           BODY
 
           gh release create "$TAG" \
             "linux-defragger_${VERSION}_amd64.deb" \
             "linux-defragger-${VERSION}-local-folder.run" \
-            "Defragger-${VERSION}.zip" \
+            "Defragmenter-${VERSION}.zip" \
             "RELEASE_SHA256SUMS.txt" \
             --verify-tag \
             --target "$EXPECTED_SHA" \
@@ -188,7 +188,7 @@ jobs:
           expected_assets=$(printf '%s\n%s\n%s\n%s\n' \
             "linux-defragger_${VERSION}_amd64.deb" \
             "linux-defragger-${VERSION}-local-folder.run" \
-            "Defragger-${VERSION}.zip" \
+            "Defragmenter-${VERSION}.zip" \
             "RELEASE_SHA256SUMS.txt" | sort)
           published_assets=$(gh release view "$TAG" --json assets --jq '.assets[].name' | sort)
           if [[ "$published_assets" != "$expected_assets" ]]; then

@@ -6,7 +6,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VERSION=$(tr -d '\r\n' <"$ROOT/VERSION")
 PARENT=$(dirname -- "$ROOT")
-ARCHIVE_BASENAME="Defragger-${VERSION}"
+ARCHIVE_BASENAME="Defragmenter-${VERSION}"
 OUTPUT=${1:-"$PARENT/${ARCHIVE_BASENAME}.zip"}
 
 command -v zip >/dev/null 2>&1 || {

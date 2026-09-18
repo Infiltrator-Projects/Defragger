@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * Linux Defragger - classic Macintosh HFS read-only analyser
+ * Defragmenter - classic Macintosh HFS read-only analyser
  * Author: Shannon Smith
  *
  * This first-party analyser reads the HFS Master Directory Block, Extents

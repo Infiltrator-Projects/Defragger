@@ -86,9 +86,9 @@ Each numbered release uses three project deliverables:
 |---|---|
 | `linux-defragger_${VERSION}_amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
 | `linux-defragger-${VERSION}-local-folder.run` | Hardware-optimised local compile-and-install program (`-march=native -mtune=native`). |
-| `Defragger-${VERSION}.zip` | Clean source archive built and tested from the exact release commit. |
+| `Defragmenter-${VERSION}.zip` | Clean source archive built and tested from the exact release commit. |
 
-Release publication is gated: the release workflow only publishes the requested version after the reusable project quality gate succeeds. GitHub's automatic tag source links may also be displayed, but `Defragger-${VERSION}.zip` is the project's verified source deliverable.
+Release publication is gated: the release workflow only publishes the requested version after the reusable project quality gate succeeds. GitHub's automatic tag source links may also be displayed, but `Defragmenter-${VERSION}.zip` is the project's verified source deliverable.
 
 ## Engineering documentation
 

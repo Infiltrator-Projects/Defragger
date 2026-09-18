@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Generate the Defragger Python theme adapter from pinned Infiltratr Common.
+"""Generate the Defragmenter Python theme adapter from pinned Infiltratr Common.
 
-Common is the palette source of truth. Defragger owns GTK selectors and
+Common is the palette source of truth. Defragmenter owns GTK selectors and
 storage-tool-specific presentation states only.
 """
 from __future__ import annotations
@@ -52,7 +52,7 @@ def main() -> int:
     if args.check:
         if actual != desired:
             raise SystemExit(
-                "Defragger theme tokens are stale; run tools/update-theme-tokens.py"
+                "Defragmenter theme tokens are stale; run tools/update-theme-tokens.py"
             )
         return 0
     OUTPUT.write_text(desired, encoding="utf-8")

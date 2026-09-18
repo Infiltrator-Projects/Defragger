@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Read-only backend discovery and allocation-map dispatch.
 
@@ -23,7 +23,7 @@ from version import VERSION  # noqa: E402
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Read-only Linux Defragger filesystem plugin dispatcher"
+        description="Read-only Defragmenter filesystem plugin dispatcher"
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("path", nargs="?")

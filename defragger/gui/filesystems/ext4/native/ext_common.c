@@ -295,7 +295,7 @@ int ext_validate_writer_support(ext2_filsys fs, const ExtGeometry *geometry,
     }
     if (geometry->physical_blocks > geometry->total_blocks + 255U) {
         ext_set_error(error,
-            "EXT active filesystem does not span the target; Linux Defragger no longer shells out to resize tools and will not resize it implicitly");
+            "EXT active filesystem does not span the target; Defragmenter no longer shells out to resize tools and will not resize it implicitly");
         return -1;
     }
     return ext_validate_metadata(fs, true, error);

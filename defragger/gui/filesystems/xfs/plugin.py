@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Thin GUI adapter for the authoritative native C XFS engine.
 
@@ -48,7 +48,7 @@ INFO = BackendInfo(
             "defrag",
             "xfs-native",
             warning=(
-                "XFS writing uses Linux Defragger's offline native C raw engine. "
+                "XFS writing uses Defragmenter's offline native C raw engine. "
                 "No XFS kernel driver, mount, filesystem ioctl or external repair tool is used."
             ),
         ),

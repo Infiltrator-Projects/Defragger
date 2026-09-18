@@ -124,7 +124,7 @@ Filesystem-neutral Defragmenter mechanics are implemented once:
 - generated version ownership.
 
 Generic C primitives that are also useful to other Infiltrator applications are
-not reimplemented here. Linux Defragger pins Infiltratr Common 1.19.2 at
+not reimplemented here. Defragmenter pins Infiltratr Common 1.19.2 at
 exact commit `44409af17c89b6ece6b4bcb2c0c133213c695c23` and links the canonical
 `InfiltratrCommon::Common` CMake target. Common owns strict integer parsing and
 range validation, bounded strings, line-end trimming, checked and saturating
@@ -198,7 +198,7 @@ authoritative filesystem change.
 ## Direct writer rule
 
 A write-capable plugin opens the unmounted target directly. It may link system-provided
-userspace libraries in-process, but Linux Defragger does not vendor third-party source.
+userspace libraries in-process, but Defragmenter does not vendor third-party source.
 A writer may not mount the target, call a mounted-filesystem relocation interface,
 or launch an external filesystem mutation/repair program. The plugin owns allocation planning, metadata updates,
 checksums, staging, verification, commit and recovery. A production architecture
@@ -260,7 +260,7 @@ invariants.
 
 ## Licensing invariant
 
-All first-party Linux Defragger implementation code, GUI glue, build/packaging logic, tests and project documentation use `SPDX-License-Identifier: GPL-3.0-or-later`. The exact comment syntax follows the file format. Non-commentable first-party artefacts use an adjacent `.license` sidecar. `tests/test_spdx_licensing.py` enforces this rule. The repository contains no vendored third-party source; system-provided build/runtime libraries retain their own licence terms.
+All first-party Defragmenter implementation code, GUI glue, build/packaging logic, tests and project documentation use `SPDX-License-Identifier: GPL-3.0-or-later`. The exact comment syntax follows the file format. Non-commentable first-party artefacts use an adjacent `.license` sidecar. `tests/test_spdx_licensing.py` enforces this rule. The repository contains no vendored third-party source; system-provided build/runtime libraries retain their own licence terms.
 
 ## Validation and evidence
 

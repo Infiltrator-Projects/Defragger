@@ -130,7 +130,7 @@ endif()
 # durable file publication/removal. Consume its authoritative package target
 # so every source dependency and transitive platform library remains defined by
 # Common itself. Application-specific device safety, staging, Stop and
-# filesystem transaction mechanics remain local to Defragger.
+# filesystem transaction mechanics remain local to Defragmenter.
 set(INFILTRATR_COMMON_BUILD_TESTS OFF)
 set(INFILTRATR_COMMON_BUILD_SHARED OFF)
 set(INFILTRATR_COMMON_WARNINGS_AS_ERRORS "${LD_ENABLE_WERROR}")

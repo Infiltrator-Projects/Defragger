@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * Linux Defragger engine
+ * Defragmenter engine
  * Author: Shannon Smith
  *
  * Implements FAT12, FAT16 and FAT32 analysis and canonical packed defragmentation,

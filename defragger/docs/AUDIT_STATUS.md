@@ -149,7 +149,7 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     integrated. The functional allocation map itself remains unchanged: its
     colour contract, dimensions, geometry and data semantics are untouched.
 19. The main About surface now consumes the same LINK-style `AboutInfo` contract
-    used by the MBLINK/InfiltratorFS family instead of maintaining a Defragger-
+    used by the MBLINK/InfiltratorFS family instead of maintaining a Defragmenter-
     specific hand-built metadata grid. It renders through native `GtkAboutDialog`
     with the shared `link-about-dialog` style hook, 96 px product emblem,
     standardized subtitle/description/authors/website/licence handling and the
@@ -252,7 +252,7 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
 29. The shared dependency is advanced again to immutable Infiltratr Common 1.18.1
     at commit `dcfa6fee9e9263a0dce5c137054d4adf130c2f25`. Common 1.18.1 is a source-licence-hygiene patch;
     its runtime behaviour and public ABI are unchanged from 1.18.0. The exact
-    Defragger migration tree at `ddca104d5464c56ed44aef699e1a4d883e17e7a3` built warnings-as-errors,
+    Defragmenter migration tree at `ddca104d5464c56ed44aef699e1a4d883e17e7a3` built warnings-as-errors,
     passed all 33 hosted native/filesystem/GUI tests, and passed the hosted
     ASan/UBSan lane. Its only initial quality-gate failure was the intentional
     stale-audit-baseline guard, which this extension advances.
@@ -268,7 +268,7 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     contract: Follow system, Day and Night. Follow system deliberately leaves
     GTK/Mint colours authoritative while preserving Infiltrator typography;
     Day and Night apply scoped light and graphite/silver palettes. The selected
-    mode is persisted per user and synchronised across every open Defragger
+    mode is persisted per user and synchronised across every open Defragmenter
     window. This is a presentation-only change: filesystem engines, allocation
     maps, operation planning, raw-device safety, journals and recovery semantics
     are unchanged. Exact production tree
@@ -278,7 +278,7 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     this extension advances.
 32. Theme palette ownership is now centralised in Infiltratr Common 1.19.2
     at exact commit `44409af17c89b6ece6b4bcb2c0c133213c695c23`.
-    Defragger's Python GTK layer retains only toolkit selectors and preference
+    Defragmenter's Python GTK layer retains only toolkit selectors and preference
     mechanics; its generated Day/Night token module is regression-checked
     directly against Common's canonical design JSON. No filesystem-specific
     analyser, planner, writer, journal, recovery or allocation-map semantics
@@ -287,28 +287,28 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     passed all 33 hosted native/filesystem/GUI tests, and passed the hosted
     ASan/UBSan lane. The only quality-gate failure was the expected stale-audit
     guard before this baseline advance.
-33. Common 1.19.2 now owns more of Defragger's generic mechanics without
+33. Common 1.19.2 now owns more of Defragmenter's generic mechanics without
     absorbing filesystem policy. FAT relocation vectors and EXT range/block
     vectors use Common's checked geometric allocator; FAT journal basename
     handling uses Common's POSIX lexical helper; EXT, NTFS, exFAT and XFS
     mutation-option numbers use Common's strict whole-string parser instead of
     `atoi()`; and FAT, Minix, SFS and UFS size calculations use Common checked
     allocation arithmetic. Filesystem geometry, placement, transaction,
-    recovery and error-policy decisions remain Defragger-owned. Exact source
+    recovery and error-policy decisions remain Defragmenter-owned. Exact source
     tree `0169036334b90312462b72ec65794a176134e3c6` built all first-party C with warnings as errors,
     passed the complete 33-test native/filesystem/GUI/release suite, and passed
     the hosted ASan/UBSan lane. Its remaining quality-gate failure was solely
     the expected stale-audit-baseline invariant that this extension advances.
-34. The final Common 1.19.2 consolidation keeps Defragger policy local while
+34. The final Common 1.19.2 consolidation keeps Defragmenter policy local while
     removing the remaining generic duplication. EXT planner vectors now use
-    Common checked geometric growth; all write workers share one Defragger
+    Common checked geometric growth; all write workers share one Defragmenter
     @@RESULT adapter backed by Common JSON escaping; Btrfs, NTFS, exFAT and XFS
     use Common percentage calculation; NTFS, swap, UFS, XFS and core path
     arithmetic use Common checked operations; superseded local realloc and
     atomic-temp/fsync helpers are removed; and Test Media now consumes Common
     parsing, trimming, basename/realpath, endian, exact-I/O and array-growth
     primitives. Filesystem geometry, relocation, transaction, recovery and
-    destructive-target policy remain Defragger-owned. Exact source tree
+    destructive-target policy remain Defragmenter-owned. Exact source tree
     `b999eb48a57456f34e3ce5ecb366bffc287b0276` built all first-party C with warnings as errors,
     passed all 33 native/filesystem/GUI/release tests, and passed the hosted
     ASan/UBSan lane. Its only remaining quality-gate failure was the intentional
@@ -357,7 +357,7 @@ exact sequential/positioned I/O, atomic recovery-state publication and durable
 recovery-state removal into Common. Test Media consumes the same primitives
 where their contracts match. Filesystem record formats, validation, transaction
 stages, geometry, relocation policy, recovery binding, accepted operation
-semantics and user-facing failure policy remain Defragger-owned. Recovery paths
+semantics and user-facing failure policy remain Defragmenter-owned. Recovery paths
 retain byte-exact persisted path values; only generic mechanics are shared.
 
 ## Release controls and decision

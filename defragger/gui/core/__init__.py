@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Shared orchestration modules for Linux Defragger."""
+"""Shared orchestration modules for Defragmenter."""
 
 from .operations import build_standard_arguments
 from .paths import resolve_program

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Small synchronous client for installed Linux Defragger executables."""
+"""Small synchronous client for installed Defragmenter executables."""
 
 from __future__ import annotations
 

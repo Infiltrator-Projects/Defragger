@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /*
- * Linux Defragger native XFS worker
+ * Defragmenter native XFS worker
  * Author: Shannon Smith
  *
  * The authoritative XFS plugin owns this C engine.  It performs read-only

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Thin GUI adapter for the authoritative native C exFAT engine.
 
@@ -48,7 +48,7 @@ INFO = BackendInfo(
             "defrag",
             "exfat-native",
             warning=(
-                "exFAT writing uses Linux Defragger's offline native C raw engine. "
+                "exFAT writing uses Defragmenter's offline native C raw engine. "
                 "No exFAT filesystem driver, mount, filesystem ioctl or external "
                 "filesystem utility is used."
             ),

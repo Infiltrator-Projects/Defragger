@@ -7,7 +7,7 @@ VERSION=$(tr -d '\r\n' <"$ROOT/VERSION")
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-artifact-test.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 RUN="$WORK/linux-defragger-${VERSION}-local-folder.run"
-SOURCE_ZIP="$WORK/Defragger-${VERSION}.zip"
+SOURCE_ZIP="$WORK/Defragmenter-${VERSION}.zip"
 
 sh -n "$ROOT/packaging/build-deb.sh"
 sh -n "$ROOT/packaging/build-local-run.sh"
@@ -23,13 +23,13 @@ if grep -qx 'stale-entry.txt' "$WORK/source-files.txt"; then
     printf '%s\n' 'Source archive rebuild retained a stale entry.' >&2
     exit 1
 fi
-grep -qx "Defragger-${VERSION}/CMakeLists.txt" "$WORK/source-files.txt"
-grep -qx "Defragger-${VERSION}/packaging/build-source-zip.sh" "$WORK/source-files.txt"
+grep -qx "Defragmenter-${VERSION}/CMakeLists.txt" "$WORK/source-files.txt"
+grep -qx "Defragmenter-${VERSION}/packaging/build-source-zip.sh" "$WORK/source-files.txt"
 
 SOURCE_EXTRACTED="$WORK/source-extracted"
 mkdir -p "$SOURCE_EXTRACTED"
 unzip -q "$SOURCE_ZIP" -d "$SOURCE_EXTRACTED"
-EXTRACTED_ROOT="$SOURCE_EXTRACTED/Defragger-${VERSION}"
+EXTRACTED_ROOT="$SOURCE_EXTRACTED/Defragmenter-${VERSION}"
 EXTRACTED_BUILD="$WORK/source-zip-build"
 cmake -S "$EXTRACTED_ROOT" -B "$EXTRACTED_BUILD" \
     -DCMAKE_BUILD_TYPE=Release \
@@ -51,7 +51,7 @@ if grep -Eq '(^|/)linux-defragger-[^/]*-local-source\.zip$' "$WORK/source-files.
     exit 1
 fi
 grep -Fq 'OUTPUT=${1:-"$PARENT/${ARCHIVE_BASENAME}.zip"}' "$ROOT/packaging/build-source-zip.sh"
-grep -Fq 'ARCHIVE_BASENAME="Defragger-${VERSION}"' "$ROOT/packaging/build-source-zip.sh"
+grep -Fq 'ARCHIVE_BASENAME="Defragmenter-${VERSION}"' "$ROOT/packaging/build-source-zip.sh"
 
 MARKER_LINE=$(grep -an '^__LINUX_DEFRAGGER_PAYLOAD_BELOW__$' "$RUN" | \
     head -1 | cut -d: -f1)

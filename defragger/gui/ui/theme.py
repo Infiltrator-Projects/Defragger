@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Runtime theme policy for Linux Defragger.
+"""Runtime theme policy for Defragmenter.
 
 Common owns semantic Day/Night palette values. This module owns only GTK
 selector mechanics, user preference persistence and the platform-authoritative

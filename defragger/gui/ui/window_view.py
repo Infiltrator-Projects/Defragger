@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""GTK widget construction and presentation for one Defragger window."""
+"""GTK widget construction and presentation for one Defragmenter window."""
 
 from __future__ import annotations
 

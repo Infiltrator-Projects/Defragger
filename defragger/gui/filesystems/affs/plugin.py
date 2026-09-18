@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Thin GUI adapter for the authoritative native C Amiga OFS/FFS engine.
 
@@ -24,7 +24,7 @@ INFO = BackendInfo(
     CAP_ANALYSE | CAP_MAP | CAP_DEFRAG | CAP_GROWTH_DEFRAG | CAP_RECOVER | CAP_LIVE_MAP,
     "exact",
     operations=(
-        operation("defrag", "affs-native", warning="Amiga OFS/FFS writing uses Linux Defragger's offline first-party native C raw engine."),
+        operation("defrag", "affs-native", warning="Amiga OFS/FFS writing uses Defragmenter's offline first-party native C raw engine."),
         operation("growth-defrag", "affs-native", warning="Amiga Growth Defrag uses the native C raw engine and leaves an exact 10% free-block reserve after each regular file."),
         operation("recover", "affs-native"),
     ),

@@ -39,7 +39,7 @@ Filesystem implementations are organised below `defragger/gui/filesystems/<forma
 
 The operating system supplies raw block I/O, but filesystem parsing, placement planning, staging and metadata updates are owned by the project. Architecture and regression tests reject known external filesystem mutation/repair orchestration and duplicate implementation paths.
 
-Shared first-party primitives are consumed from the pinned Common dependency; filesystem-specific rules remain in Defragger.
+Shared first-party primitives are consumed from the pinned Common dependency; filesystem-specific rules remain in Defragmenter.
 
 ## Build and test
 
@@ -62,7 +62,7 @@ A numbered release publishes:
 | --- | --- |
 | `linux-defragger_<version>_amd64.deb` | Generic amd64 Debian package. |
 | `linux-defragger-<version>-local-folder.run` | Hardware-native local compile/install program. |
-| `Defragger-<version>.zip` | Tested source archive from the exact release commit. |
+| `Defragmenter-<version>.zip` | Tested source archive from the exact release commit. |
 | `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for published artifacts. |
 
 ## Repository and release policy

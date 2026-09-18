@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Thin GUI adapter for the authoritative native C NTFS engine.
 
@@ -48,7 +48,7 @@ INFO = BackendInfo(
             "defrag",
             "ntfs-native",
             warning=(
-                "NTFS writing uses Linux Defragger's offline native C raw engine. "
+                "NTFS writing uses Defragmenter's offline native C raw engine. "
                 "No NTFS filesystem driver, mount, filesystem ioctl or external "
                 "filesystem utility is used."
             ),

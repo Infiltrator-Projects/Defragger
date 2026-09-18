@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: Refresh Defragger APT publication
+name: Refresh Defragmenter APT publication
 
 on:
   workflow_run:
@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Released Defragger version (for example 1.8.0-141)
+        description: Released Defragmenter version (for example 1.8.0-141)
         required: true
         type: string
       release_sha:
-        description: Exact released Defragger commit SHA
+        description: Exact released Defragmenter commit SHA
         required: true
         type: string
 

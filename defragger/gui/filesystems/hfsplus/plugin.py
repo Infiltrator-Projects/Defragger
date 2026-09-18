@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Thin GUI adapter for the authoritative native C HFS+/HFSX engine.
 
@@ -24,7 +24,7 @@ INFO = BackendInfo(
     CAP_ANALYSE | CAP_MAP | CAP_DEFRAG | CAP_GROWTH_DEFRAG | CAP_RECOVER | CAP_LIVE_MAP,
     "exact",
     operations=(
-        operation("defrag", "hfsplus-native", warning="HFS+/HFSX writing uses Linux Defragger's offline first-party native C raw engine."),
+        operation("defrag", "hfsplus-native", warning="HFS+/HFSX writing uses Defragmenter's offline first-party native C raw engine."),
         operation("growth-defrag", "hfsplus-native", warning="HFS+/HFSX Growth Defrag uses the native C raw engine and leaves an exact 10% free allocation-block reserve after each movable fork."),
         operation("recover", "hfsplus-native"),
     ),

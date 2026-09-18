@@ -90,7 +90,7 @@ def prepare_mutation(
     required = CAPABILITY_FOR_OPERATION.get(operation)
     if required is None:
         raise OperationValidationError(
-            "Unknown operation", f"Linux Defragger does not recognise {operation!r}."
+            "Unknown operation", f"Defragmenter does not recognise {operation!r}."
         )
     if not (volume.capabilities & required):
         raise OperationValidationError(
