@@ -403,6 +403,8 @@ def test_ui_polish_preserves_allocation_map_visual_contract() -> None:
 
 def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
     theme_source = (GUI / "ui" / "theme.py").read_text()
+    tokens_source = (GUI / "ui" / "theme_tokens.py").read_text()
+    generator_source = (ROOT / "tools" / "update-theme-tokens.py").read_text()
     view_source = (GUI / "ui" / "window_view.py").read_text()
     application_source = (GUI / "ui" / "application.py").read_text()
 
@@ -417,8 +419,33 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
         '"Day"',
         '"Night"',
         "XDG_CONFIG_HOME",
+        "from .theme_tokens import DAY, NIGHT",
     ):
         assert required in theme_source
+
+    for forbidden_private_palette in (
+        "#050608",
+        "#F4F5F7",
+        "#D7DDE2",
+        "#20252B",
+    ):
+        assert forbidden_private_palette not in theme_source, (
+            f"Defragger reintroduced private theme truth: {forbidden_private_palette}"
+        )
+
+    common_design = ROOT / "shared" / "infiltratr-common" / "design" / "infiltrator-design-v1.json"
+    assert common_design.is_file()
+    assert 'COMMON = ROOT / "shared/infiltratr-common/design/infiltrator-design-v1.json"' in generator_source
+    assert "THEME_CONTRACT_VERSION = 1" in tokens_source
+
+    namespace: dict[str, object] = {}
+    exec(tokens_source, namespace)
+    import json
+
+    design = json.loads(common_design.read_text())
+    assert namespace["DAY"] == design["theme"]["palettes"]["day"]
+    assert namespace["NIGHT"] == design["theme"]["palettes"]["night"]
+    assert namespace["THEME_CONTRACT_VERSION"] == design["theme"]["contract_version"]
 
     assert 'Gtk.MenuItem.new_with_label("Theme")' in view_source
     assert "Gtk.RadioMenuItem" in view_source
@@ -428,7 +455,7 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
     assert "apply_theme(load_theme_mode())" in application_source
 
     # Follow-system must leave host colours authoritative rather than
-    # reapplying the old hard-coded dark palette unconditionally.
+    # reapplying a Common palette when the operating system owns appearance.
     assert "if resolved is ThemeMode.DAY:" in theme_source
     assert "elif resolved is ThemeMode.NIGHT:" in theme_source
 
