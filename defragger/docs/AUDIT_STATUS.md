@@ -8,7 +8,7 @@ Extended: 2026-09-18
 
 Applies to: release version 1.8.0-166
 Audited source commit: f4c538e4d8bfa724d8de53b391d76325e2f993d3
-Audited release-governance commit: 24efb9f41a449148b49547cb7db9d1c6f24f1403
+Audited release-governance commit: 5420b0d12049ae9b9f6489fc0a33d2676ca488db
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -358,13 +358,20 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     `f4c538e4d8bfa724d8de53b391d76325e2f993d3`.
 
 38. Qualification of the completed branding pass exposed one accidental
-    compatibility break: the Debian control-field identifier
-    the legacy build-profile metadata header had been changed as though it were display
-    branding. The package builder and local compiler now retain that established
+    compatibility break: the legacy Debian build-profile metadata header had
+    been changed as though it were display branding. The package builder and local compiler now retain that established
     metadata key while all user-visible product text remains Defragmenter.
     This correction changes no filesystem algorithm, package name, executable,
     application ID, state path or journal format. The corrected audited source
     baseline is `f4c538e4d8bfa724d8de53b391d76325e2f993d3`.
+
+39. A second orphaned self-hosted cancellation required one further
+    concurrency-identity renewal, from v3 to v4. Exact governance commit
+    `5420b0d12049ae9b9f6489fc0a33d2676ca488db` changes only the quality-gate concurrency group; runner
+    selection, build and test commands, sanitizer qualification, release
+    invariants and cancel-in-progress semantics are unchanged. The audited
+    product source baseline remains
+    `f4c538e4d8bfa724d8de53b391d76325e2f993d3`.
 
 ## Shared Common dependency
 
@@ -375,7 +382,7 @@ The current 1.8.0-166 audit extension is bound to Defragmenter source baseline
 `f4c538e4d8bfa724d8de53b391d76325e2f993d3`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`24efb9f41a449148b49547cb7db9d1c6f24f1403`; changes beneath `.github/workflows`
+`5420b0d12049ae9b9f6489fc0a33d2676ca488db`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.19.2 at exact commit
 `44409af17c89b6ece6b4bcb2c0c133213c695c23`. CMake, the gitlink and the local
