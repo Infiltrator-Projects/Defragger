@@ -112,7 +112,7 @@ def resolve_program(program_id: str, *, anchor: Path | None = None) -> str:
     try:
         spec = PROGRAMS[program_id]
     except KeyError as exc:
-        raise FileNotFoundError(f"unknown Linux Defragger program: {program_id}") from exc
+        raise FileNotFoundError(f"unknown Defragmenter program: {program_id}") from exc
 
     override = os.environ.get(spec.environment)
     candidates: list[Path] = []
