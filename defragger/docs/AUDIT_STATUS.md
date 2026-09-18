@@ -6,9 +6,9 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-163
-Audited source commit: b999eb48a57456f34e3ce5ecb366bffc287b0276
-Audited release-governance commit: 29ea8bc75a51bb8779d5507bee866152802f678f
+Applies to: release version 1.8.0-164
+Audited source commit: 9c984d5e3ae116794de98f539e73ee13e5ef0a22
+Audited release-governance commit: 9c984d5e3ae116794de98f539e73ee13e5ef0a22
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -109,7 +109,7 @@ Recover.
     changed by presentation work. The exact source baseline passed the native/
     filesystem/GUI suite and sanitizer tests before this audit extension was
     advanced.
-17. Linux Defragger is again strictly package-manager updated. The application
+17. Defragmenter is again strictly package-manager updated. The application
     launcher now starts the installed GTK program directly, the private GitHub
     release downloader/pkexec installer and manual Check for Updates desktop
     action have been removed, and the Debian package remains the sole installed
@@ -241,7 +241,7 @@ Recover.
     hosted native/filesystem/GUI tests, and passed the hosted ASan/UBSan lane.
     Its only initial quality-gate failure was the intentional stale-audit-
     baseline guard, which this extension advances.
-31. The main Linux Defragger GUI now has an explicit three-state appearance
+31. The main Defragmenter GUI now has an explicit three-state appearance
     contract: Follow system, Day and Night. Follow system deliberately leaves
     GTK/Mint colours authoritative while preserving Infiltrator typography;
     Day and Night apply scoped light and graphite/silver palettes. The selected
@@ -342,7 +342,7 @@ Version 1.8.0-163 is explicitly authorized for release on 2026-09-18. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
-Linux Defragger Test Media is outside the production-operation audit. It is a
+Defragmenter Test Media is outside the production-operation audit. It is a
 deliberately destructive filesystem-manufacturing utility with independent
 system/boot-disk refusal, canonical-device matching and typed confirmation. Its
 OFS/FFS/SFS fixtures are regression evidence for the corresponding native
