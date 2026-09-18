@@ -865,7 +865,7 @@ static int recover(const char *device, const char *journal_path, char **error) {
         ext_set_error(error, "EXT recovery journal belongs to a different target"); free(real); free(identity); journal_free(&state); return 1;
     }
     free(real); free(identity);
-    if (strncmp(state.phase, "direct-", 7) == 0) {
+    if (infiltratr_string_starts_with(state.phase, "direct-")) {
         sqlite3 *direct_db = NULL;
         if (ext_open_plan_db(state.plan, false, &direct_db, error) != 0) {
             journal_free(&state);
