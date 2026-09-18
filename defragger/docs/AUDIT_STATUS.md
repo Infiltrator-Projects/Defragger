@@ -6,9 +6,9 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-162
-Audited source commit: 0169036334b90312462b72ec65794a176134e3c6
-Audited release-governance commit: 0f7536d6b917e8ccdd7ebe47c697695809c6dc8e
+Applies to: release version 1.8.0-163
+Audited source commit: b999eb48a57456f34e3ce5ecb366bffc287b0276
+Audited release-governance commit: 29ea8bc75a51bb8779d5507bee866152802f678f
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -276,17 +276,35 @@ Recover.
     passed the complete 33-test native/filesystem/GUI/release suite, and passed
     the hosted ASan/UBSan lane. Its remaining quality-gate failure was solely
     the expected stale-audit-baseline invariant that this extension advances.
+34. The final Common 1.19.2 consolidation keeps Defragger policy local while
+    removing the remaining generic duplication. EXT planner vectors now use
+    Common checked geometric growth; all write workers share one Defragger
+    @@RESULT adapter backed by Common JSON escaping; Btrfs, NTFS, exFAT and XFS
+    use Common percentage calculation; NTFS, swap, UFS, XFS and core path
+    arithmetic use Common checked operations; superseded local realloc and
+    atomic-temp/fsync helpers are removed; and Test Media now consumes Common
+    parsing, trimming, basename/realpath, endian, exact-I/O and array-growth
+    primitives. Filesystem geometry, relocation, transaction, recovery and
+    destructive-target policy remain Defragger-owned. Exact source tree
+    `b999eb48a57456f34e3ce5ecb366bffc287b0276` built all first-party C with warnings as errors,
+    passed all 33 native/filesystem/GUI/release tests, and passed the hosted
+    ASan/UBSan lane. Its only remaining quality-gate failure was the intentional
+    stale source-audit baseline that this extension advances. The quality-gate
+    concurrency key was also renewed after an orphaned self-hosted run retained
+    the previous key; runner selection, checks and cancel-in-progress semantics
+    are unchanged, and release governance is now bound to
+    `29ea8bc75a51bb8779d5507bee866152802f678f`.
 
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-162 audit extension is bound to Defragger source baseline
-`0169036334b90312462b72ec65794a176134e3c6`. Release qualification rejects any later change beneath the
+The current 1.8.0-163 audit extension is bound to Defragger source baseline
+`b999eb48a57456f34e3ce5ecb366bffc287b0276`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`0f7536d6b917e8ccdd7ebe47c697695809c6dc8e`; changes beneath `.github/workflows`
+`29ea8bc75a51bb8779d5507bee866152802f678f`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.19.2 at exact commit
 `44409af17c89b6ece6b4bcb2c0c133213c695c23`. CMake, the gitlink and the local
@@ -295,11 +313,13 @@ an unconstrained checkout.
 
 The consolidation moves generic exact numeric and binary-quantity parsing,
 production endian decoding, checked allocation arithmetic and geometric growth,
-POSIX lexical basename handling, atomic recovery-state publication and durable
-recovery-state removal into Common. Filesystem record formats, validation,
-transaction stages, geometry, relocation policy, accepted operation semantics
-and user-facing failure policy remain Defragger-owned. Recovery paths retain
-byte-exact persisted path values; only generic mechanics are shared.
+percentage calculation, POSIX lexical basename/realpath handling, JSON escaping,
+exact sequential/positioned I/O, atomic recovery-state publication and durable
+recovery-state removal into Common. Test Media consumes the same primitives
+where their contracts match. Filesystem record formats, validation, transaction
+stages, geometry, relocation policy, recovery binding, accepted operation
+semantics and user-facing failure policy remain Defragger-owned. Recovery paths
+retain byte-exact persisted path values; only generic mechanics are shared.
 
 ## Release controls and decision
 
@@ -318,7 +338,7 @@ refresh workflow for that exact release SHA, and the same exact version/SHA can
 be supplied to its manual dispatch path if central publication needs to be
 retried.
 
-Version 1.8.0-162 is explicitly authorized for release on 2026-09-18. Any later
+Version 1.8.0-163 is explicitly authorized for release on 2026-09-18. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
