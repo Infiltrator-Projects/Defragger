@@ -6,9 +6,9 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-165
-Audited source commit: 49e20783f3c74177d18f9c858ef27e74938340e9
-Audited release-governance commit: 9c984d5e3ae116794de98f539e73ee13e5ef0a22
+Applies to: release version 1.8.0-166
+Audited source commit: fe992e2252d7b4995388de0bc90652f52b759dd3
+Audited release-governance commit: fe992e2252d7b4995388de0bc90652f52b759dd3
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -149,8 +149,7 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     integrated. The functional allocation map itself remains unchanged: its
     colour contract, dimensions, geometry and data semantics are untouched.
 19. The main About surface now consumes the same LINK-style `AboutInfo` contract
-    used by the MBLINK/InfiltratorFS family instead of maintaining a Defragmenter-
-    specific hand-built metadata grid. It renders through native `GtkAboutDialog`
+    used by the MBLINK/InfiltratorFS family instead of maintaining a Defragmenter-specific hand-built metadata grid. It renders through native `GtkAboutDialog`
     with the shared `link-about-dialog` style hook, 96 px product emblem,
     standardized subtitle/description/authors/website/licence handling and the
     established 560x520 / 520x480 Linux sizing contract. A dedicated regression
@@ -334,16 +333,32 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     The only remaining gate failure was the intentional stale-audit-baseline
     assertion that this extension advances.
 
+36. The product-branding completion removes the retired
+    "Linux Defragger" and standalone "Defragger" product labels from
+    user-facing source, GUI messages, plugin warnings, engineering
+    documentation and release metadata. Public source archives are now named
+    `Defragmenter-<version>.zip`. Stable compatibility identifiers remain
+    unchanged where renaming would break upgrades, persisted state or external
+    automation: the Debian package and executable family remain
+    `linux-defragger`, the desktop application ID remains
+    `io.github.linuxdefragger`, and existing state paths, environment
+    variables and journal magic retain their established identifiers. A
+    permanent architecture regression rejects the retired product labels from
+    selected user-facing surfaces and verifies the Defragmenter source-archive
+    contract. Exact audited source and release-governance baseline
+    `fe992e2252d7b4995388de0bc90652f52b759dd3` contains the completed rename; publication remains
+    conditional on the exact-head quality gate and immutable release checks.
+
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-165 audit extension is bound to Defragmenter source baseline
-`49e20783f3c74177d18f9c858ef27e74938340e9`. Release qualification rejects any later change beneath the
+The current 1.8.0-166 audit extension is bound to Defragmenter source baseline
+`fe992e2252d7b4995388de0bc90652f52b759dd3`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`29ea8bc75a51bb8779d5507bee866152802f678f`; changes beneath `.github/workflows`
+`fe992e2252d7b4995388de0bc90652f52b759dd3`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.19.2 at exact commit
 `44409af17c89b6ece6b4bcb2c0c133213c695c23`. CMake, the gitlink and the local
@@ -377,7 +392,7 @@ refresh workflow for that exact release SHA, and the same exact version/SHA can
 be supplied to its manual dispatch path if central publication needs to be
 retried.
 
-Version 1.8.0-165 is explicitly authorized for release on 2026-09-18. Any later
+Version 1.8.0-166 is explicitly authorized for release on 2026-09-18. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
