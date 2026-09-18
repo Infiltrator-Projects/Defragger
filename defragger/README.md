@@ -97,6 +97,8 @@ release history:
 
 - [`docs/DESIGN.md`](docs/DESIGN.md) defines architectural responsibilities,
   trust assumptions, safety invariants, trade-offs and resource bounds.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) records the major alternatives,
+  decisions and consequences that produced the current architecture.
 - [`docs/VALIDATION.md`](docs/VALIDATION.md) explains how those claims are
   verified, which test oracles are independent, and what the evidence does not
   prove.
