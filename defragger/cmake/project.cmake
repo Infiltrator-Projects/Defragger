@@ -455,8 +455,8 @@ install(DIRECTORY gui/core gui/engine gui/ui gui/backends gui/filesystems
 install(PROGRAMS packaging/linux-defragger DESTINATION bin)
 install(FILES packaging/io.github.linuxdefragger.desktop
         DESTINATION share/applications)
-install(FILES packaging/io.github.linuxdefragger.svg
-        DESTINATION share/icons/hicolor/scalable/apps)
+install(FILES packaging/io.github.linuxdefragger.png
+        DESTINATION share/icons/hicolor/128x128/apps)
 
 install(FILES README.md docs/DESIGN.md docs/AUDIT_STATUS.md
         DESTINATION share/doc/linux-defragger)

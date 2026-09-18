@@ -6,7 +6,7 @@
 
 Defragmenter is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-168
+**Current version:** 1.8.0-169
 
 **Platform:** Linux
 

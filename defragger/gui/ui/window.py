@@ -56,7 +56,7 @@ from .support import (
 )
 from .volume_coordinator import VolumeCoordinator
 from .widgets import MAX_MAP_CELLS, MIN_MAP_CELLS
-from .window_view import APP_NAME
+from .window_view import APP_ICON_NAME, APP_NAME
 
 
 class MainWindow(Gtk.ApplicationWindow):
@@ -70,6 +70,7 @@ class MainWindow(Gtk.ApplicationWindow):
         # outside the visible screen.
         self.set_decorated(True)
         self.set_resizable(True)
+        self.set_icon_name(APP_ICON_NAME)
         self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.set_skip_taskbar_hint(False)
         self.set_skip_pager_hint(False)

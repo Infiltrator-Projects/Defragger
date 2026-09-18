@@ -26,6 +26,8 @@ for required in (
     assert required in ABOUT, required
 
 assert "from .about import LinkStandardWindowView" in WINDOW
+assert "APP_ICON_NAME" in WINDOW
+assert "self.set_icon_name(APP_ICON_NAME)" in WINDOW
 assert "self.view = LinkStandardWindowView(" in WINDOW
 assert "self.view = WindowView(" not in WINDOW
 
