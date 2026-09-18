@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
-from gi.repository import Gdk, GLib, Gtk
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
 from .window_view import (
     ABOUT_COMMENTS,
@@ -36,6 +37,9 @@ class AboutInfo:
 
 
 _about_provider: Gtk.CssProvider | None = None
+_ABOUT_ICON_PATH = Path(
+    "/usr/share/icons/hicolor/256x256/apps/io.github.linuxdefragger.png"
+)
 
 
 def _apply_about_style() -> None:
@@ -77,21 +81,29 @@ def _apply_about_style() -> None:
 
 
 def _about_logo():
-    """Load the product emblem at the shared LINK About size."""
+    """Load the exact packaged Defragmenter icon at the shared About size."""
+    if _ABOUT_ICON_PATH.is_file():
+        try:
+            return GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                str(_ABOUT_ICON_PATH),
+                96,
+                96,
+                True,
+            )
+        except GLib.Error:
+            pass
+
     theme = Gtk.IconTheme.get_default()
     if theme is None:
         return None
-    for name in (
-        APP_ICON_NAME,
-        "drive-harddisk",
-        "drive-harddisk-symbolic",
-        "media-floppy",
-    ):
-        try:
-            return theme.load_icon(name, 96, Gtk.IconLookupFlags.FORCE_SIZE)
-        except GLib.Error:
-            continue
-    return None
+    try:
+        return theme.load_icon(
+            APP_ICON_NAME,
+            96,
+            Gtk.IconLookupFlags.FORCE_SIZE,
+        )
+    except GLib.Error:
+        return None
 
 
 def show_common_about(parent: Gtk.Window, info: AboutInfo) -> None:

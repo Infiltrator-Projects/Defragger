@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ABOUT = (ROOT / "gui" / "ui" / "about.py").read_text()
+APPLICATION = (ROOT / "gui" / "ui" / "application.py").read_text()
 WINDOW = (ROOT / "gui" / "ui" / "window.py").read_text()
 
 for required in (
@@ -20,11 +21,14 @@ for required in (
     "dialog.set_wrap_license(True)",
     'website_label="Project website"',
     "APP_ICON_NAME",
+    "GdkPixbuf.Pixbuf.new_from_file_at_scale",
+    '"/usr/share/icons/hicolor/256x256/apps/io.github.linuxdefragger.png"',
     'subtitle="DEFRAGMENTER · NATIVE FILESYSTEM OPTIMISATION"',
     '"Shannon Smith — Author and project maintainer"',
 ):
     assert required in ABOUT, required
 
+assert "Gtk.Window.set_default_icon_name(APP_ID)" in APPLICATION
 assert "from .about import LinkStandardWindowView" in WINDOW
 assert "APP_ICON_NAME" in WINDOW
 assert "self.set_icon_name(APP_ICON_NAME)" in WINDOW

@@ -456,7 +456,7 @@ install(PROGRAMS packaging/linux-defragger DESTINATION bin)
 install(FILES packaging/io.github.linuxdefragger.desktop
         DESTINATION share/applications)
 install(FILES packaging/io.github.linuxdefragger.png
-        DESTINATION share/icons/hicolor/128x128/apps)
+        DESTINATION share/icons/hicolor/256x256/apps)
 
 install(FILES README.md docs/DESIGN.md docs/AUDIT_STATUS.md
         DESTINATION share/doc/linux-defragger)

@@ -20,6 +20,7 @@ APP_ID = "io.github.linuxdefragger"
 class LinuxDefraggerApplication(Gtk.Application):
     def __init__(self) -> None:
         super().__init__(application_id=APP_ID, flags=0)
+        Gtk.Window.set_default_icon_name(APP_ID)
         self.windows: list[MainWindow] = []
 
     def new_window(self) -> None:

@@ -632,7 +632,8 @@ def test_user_facing_branding_is_defragmenter() -> None:
 
     project_cmake = (ROOT / "cmake" / "project.cmake").read_text()
     assert "packaging/io.github.linuxdefragger.png" in project_cmake
-    assert "share/icons/hicolor/128x128/apps" in project_cmake
+    assert "share/icons/hicolor/256x256/apps" in project_cmake
+    assert "share/icons/hicolor/128x128/apps" not in project_cmake
     assert "packaging/io.github.linuxdefragger.svg" not in project_cmake
     assert (ROOT / "packaging" / "io.github.linuxdefragger.png").is_file()
     assert not (ROOT / "packaging" / "io.github.linuxdefragger.svg").exists()
