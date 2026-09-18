@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Generated from Infiltratr Common design tokens. Do not edit."""
+
+THEME_CONTRACT_VERSION = 1
+
+DAY = {
+    "background": "#F4F5F7",
+    "panel": "#FFFFFF",
+    "card": "#F8F9FA",
+    "surface": "#ECEFF2",
+    "input": "#FFFFFF",
+    "border": "#C7CDD3",
+    "text": "#20252B",
+    "title": "#111418",
+    "muted": "#59636C",
+    "subtle": "#737D86",
+    "button_background": "#20252B",
+    "button_foreground": "#FFFFFF",
+    "selection_background": "#DDE2E7",
+    "selection_foreground": "#111418",
+    "neutral_accent": "#6F7881",
+    "success": "#3A8A58",
+    "warning": "#9A6500",
+    "fault": "#B54848",
+    "info": "#467AA3",
+    "operation": "#E8ECEF",
+    "card_hover": "#EEF1F3",
+    "surface_hover": "#F1F3F5",
+    "operation_hover": "#DDE2E7",
+    "equals_hover": "#343B42",
+}
+
+NIGHT = {
+    "background": "#050608",
+    "panel": "#101318",
+    "card": "#171B20",
+    "surface": "#0D1014",
+    "input": "#0E1115",
+    "border": "#353A40",
+    "text": "#E8ECEF",
+    "title": "#EEF1F3",
+    "muted": "#AEB6BD",
+    "subtle": "#899198",
+    "button_background": "#D7DDE2",
+    "button_foreground": "#111418",
+    "selection_background": "#2B3137",
+    "selection_foreground": "#EEF1F3",
+    "neutral_accent": "#BEC7CF",
+    "success": "#63AB7C",
+    "warning": "#D19E47",
+    "fault": "#C96B6B",
+    "info": "#7FA7C9",
+    "operation": "#20252B",
+    "card_hover": "#22272D",
+    "surface_hover": "#171B20",
+    "operation_hover": "#2B3137",
+    "equals_hover": "#EEF1F3",
+}
