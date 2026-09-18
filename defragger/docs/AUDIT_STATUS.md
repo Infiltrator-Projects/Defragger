@@ -17,6 +17,25 @@ Growth Defrag and Recover are available according to each filesystem plugin's
 declared capability. Unsupported or structurally unsafe layouts continue to
 fail closed.
 
+## Safety argument summary
+
+The audit is structured as a safety case: each material hazard has a control, an enforcement point and executable evidence. The chronological change record below is supporting history, not the primary argument for safety.
+
+| Hazard | Principal control | Enforcement / evidence | Residual limitation |
+| --- | --- | --- | --- |
+| Wrong target or pathname replacement | canonical open plus descriptor identity/capacity and filesystem identity binding | `src/core/ld_device.*`, native target checks, `tests/test_safety.py` | malicious root or a compromised kernel is outside the threat model |
+| Mounted or overlapping storage mapping | parent/child/holder/slave overlap closure with pre/post-open refusal | native core, architecture/safety tests | depends on Linux exposing the relevant topology in the current namespace |
+| Malformed or unsupported on-disk state | strict parser validation and fail-closed feature gates | native negative fixtures and filesystem suites | unsupported valid feature combinations remain intentionally unavailable |
+| Integer/resource exhaustion from hostile metadata | checked arithmetic, bounded vectors and explicit traversal/planning ceilings | Common arithmetic, native tests, ASan/UBSan | ceilings may reject unusually large but otherwise valid filesystems |
+| Interruption before authoritative writes | verified staging plus durable phase publication | transaction/fault-injection tests | storage must honour software-visible durability semantics |
+| Interruption after authoritative writes | recoverable journal/workspace state retained until final verification | filesystem recovery suites | physical media failure can exceed recoverable software state |
+| Corrupt or stale recovery artefacts | target/stage binding, schema/phase validation and digest/identity checks | transaction/native recovery regressions | deliberate privileged tampering is outside the model |
+| False success after mutation | reopened read-only payload/layout verification | disposable-image integration tests and independent verifier scripts | testing is empirical, not a formal proof |
+| Publication from unaudited source | exact source/governance baselines plus exact-head quality/release gates | `tests/test_release_gate.py`, GitHub release workflow | protects project publication, not downstream repackaging |
+| Destructive Test Media misuse | separate utility, system-disk refusal, repeated privileged confirmation | Test Media safety tests | operator can still destroy explicitly selected sacrificial media |
+
+The verification methodology and limits of this evidence are documented in [VALIDATION.md](VALIDATION.md).
+
 ## Audited scope
 
 The audit traced every production path from the GUI and command-line operation
@@ -42,7 +61,11 @@ before source mutation or at a filesystem-safe durable boundary; a transaction
 that may have reached authoritative writes retains the state required by
 Recover.
 
-## Corrective changes made by the audit
+## Audit history and corrective changes
+
+The entries below preserve traceability for material corrections and qualification
+work. They are supporting history; the current safety obligations are the
+hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
 
 1. Mounted-target refusal is now enforced inside every native mutation and
    recovery entry point, including NTFS, exFAT, Amiga OFS/FFS and HFS+/HFSX.
