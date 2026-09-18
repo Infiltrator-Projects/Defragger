@@ -989,8 +989,22 @@ int main(int argc, char **argv) {
         if (strcmp(argv[index], "--write") == 0) write = true;
         else if (strcmp(argv[index], "--confirm") == 0 && index + 1 < argc) confirm = argv[++index];
         else if (strcmp(argv[index], "--journal") == 0 && index + 1 < argc) journal = argv[++index];
-        else if (strcmp(argv[index], "--growth-percent") == 0 && index + 1 < argc) growth_percent = atoi(argv[++index]);
-        else if (strcmp(argv[index], "--live-map-cells") == 0 && index + 1 < argc) { live_updates = atoi(argv[++index]) > 0; }
+        else if (strcmp(argv[index], "--growth-percent") == 0 && index + 1 < argc) {
+            uint64_t parsed = 0U;
+            if (parse_u64(argv[++index], &parsed) != 0 || parsed > 100U) {
+                fprintf(stderr, "%s: --growth-percent requires an integer from 0 to 100\n", PROGRAM_NAME);
+                return 2;
+            }
+            growth_percent = (int)parsed;
+        }
+        else if (strcmp(argv[index], "--live-map-cells") == 0 && index + 1 < argc) {
+            uint64_t parsed = 0U;
+            if (parse_u64(argv[++index], &parsed) != 0) {
+                fprintf(stderr, "%s: --live-map-cells requires a non-negative integer\n", PROGRAM_NAME);
+                return 2;
+            }
+            live_updates = parsed > 0U;
+        }
         else if (strcmp(argv[index], "--batch-clusters") == 0 && index + 1 < argc) {
             if (parse_u64(argv[++index], &batch_blocks) != 0 || batch_blocks == 0) {
                 fprintf(stderr, "%s: --batch-clusters requires a positive integer\n", PROGRAM_NAME); return 2;
