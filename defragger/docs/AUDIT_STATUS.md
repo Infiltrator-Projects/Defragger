@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-155
-Audited source commit: 81f51300d3369b28f572f4777b65aa30bed9d308
+Applies to: release version 1.8.0-156
+Audited source commit: ddca104d5464c56ed44aef699e1a4d883e17e7a3
 Audited release-governance commit: 0e6deda16fbf01a882bed0e45ee33df2622e87eb
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -224,26 +224,33 @@ Recover.
     with explicit command, pkg-config, Python-module or executable diagnostics
     when that machine is available. Ordinary pushes and releases no longer
     create queued work on an offline home runner.
-28. The shared dependency is advanced to immutable Infiltratr Common 1.18.0 at
+28. The shared dependency was advanced to immutable Infiltratr Common 1.18.0 at
     commit `0f458a7145f3a996ff19f11bf9d0893b91ae5cbb`. The exact migrated
     production tree at `81f51300d3369b28f572f4777b65aa30bed9d308` built
     warnings-as-errors, passed all 33 hosted native/filesystem/GUI tests and
     passed the hosted ASan/UBSan lane. Its only initial quality-gate failure was
-    the intentional stale-audit-baseline guard, which this extension advances.
+    the intentional stale-audit-baseline guard, which that extension advanced.
+29. The shared dependency is advanced again to immutable Infiltratr Common 1.18.1
+    at commit `dcfa6fee9e9263a0dce5c137054d4adf130c2f25`. Common 1.18.1 is a source-licence-hygiene patch;
+    its runtime behaviour and public ABI are unchanged from 1.18.0. The exact
+    Defragger migration tree at `ddca104d5464c56ed44aef699e1a4d883e17e7a3` built warnings-as-errors,
+    passed all 33 hosted native/filesystem/GUI tests, and passed the hosted
+    ASan/UBSan lane. Its only initial quality-gate failure was the intentional
+    stale-audit-baseline guard, which this extension advances.
 
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-155 audit extension is bound to Defragger source baseline
-`81f51300d3369b28f572f4777b65aa30bed9d308`. Release qualification rejects any later change beneath the
+The current 1.8.0-156 audit extension is bound to Defragger source baseline
+`ddca104d5464c56ed44aef699e1a4d883e17e7a3`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `0e6deda16fbf01a882bed0e45ee33df2622e87eb`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
-validates Infiltratr Common 1.18.0 at exact commit
-`0f458a7145f3a996ff19f11bf9d0893b91ae5cbb`. CMake, the gitlink and the local
+validates Infiltratr Common 1.18.1 at exact commit
+`dcfa6fee9e9263a0dce5c137054d4adf130c2f25`. CMake, the gitlink and the local
 compiler/installer all verify that same version and commit rather than accepting
 an unconstrained checkout.
 
