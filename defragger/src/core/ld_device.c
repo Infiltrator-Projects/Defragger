@@ -4,6 +4,7 @@
 
 #include "infiltratr/core.h"
 #include "infiltratr/posix.h"
+#include "infiltratr/posix_path.h"
 #include "infiltratr/token.h"
 
 #include <dirent.h>
@@ -418,7 +419,6 @@ bool ld_device_is_rotational(const LdDevice *device) {
 }
 
 bool ld_device_is_serial_flash(const LdDevice *device) {
-    const char *base = strrchr(device->path, '/');
-    base = base == NULL ? device->path : base + 1;
-    return infiltratr_string_starts_with(base, "mmcblk");
+    return infiltratr_string_starts_with(
+        infiltratr_path_basename(device->path), "mmcblk");
 }
