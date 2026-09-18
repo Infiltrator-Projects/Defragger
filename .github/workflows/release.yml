@@ -123,7 +123,7 @@ jobs:
           test -f "Defragmenter-${VERSION}-local-folder.run"
           test -f "Defragmenter-${VERSION}.zip"
           ./tests/test_local_installer_end_to_end.sh \
-            "./linux-defragger-${VERSION}-local-folder.run"
+            "./Defragmenter-${VERSION}-local-folder.run"
           sha256sum \
             "Defragmenter-${VERSION}-amd64.deb" \
             "Defragmenter-${VERSION}-local-folder.run" \
