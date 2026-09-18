@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-161
-Audited source commit: a45642c2ed4175cbd43967713d87fdc022223620
+Applies to: release version 1.8.0-162
+Audited source commit: 0169036334b90312462b72ec65794a176134e3c6
 Audited release-governance commit: 0f7536d6b917e8ccdd7ebe47c697695809c6dc8e
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -264,30 +264,42 @@ Recover.
     passed all 33 hosted native/filesystem/GUI tests, and passed the hosted
     ASan/UBSan lane. The only quality-gate failure was the expected stale-audit
     guard before this baseline advance.
+33. Common 1.19.2 now owns more of Defragger's generic mechanics without
+    absorbing filesystem policy. FAT relocation vectors and EXT range/block
+    vectors use Common's checked geometric allocator; FAT journal basename
+    handling uses Common's POSIX lexical helper; EXT, NTFS, exFAT and XFS
+    mutation-option numbers use Common's strict whole-string parser instead of
+    `atoi()`; and FAT, Minix, SFS and UFS size calculations use Common checked
+    allocation arithmetic. Filesystem geometry, placement, transaction,
+    recovery and error-policy decisions remain Defragger-owned. Exact source
+    tree `0169036334b90312462b72ec65794a176134e3c6` built all first-party C with warnings as errors,
+    passed the complete 33-test native/filesystem/GUI/release suite, and passed
+    the hosted ASan/UBSan lane. Its remaining quality-gate failure was solely
+    the expected stale-audit-baseline invariant that this extension advances.
 
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-159 audit extension is bound to Defragger source baseline
-`fa1b5537292e27fa0f6bd519f6fa3d0921496223`. Release qualification rejects any later change beneath the
+The current 1.8.0-162 audit extension is bound to Defragger source baseline
+`0169036334b90312462b72ec65794a176134e3c6`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`0e6deda16fbf01a882bed0e45ee33df2622e87eb`; changes beneath `.github/workflows`
+`0f7536d6b917e8ccdd7ebe47c697695809c6dc8e`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
-validates Infiltratr Common 1.18.1 at exact commit
-`dcfa6fee9e9263a0dce5c137054d4adf130c2f25`. CMake, the gitlink and the local
+validates Infiltratr Common 1.19.2 at exact commit
+`44409af17c89b6ece6b4bcb2c0c133213c695c23`. CMake, the gitlink and the local
 compiler/installer all verify that same version and commit rather than accepting
 an unconstrained checkout.
 
-The consolidation moves generic exact numeric parsing, production endian
-decoding, checked geometric allocation growth, atomic recovery-state
-publication and durable recovery-state removal into Common. Filesystem record
-formats, validation, transaction stages, geometry, relocation policy and the
-strict FAT/exFAT destructive CLI quantity grammars remain Defragger-owned.
-Recovery paths retain byte-exact persisted path values; only generic mechanics
-are shared.
+The consolidation moves generic exact numeric and binary-quantity parsing,
+production endian decoding, checked allocation arithmetic and geometric growth,
+POSIX lexical basename handling, atomic recovery-state publication and durable
+recovery-state removal into Common. Filesystem record formats, validation,
+transaction stages, geometry, relocation policy, accepted operation semantics
+and user-facing failure policy remain Defragger-owned. Recovery paths retain
+byte-exact persisted path values; only generic mechanics are shared.
 
 ## Release controls and decision
 
@@ -306,7 +318,7 @@ refresh workflow for that exact release SHA, and the same exact version/SHA can
 be supplied to its manual dispatch path if central publication needs to be
 retried.
 
-Version 1.8.0-154 is explicitly authorized for release on 2026-09-13. Any later
+Version 1.8.0-162 is explicitly authorized for release on 2026-09-18. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
