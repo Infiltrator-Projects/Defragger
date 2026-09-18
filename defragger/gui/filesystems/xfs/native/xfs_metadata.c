@@ -1498,10 +1498,14 @@ int xfs_verify_clean_log(const char *path, const XfsCatalogue *catalogue, char *
     uint64_t start = g->logstart * g->block_size;
     uint64_t size = (uint64_t)g->logblocks * g->block_size;
     uint64_t log_bbs = size / 512U;
-    if (log_bbs == 0 || log_bbs > SIZE_MAX / sizeof(uint32_t)) {
+    size_t log_cycle_bytes = 0U;
+    if (log_bbs == 0 || log_bbs > SIZE_MAX ||
+        !infiltratr_size_multiply_checked((size_t)log_bbs, sizeof(uint32_t),
+                                          &log_cycle_bytes)) {
         xfs_set_error(error, "XFS internal log geometry is invalid");
         return -1;
     }
+    (void)log_cycle_bytes;
     int fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
         xfs_set_error(error, "cannot open XFS internal log: %s", strerror(errno));
