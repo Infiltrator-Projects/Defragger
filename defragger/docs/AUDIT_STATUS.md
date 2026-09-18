@@ -8,7 +8,7 @@ Extended: 2026-09-18
 
 Applies to: release version 1.8.0-155
 Audited source commit: 81f51300d3369b28f572f4777b65aa30bed9d308
-Audited release-governance commit: e449f3e740a04062517ea3e14d4f86ab48d8c3aa
+Audited release-governance commit: 0e6deda16fbf01a882bed0e45ee33df2622e87eb
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -218,12 +218,12 @@ Recover.
     the bytes into a root-only staging file, and invokes only the fixed APT or
     native installer path from that staged copy. A pathname replacement after
     GUI verification therefore cannot redirect a privileged installation.
-27. The home Linux native/heavy qualification lane is now an independent
-    main-push workflow rather than a required job in the hosted release gate.
-    It remains available on the `linux-native` runner and fails with explicit
-    command, pkg-config, Python-module or executable diagnostics when the
-    machine drifts. An offline home runner can no longer hold up a green hosted
-    release.
+27. The home Linux native/heavy qualification lane is independent of the
+    hosted release gate and is now manual-only. It remains available on the
+    `linux-native` runner for deliberate workstation/hardware qualification,
+    with explicit command, pkg-config, Python-module or executable diagnostics
+    when that machine is available. Ordinary pushes and releases no longer
+    create queued work on an offline home runner.
 28. The shared dependency is advanced to immutable Infiltratr Common 1.18.0 at
     commit `0f458a7145f3a996ff19f11bf9d0893b91ae5cbb`. The exact migrated
     production tree at `81f51300d3369b28f572f4777b65aa30bed9d308` built
@@ -240,7 +240,7 @@ The current 1.8.0-155 audit extension is bound to Defragger source baseline
 `81f51300d3369b28f572f4777b65aa30bed9d308`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`e449f3e740a04062517ea3e14d4f86ab48d8c3aa`; changes beneath `.github/workflows`
+`0e6deda16fbf01a882bed0e45ee33df2622e87eb`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.18.0 at exact commit
 `0f458a7145f3a996ff19f11bf9d0893b91ae5cbb`. CMake, the gitlink and the local
