@@ -6,13 +6,17 @@
 
 Linux Defragger is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-142
+**Current version:** 1.8.0-158
 
 **Platform:** Linux
 
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** The version 1.8.0-142 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
+> **Safety status:** The version 1.8.0-158 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
+
+## Appearance
+
+The main GTK application supports **Follow system**, **Day** and **Night** appearance modes. Follow system leaves the host GTK/Mint palette authoritative while retaining the Infiltrator typography and layout hierarchy. Day and Night apply explicit Infiltrator light and graphite/silver palettes. The selected mode is persisted per user and synchronised across open windows.
 
 ## Capabilities
 
