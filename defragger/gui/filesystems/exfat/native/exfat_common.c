@@ -24,8 +24,17 @@ static uint64_t read_le64(const uint8_t *p) { return infiltratr_load_le64(p); }
 void exfat_set_error(char **error, const char *format, ...) { if (error == NULL || *error != NULL) return; va_list ap; va_start(ap, format); va_list copy; va_copy(copy, ap); int n=vsnprintf(NULL,0,format,copy); va_end(copy); if(n<0){va_end(ap);return;} *error=ld_xmalloc((size_t)n+1U); (void)vsnprintf(*error,(size_t)n+1U,format,ap); va_end(ap); }
 uint16_t exfat_u16(const void *data,size_t off){return read_le16((const uint8_t*)data+off);} uint32_t exfat_u32(const void *data,size_t off){return read_le32((const uint8_t*)data+off);} uint64_t exfat_u64(const void *data,size_t off){return read_le64((const uint8_t*)data+off);}
 void exfat_put_u16(void *data,size_t off,uint16_t v){infiltratr_store_le16((uint8_t*)data+off,v);} void exfat_put_u32(void *data,size_t off,uint32_t v){infiltratr_store_le32((uint8_t*)data+off,v);}
+/*
+ * exFAT entry-set checksum: bytes 2 and 3 of the primary entry contain the
+ * checksum itself and are excluded from the rotating checksum calculation.
+ */
 uint16_t exfat_entry_checksum(const uint8_t *data,size_t bytes){uint16_t c=0;for(size_t i=0;i<bytes;++i){if(i==2U||i==3U)continue;c=(uint16_t)((c>>1)|((c&1U)<<15));c=(uint16_t)(c+data[i]);}return c;}
 uint32_t exfat_table_checksum(const uint8_t *data,size_t bytes){uint32_t c=0;for(size_t i=0;i<bytes;++i)c=((c&1U)<<31)+(c>>1)+data[i];return c;}
+/*
+ * Boot checksum covers the first eleven sectors but excludes VolumeFlags
+ * (106-107) and PercentInUse (112), which may change without invalidating the
+ * boot-region checksum.
+ */
 uint32_t exfat_boot_checksum(const uint8_t *region,uint32_t bps){uint32_t c=0;uint64_t limit=(uint64_t)bps*11U;for(uint64_t i=0;i<limit;++i){if(i==106U||i==107U||i==112U)continue;c=((c&1U)<<31)+(c>>1)+region[i];}return c;}
 
 int exfat_clusters_push(ExfatClusterVec *v,uint32_t c){if(v->count==SIZE_MAX||!infiltratr_array_reserve((void**)&v->items,&v->capacity,sizeof(*v->items),v->count+1U,16U))ld_die("cannot grow exFAT cluster list");v->items[v->count++]=c;return 0;}
@@ -45,6 +54,11 @@ uint64_t exfat_cluster_offset(const ExfatVolume *v,uint32_t cluster){return v->h
 int exfat_read_cluster(const ExfatVolume*v,uint32_t cluster,void*buffer,char**error){if(cluster<2U||cluster>=v->cluster_count+2U){exfat_set_error(error,"exFAT cluster %u is outside the heap",cluster);return -1;}if(ld_pread_full(v->fd,buffer,v->cluster_size,exfat_cluster_offset(v,cluster))!=(ssize_t)v->cluster_size){exfat_set_error(error,"short exFAT cluster read");return -1;}return 0;}
 int exfat_write_cluster(const ExfatVolume*v,uint32_t cluster,const void*buffer,char**error){if(!v->writable){exfat_set_error(error,"exFAT volume is read-only");return -1;}if(cluster<2U||cluster>=v->cluster_count+2U){exfat_set_error(error,"exFAT cluster %u is outside the heap",cluster);return -1;}if(ld_pwrite_full(v->fd,buffer,v->cluster_size,exfat_cluster_offset(v,cluster))!=(ssize_t)v->cluster_size){exfat_set_error(error,"short exFAT cluster write");return -1;}return 0;}
 static uint32_t fat_get(const ExfatVolume*v,uint32_t cluster){return exfat_u32(v->fat,(size_t)cluster*4U);}
+/*
+ * NoFatChain streams are validated as one contiguous heap run and never follow
+ * FAT entries. FAT-chained streams use a visit bitmap so cycles, bad clusters,
+ * short chains and chains longer than DataLength fail closed.
+ */
 int exfat_chain(const ExfatVolume*v,uint32_t first,uint64_t count,bool count_known,bool contiguous,ExfatClusterVec*out,char**error){memset(out,0,sizeof(*out));if(first==0U){if(count_known&&count!=0U){exfat_set_error(error,"zero exFAT first cluster has nonzero length");return -1;}return 0;}if(first<2U||first>=v->cluster_count+2U){exfat_set_error(error,"exFAT first cluster is outside the heap");return -1;}if(contiguous){if(!count_known){exfat_set_error(error,"contiguous exFAT stream has unknown length");return -1;}if(count>(uint64_t)v->cluster_count||first+(uint64_t)count>v->cluster_count+2ULL){exfat_set_error(error,"contiguous exFAT stream exceeds the heap");return -1;}for(uint64_t i=0;i<count;++i)exfat_clusters_push(out,first+(uint32_t)i);return 0;}uint8_t *seen=calloc((v->cluster_count+7U)/8U,1);if(seen==NULL){exfat_set_error(error,"allocating exFAT chain guard failed");return -1;}uint32_t cluster=first;while(cluster>=2U&&cluster<EXFAT_EOC_MIN){if(cluster>=v->cluster_count+2U){exfat_set_error(error,"exFAT FAT chain exceeds the heap");goto fail;}uint32_t bit=cluster-2U;if((seen[bit>>3U]&(uint8_t)(1U<<(bit&7U)))!=0U){exfat_set_error(error,"exFAT FAT loop");goto fail;}seen[bit>>3U]|=(uint8_t)(1U<<(bit&7U));exfat_clusters_push(out,cluster);if(count_known&&out->count==(size_t)count){uint32_t next=fat_get(v,cluster);if(next<EXFAT_EOC_MIN){exfat_set_error(error,"exFAT FAT chain is longer than DataLength");goto fail;}free(seen);return 0;}cluster=fat_get(v,cluster);if(cluster==EXFAT_BAD_CLUSTER){exfat_set_error(error,"exFAT chain contains a bad cluster");goto fail;}}if(count_known&&out->count!=(size_t)count){exfat_set_error(error,"short exFAT FAT chain");goto fail;}free(seen);return 0;fail:free(seen);exfat_clusters_free(out);return -1;}
 int exfat_read_stream(const ExfatVolume*v,const ExfatClusterVec*clusters,uint64_t length,uint8_t**data,char**error){if(length>SIZE_MAX){exfat_set_error(error,"exFAT stream exceeds addressable memory");return -1;}uint8_t*out=ld_xmalloc((size_t)(length?length:1U));uint64_t remaining=length,position=0;uint8_t*buffer=ld_xmalloc(v->cluster_size);for(size_t i=0;i<clusters->count&&remaining>0;++i){if(exfat_read_cluster(v,clusters->items[i],buffer,error)!=0){free(buffer);free(out);return -1;}size_t take=remaining<v->cluster_size?(size_t)remaining:v->cluster_size;memcpy(out+(size_t)position,buffer,take);position+=take;remaining-=take;}free(buffer);if(remaining!=0){free(out);exfat_set_error(error,"short exFAT stream");return -1;}*data=out;return 0;}
 
