@@ -22,15 +22,18 @@ for required in (
     'website_label="Project website"',
     "APP_ICON_NAME",
     "GdkPixbuf.Pixbuf.new_from_file_at_scale",
-    '"/usr/share/icons/hicolor/256x256/apps/io.github.linuxdefragger.png"',
+    '"/usr/lib/linux-defragger/defragmenter-icon.png"',
     'subtitle="DEFRAGMENTER · NATIVE FILESYSTEM OPTIMISATION"',
     '"Shannon Smith — Author and project maintainer"',
 ):
     assert required in ABOUT, required
 
-assert "Gtk.Window.set_default_icon_name(APP_ID)" in APPLICATION
+assert 'APP_ICON_FILE = "/usr/lib/linux-defragger/defragmenter-icon.png"' in APPLICATION
+assert "Gtk.Window.set_default_icon_from_file(APP_ICON_FILE)" in APPLICATION
 assert "from .about import LinkStandardWindowView" in WINDOW
 assert "APP_ICON_NAME" in WINDOW
+assert 'APP_ICON_FILE = "/usr/lib/linux-defragger/defragmenter-icon.png"' in WINDOW
+assert "self.set_icon_from_file(APP_ICON_FILE)" in WINDOW
 assert "self.set_icon_name(APP_ICON_NAME)" in WINDOW
 assert "self.view = LinkStandardWindowView(" in WINDOW
 assert "self.view = WindowView(" not in WINDOW

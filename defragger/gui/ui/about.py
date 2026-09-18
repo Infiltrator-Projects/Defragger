@@ -37,9 +37,7 @@ class AboutInfo:
 
 
 _about_provider: Gtk.CssProvider | None = None
-_ABOUT_ICON_PATH = Path(
-    "/usr/share/icons/hicolor/256x256/apps/io.github.linuxdefragger.png"
-)
+_ABOUT_ICON_PATH = Path("/usr/lib/linux-defragger/defragmenter-icon.png")
 
 
 def _apply_about_style() -> None:

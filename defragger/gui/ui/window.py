@@ -58,6 +58,8 @@ from .volume_coordinator import VolumeCoordinator
 from .widgets import MAX_MAP_CELLS, MIN_MAP_CELLS
 from .window_view import APP_ICON_NAME, APP_NAME
 
+APP_ICON_FILE = "/usr/lib/linux-defragger/defragmenter-icon.png"
+
 
 class MainWindow(Gtk.ApplicationWindow):
     """Compose independent GUI, storage, runner, and protocol components."""
@@ -70,7 +72,10 @@ class MainWindow(Gtk.ApplicationWindow):
         # outside the visible screen.
         self.set_decorated(True)
         self.set_resizable(True)
-        self.set_icon_name(APP_ICON_NAME)
+        try:
+            self.set_icon_from_file(APP_ICON_FILE)
+        except GLib.Error:
+            self.set_icon_name(APP_ICON_NAME)
         self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.set_skip_taskbar_hint(False)
         self.set_skip_pager_hint(False)
