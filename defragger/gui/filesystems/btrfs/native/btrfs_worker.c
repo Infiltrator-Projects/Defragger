@@ -110,8 +110,8 @@ static void print_identify(void)
 
 static void print_analysis_json(const BtrfsAnalysis *analysis)
 {
-    const double percent = analysis->regular_files == 0U ? 0.0 :
-        (100.0 * (double)analysis->fragmented_files / (double)analysis->regular_files);
+    const double percent = infiltratr_percent_u64(
+        analysis->fragmented_files, analysis->regular_files);
     (void)printf(
         "{\"filesystem\":\"btrfs\",\"sector_size\":%u,\"node_size\":%u,"
         "\"device_id\":%" PRIu64 ",\"filesystem_bytes\":%" PRIu64 ","
@@ -232,8 +232,8 @@ static int print_map_json(const BtrfsAnalysis *analysis, uint64_t requested_cell
             cell->start, cell->end, cell->free_count, cell->used_count,
             cell->unknown_count, cell->fragmented_count, cell->outside_count);
     }
-    const double percent = analysis->regular_files == 0U ? 0.0 :
-        (100.0 * (double)analysis->fragmented_files / (double)analysis->regular_files);
+    const double percent = infiltratr_percent_u64(
+        analysis->fragmented_files, analysis->regular_files);
     (void)printf(
         "],\"details\":{\"sector_size\":%u,\"node_size\":%u,\"device_id\":%" PRIu64 ","
         "\"chunks\":%zu,\"logical_bytes_used\":%" PRIu64 ",\"chunk_tree_blocks\":%zu,"
