@@ -293,6 +293,59 @@ def test_infiltratr_common_integration() -> None:
     sfs_native = (GUI / "filesystems" / "sfs" / "native" / "sfs_native.c").read_text()
     assert "infiltratr_array_reserve" in sfs_native
     assert "realloc(" not in sfs_native
+    ext_plan = (GUI / "filesystems" / "ext4" / "native" / "ext_plan.c").read_text()
+    assert "infiltratr_array_reserve" in ext_plan
+    assert "ld_xrealloc(" not in ext_plan
+    runtime_header = (ROOT / "src" / "core" / "ld_runtime.h").read_text()
+    runtime_source = (ROOT / "src" / "core" / "ld_runtime.c").read_text()
+    assert "ld_xrealloc" not in runtime_header
+    assert "ld_xrealloc" not in runtime_source
+
+    protocol = (ROOT / "src" / "core" / "ld_protocol.c").read_text()
+    assert "infiltratr_escape_json" in protocol
+    result_workers = (
+        GUI / "filesystems" / "fat" / "native" / "writer.c",
+        GUI / "filesystems" / "ext4" / "native" / "ext_worker.c",
+        GUI / "filesystems" / "ntfs" / "native" / "ntfs_worker.c",
+        GUI / "filesystems" / "exfat" / "native" / "exfat_worker.c",
+        GUI / "filesystems" / "xfs" / "native" / "xfs_worker.c",
+        GUI / "filesystems" / "affs" / "native" / "affs_worker.c",
+        GUI / "filesystems" / "sfs" / "native" / "sfs_worker.c",
+        GUI / "filesystems" / "hfsplus" / "native" / "hfsplus_worker.c",
+    )
+    for path in result_workers:
+        source = path.read_text()
+        assert "ld_emit_result_event" in source
+        assert '@@RESULT {"operation"' not in source
+
+    for path in (
+        GUI / "filesystems" / "btrfs" / "native" / "btrfs_worker.c",
+        GUI / "filesystems" / "ntfs" / "native" / "ntfs_worker.c",
+        GUI / "filesystems" / "exfat" / "native" / "exfat_worker.c",
+        GUI / "filesystems" / "xfs" / "native" / "xfs_catalog.c",
+    ):
+        assert "infiltratr_percent_u64" in path.read_text()
+
+    for path in (
+        GUI / "filesystems" / "ntfs" / "native" / "ntfs_common.c",
+        GUI / "filesystems" / "ntfs" / "native" / "ntfs_catalog.c",
+        GUI / "filesystems" / "swap" / "native" / "swap_native.c",
+        GUI / "filesystems" / "ufs" / "native" / "ufs_native.c",
+    ):
+        assert "infiltratr_u64_multiply_checked" in path.read_text()
+
+    test_media_worker = (ROOT / "test_media" / "test_media_worker.c").read_text()
+    test_media_gui = (ROOT / "test_media" / "test_media_gui.c").read_text()
+    test_media_amiga = (ROOT / "test_media" / "test_media_amiga_payload.c").read_text()
+    assert "strtoull(" not in test_media_worker
+    assert "atoi(" not in test_media_worker
+    assert "strtoull(" not in test_media_gui
+    assert "atoi(" not in test_media_gui
+    assert "infiltratr_array_reserve" in test_media_worker
+    assert "infiltratr_path_basename" in test_media_worker
+    assert "infiltratr_array_reserve" in test_media_amiga
+    assert "infiltratr_load_be32" in test_media_amiga
+    assert "infiltratr_store_be32" in test_media_amiga
     for filesystem, worker in (("affs", "affs_worker.c"), ("sfs", "sfs_worker.c"),
                                ("hfsplus", "hfsplus_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
@@ -303,7 +356,8 @@ def test_infiltratr_common_integration() -> None:
 def test_core_remains_filesystem_neutral() -> None:
     core = ROOT / "src" / "core"
     expected = {"ld_device.c", "ld_device.h", "ld_io.c", "ld_io.h", "ld_runtime.c",
-                "ld_runtime.h", "ld_path.c", "ld_path.h", "ld_stop.c", "ld_stop.h"}
+                "ld_runtime.h", "ld_path.c", "ld_path.h", "ld_protocol.c",
+                "ld_protocol.h", "ld_stop.c", "ld_stop.h"}
     assert expected <= {path.name for path in core.iterdir() if path.is_file()}
     combined = "\n".join(
         path.read_text(encoding="utf-8", errors="replace").lower()
