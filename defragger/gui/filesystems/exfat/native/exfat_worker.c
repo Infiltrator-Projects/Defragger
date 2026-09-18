@@ -4,6 +4,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "ld_protocol.h"
 #include "ld_path.h"
 
 #include "infiltratr/core.h"
@@ -55,11 +56,7 @@ static void usage(FILE *stream) {
             PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME);
 }
 
-static void emit_result(const char *operation, const char *status, const char *message) {
-    printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"%s\"}\n",
-           operation, status, message == NULL ? "" : message);
-    fflush(stdout);
-}
+
 
 
 
@@ -511,15 +508,15 @@ static int build_and_commit(const char *device, const char *operation, const cha
                                            ram_bytes, batch_clusters,
                                            live_updates, &relayout_stats, error);
     if (relayout == EXFAT_RELAYOUT_COMPLETED) {
-        emit_result(operation, "completed", "");
+        ld_emit_result_event(stdout, operation, "completed", "");
         return 0;
     }
     if (relayout == EXFAT_RELAYOUT_NOT_NEEDED) {
-        emit_result(operation, "not-needed", "");
+        ld_emit_result_event(stdout, operation, "not-needed", "");
         return 0;
     }
     if (relayout == EXFAT_RELAYOUT_STOPPED) {
-        emit_result(operation, "stopped", "");
+        ld_emit_result_event(stdout, operation, "stopped", "");
         return 130;
     }
     if (relayout == EXFAT_RELAYOUT_FAILED) return 1;
@@ -532,7 +529,7 @@ static int build_and_commit(const char *device, const char *operation, const cha
     if (exfat_build_plan(&source, &catalogue, growth ? 10U : 0U, &plan, error) != 0) { exfat_catalogue_free(&catalogue); exfat_close_volume(&source); free(real); free(identity); return 1; }
     if (canonical_layout(&catalogue, &plan)) {
         puts(growth ? "Not needed; canonical exFAT layout with exact 10% growth reserves verified." : "Not needed; canonical packed exFAT layout verified.");
-        emit_result(operation, "not-needed", ""); exfat_plan_free(&plan); exfat_catalogue_free(&catalogue); exfat_close_volume(&source); free(real); free(identity); return 0;
+        ld_emit_result_event(stdout, operation, "not-needed", ""); exfat_plan_free(&plan); exfat_catalogue_free(&catalogue); exfat_close_volume(&source); free(real); free(identity); return 0;
     }
     state.device = ld_xstrdup(real); state.target_identity = ld_xstrdup(identity); state.stage = ld_path_append_suffix(journal_path, ".exfat-stage.img");
     snprintf(state.operation, sizeof(state.operation), "%s", operation); snprintf(state.phase, sizeof(state.phase), "prepared");
@@ -563,12 +560,12 @@ static int build_and_commit(const char *device, const char *operation, const cha
     exfat_catalogue_free(&final_catalogue); exfat_close_volume(&final_volume);
     transaction_cleanup(journal_path, &state);
     printf("exFAT %s completed with serial and full volume capacity preserved.\n", growth ? "Growth Defrag" : "Defragment");
-    emit_result(operation, ld_stop_requested() ? "stopped" : "completed", "");
+    ld_emit_result_event(stdout, operation, ld_stop_requested() ? "stopped" : "completed", "");
     journal_free(&state); free(real); free(identity); return ld_stop_requested() ? 130 : 0;
 stopped:
     exfat_plan_free(&plan); exfat_catalogue_free(&catalogue); exfat_close_volume(&source);
 stopped_after_close:
-    transaction_cleanup(journal_path, &state); puts("Stop requested before source commit; the original exFAT filesystem is unchanged."); emit_result(operation, "stopped", "");
+    transaction_cleanup(journal_path, &state); puts("Stop requested before source commit; the original exFAT filesystem is unchanged."); ld_emit_result_event(stdout, operation, "stopped", "");
     journal_free(&state); free(real); free(identity); return 130;
 precommit_fail:
     exfat_plan_free(&plan); exfat_catalogue_free(&catalogue); exfat_close_volume(&source);
@@ -626,7 +623,7 @@ static int recover_transaction(const char *device, const char *journal_path,
     ExfatVolume final_volume; ExfatCatalogue final_catalogue;
     if (exfat_scan(device, false, &final_volume, &final_catalogue, error) != 0) goto done;
     exfat_catalogue_free(&final_catalogue); exfat_close_volume(&final_volume); transaction_cleanup(journal_path, &state);
-    puts("exFAT recovery completed successfully."); emit_result("recover", "completed", ""); result = 0;
+    puts("exFAT recovery completed successfully."); ld_emit_result_event(stdout, "recover", "completed", ""); result = 0;
 done:
     free(real); free(identity); journal_free(&state); return result;
 }
@@ -690,7 +687,7 @@ int main(int argc, char **argv) {
         ? recover_transaction(device, journal, ram_bytes, batch_clusters, live_updates, &error)
         : build_and_commit(device, operation, journal, ram_bytes, batch_clusters, live_updates, &error);
     if (result != 0 && result != 130) {
-        const char *message = error == NULL ? "native exFAT operation failed" : error; fprintf(stderr, "%s\n", message); emit_result(operation, "failed", message);
+        const char *message = error == NULL ? "native exFAT operation failed" : error; fprintf(stderr, "%s\n", message); ld_emit_result_event(stdout, operation, "failed", message);
     }
     free(error); return result;
 }
