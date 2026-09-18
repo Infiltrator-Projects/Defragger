@@ -842,7 +842,7 @@ static int recover_transaction(const char *device, const char *journal_path, cha
         goto done;
     }
 
-    if (state.workspace_clusters != 0 && strncmp(state.phase, "workspace-", 10) == 0) {
+    if (state.workspace_clusters != 0 && infiltratr_string_starts_with(state.phase, "workspace-")) {
         if (state.workspace_start == 0 || state.workspace_clusters != state.move_clusters) {
             ntfs_set_error(error, "NTFS recovery journal has invalid terminal-workspace geometry");
             goto done;
