@@ -401,18 +401,35 @@ def test_ui_polish_preserves_allocation_map_visual_contract() -> None:
         assert required in source
 
 
-def test_main_window_remains_resizable_and_maximisable() -> None:
+def test_main_window_remains_resizable_maximisable_and_workarea_bounded() -> None:
     window_source = (GUI / "ui" / "window.py").read_text()
     view_source = (GUI / "ui" / "window_view.py").read_text()
     widgets_source = (GUI / "ui" / "widgets.py").read_text()
 
+    assert "self.set_decorated(True)" in window_source
     assert "self.set_resizable(True)" in window_source
-    assert "self.set_default_size(1180, 820)" in window_source
+    assert "self.set_type_hint(Gdk.WindowTypeHint.NORMAL)" in window_source
+    assert "self.set_default_size(1040, 680)" in window_source
+    assert "self.set_default_size(1180, 820)" not in window_source
     assert "self.set_resizable(False)" not in window_source
     assert "set_geometry_hints" not in window_source
-    assert 'self.connect("realize", self._publish_window_manager_functions)' in window_source
-    assert "native_window.set_functions(Gdk.WMFunction.ALL)" in window_source
-    assert "self.window.add(outer)" in view_source
+    assert 'self.connect("realize", self._configure_native_window)' in window_source
+    for function in (
+        "Gdk.WMFunction.RESIZE",
+        "Gdk.WMFunction.MOVE",
+        "Gdk.WMFunction.MINIMIZE",
+        "Gdk.WMFunction.MAXIMIZE",
+        "Gdk.WMFunction.CLOSE",
+    ):
+        assert function in window_source
+    assert "Gdk.WMFunction.ALL" not in window_source
+    assert "monitor.get_workarea()" in window_source
+    assert "workarea.width - 48" in window_source
+    assert "workarea.height - 64" in window_source
+    assert "self.resize(width, height)" in window_source
+    assert "body_scroll = Gtk.ScrolledWindow()" in view_source
+    assert "body_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)" in view_source
+    assert "body_scroll.add(root)" in view_source
     assert "scroll.set_min_content_height(110)" in view_source
     assert "self.set_size_request(-1, 180)" in widgets_source
     assert "self.set_size_request(640, 260)" not in widgets_source
@@ -428,7 +445,7 @@ def main() -> None:
     test_result_protocol_replaces_worker_output_text_matching()
     test_about_dialog_matches_the_standard_project_identity()
     test_ui_polish_preserves_allocation_map_visual_contract()
-    test_main_window_remains_resizable_and_maximisable()
+    test_main_window_remains_resizable_maximisable_and_workarea_bounded()
     print("GUI model and worker-result contract tests passed")
 
 

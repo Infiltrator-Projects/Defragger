@@ -94,9 +94,15 @@ class WindowView:
         self.window.add(outer)
         outer.pack_start(self._build_menu_bar(), False, False, 0)
 
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        root.set_border_width(16)
-        outer.pack_start(root, True, True, 0)
+        body_scroll = Gtk.ScrolledWindow()
+        body_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        body_scroll.set_shadow_type(Gtk.ShadowType.NONE)
+        body_scroll.get_style_context().add_class("body-scroll")
+        outer.pack_start(body_scroll, True, True, 0)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        root.set_border_width(14)
+        body_scroll.add(root)
 
         title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         title_row.set_border_width(2)

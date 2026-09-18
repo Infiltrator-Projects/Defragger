@@ -64,13 +64,18 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def __init__(self, application: Gtk.Application) -> None:
         super().__init__(application=application, title=f"{APP_NAME} {VERSION}")
-        # Keep the normal size as a startup preference only.  Publishing an
-        # explicit resizable contract prevents window managers from treating
-        # the requested size as a fixed geometry when maximisation is toggled.
+        # Behave like a normal desktop window.  The startup geometry is only a
+        # preference; once realised it is capped to the actual monitor work area
+        # so panels, RDP decorations and smaller desktops cannot leave controls
+        # outside the visible screen.
+        self.set_decorated(True)
         self.set_resizable(True)
-        self.set_default_size(1180, 820)
+        self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
+        self.set_skip_taskbar_hint(False)
+        self.set_skip_pager_hint(False)
+        self.set_default_size(1040, 680)
         self.set_position(Gtk.WindowPosition.CENTER)
-        self.connect("realize", self._publish_window_manager_functions)
+        self.connect("realize", self._configure_native_window)
 
         self.mapper = find_mapper()
         self.operation_engine = find_operation_engine()
@@ -125,12 +130,41 @@ class MainWindow(Gtk.ApplicationWindow):
         self.refresh_devices()
         GLib.timeout_add(150, self._authenticate_on_launch)
 
-    def _publish_window_manager_functions(self, _window: Gtk.Widget) -> None:
-        """Advertise the complete native resize/maximise contract after realise."""
+    def _configure_native_window(self, _window: Gtk.Widget) -> None:
+        """Publish normal WM controls and fit startup geometry to the work area."""
 
         native_window = self.get_window()
-        if native_window is not None:
-            native_window.set_functions(Gdk.WMFunction.ALL)
+        if native_window is None:
+            return
+
+        # Do not rely on WMFunction.ALL semantics: explicitly advertise every
+        # normal desktop operation so Cinnamon/Muffin and RDP window managers
+        # expose resize/minimise/maximise/close consistently.
+        functions = (
+            Gdk.WMFunction.RESIZE
+            | Gdk.WMFunction.MOVE
+            | Gdk.WMFunction.MINIMIZE
+            | Gdk.WMFunction.MAXIMIZE
+            | Gdk.WMFunction.CLOSE
+        )
+        native_window.set_functions(functions)
+
+        display = Gdk.Display.get_default()
+        monitor = (
+            display.get_monitor_at_window(native_window)
+            if display is not None
+            else None
+        )
+        if monitor is None:
+            return
+
+        workarea = monitor.get_workarea()
+        # Client geometry needs headroom for server-side title bars/borders.
+        # Never request more than the usable monitor rectangle minus this
+        # decoration margin.
+        width = min(1040, max(1, workarea.width - 48))
+        height = min(680, max(1, workarea.height - 64))
+        self.resize(width, height)
 
     @property
     def current_volume(self) -> Volume | None:
