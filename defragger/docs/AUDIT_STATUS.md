@@ -8,7 +8,7 @@ Extended: 2026-09-18
 
 Applies to: release version 1.8.0-166
 Audited source commit: fe992e2252d7b4995388de0bc90652f52b759dd3
-Audited release-governance commit: fe992e2252d7b4995388de0bc90652f52b759dd3
+Audited release-governance commit: 24efb9f41a449148b49547cb7db9d1c6f24f1403
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -345,9 +345,18 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     variables and journal magic retain their established identifiers. A
     permanent architecture regression rejects the retired product labels from
     selected user-facing surfaces and verifies the Defragmenter source-archive
-    contract. Exact audited source and release-governance baseline
-    `fe992e2252d7b4995388de0bc90652f52b759dd3` contains the completed rename; publication remains
+    contract. Exact audited source baseline `fe992e2252d7b4995388de0bc90652f52b759dd3` contains the completed rename;
+    release-governance is independently bound below; publication remains
     conditional on the exact-head quality gate and immutable release checks.
+
+37. The quality-gate concurrency identity was renewed from v2 to v3 after
+    GitHub left a cancelled self-hosted job attached to
+    `Latitude-5550-Linux` with no executed steps, preventing the current
+    release gate from starting. Runner selection, build/test commands,
+    sanitizer qualification, release invariants and cancel-in-progress
+    semantics are unchanged. The governance-only change is bound to exact
+    commit `24efb9f41a449148b49547cb7db9d1c6f24f1403`; the audited product source remains
+    `fe992e2252d7b4995388de0bc90652f52b759dd3`.
 
 ## Shared Common dependency
 
@@ -358,7 +367,7 @@ The current 1.8.0-166 audit extension is bound to Defragmenter source baseline
 `fe992e2252d7b4995388de0bc90652f52b759dd3`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`fe992e2252d7b4995388de0bc90652f52b759dd3`; changes beneath `.github/workflows`
+`24efb9f41a449148b49547cb7db9d1c6f24f1403`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.19.2 at exact commit
 `44409af17c89b6ece6b4bcb2c0c133213c695c23`. CMake, the gitlink and the local
