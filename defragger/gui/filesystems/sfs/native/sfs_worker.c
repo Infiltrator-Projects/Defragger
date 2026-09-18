@@ -8,6 +8,7 @@
 #include "ld_io.h"
 #include "ld_path.h"
 #include "ld_runtime.h"
+#include "ld_protocol.h"
 #include "ld_stop.h"
 
 #include <errno.h>
@@ -198,12 +199,7 @@ static void worker_error(char *error, size_t error_size, const char *format, ...
     va_end(arguments);
 }
 
-static void result(const char *operation, const char *status, const char *message)
-{
-    (void)printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"%s\"}\n",
-                 operation, status, message == NULL ? "" : message);
-    (void)fflush(stdout);
-}
+
 
 static bool parse_unsigned(const char *text, unsigned *value)
 {
@@ -771,7 +767,7 @@ static int handle_recovery(const char *device, const char *journal,
         ? check_source_unchanged(device, &state, error, error_size)
         : check_target_identity(device, &state, error, error_size);
     if (identity_rc == STOPPED) {
-        result("recover", "stopped",
+        ld_emit_result_event(stdout, "recover", "stopped",
                "Stopped before recovery source writes; artifacts remain intact.");
         journal_free(&state);
         return STOPPED;
@@ -784,7 +780,7 @@ static int handle_recovery(const char *device, const char *journal,
     int digest_rc = stage_sha256(state.stage, &state, digest,
                                  error, error_size);
     if (digest_rc == STOPPED) {
-        result("recover", "stopped",
+        ld_emit_result_event(stdout, "recover", "stopped",
                "Stopped before recovery source writes; artifacts remain intact.");
         journal_free(&state);
         return STOPPED;
@@ -809,7 +805,7 @@ static int handle_recovery(const char *device, const char *journal,
             return 1;
         }
         transaction_cleanup(journal, &state);
-        result("recover", "completed",
+        ld_emit_result_event(stdout, "recover", "completed",
                "Verified an already committed SFS transaction.");
         journal_free(&state);
         return 0;
@@ -823,7 +819,7 @@ static int handle_recovery(const char *device, const char *journal,
     const int commit_rc = safe_commit_stage(
         state.stage, state.device, &state, &written, error, error_size);
     if (commit_rc == STOPPED) {
-        result("recover", "stopped",
+        ld_emit_result_event(stdout, "recover", "stopped",
                "Recovery stopped at a durable boundary and can be resumed.");
         journal_free(&state);
         return STOPPED;
@@ -846,7 +842,7 @@ static int handle_recovery(const char *device, const char *journal,
     }
     (void)printf("Recovered verified SFS source; committed %" PRIu64 " KiB.\n",
                  written / 1024U);
-    result("recover", "completed", "");
+    ld_emit_result_event(stdout, "recover", "completed", "");
     journal_free(&state);
     return 0;
 }
@@ -966,7 +962,7 @@ int main(int argc, char **argv)
     infiltratr_copy_string(state.operation, sizeof(state.operation), mode);
     int capture_rc = capture_target(device, &state, error, sizeof(error));
     if (capture_rc == STOPPED) {
-        result(mode, "stopped", "Stopped during read-only SFS preflight.");
+        ld_emit_result_event(stdout, mode, "stopped", "Stopped during read-only SFS preflight.");
         journal_free(&state);
         return STOPPED;
     }
@@ -996,7 +992,7 @@ int main(int argc, char **argv)
     }
     if (ld_stop_requested()) {
         unlink_if_exists(state.stage);
-        result(mode, "stopped", "Stopped before any SFS source writes.");
+        ld_emit_result_event(stdout, mode, "stopped", "Stopped before any SFS source writes.");
         journal_free(&state);
         return STOPPED;
     }
@@ -1005,7 +1001,7 @@ int main(int argc, char **argv)
         state.device, &state, error, sizeof(error));
     if (unchanged_rc == STOPPED) {
         unlink_if_exists(state.stage);
-        result(mode, "stopped", "Stopped before any SFS source writes.");
+        ld_emit_result_event(stdout, mode, "stopped", "Stopped before any SFS source writes.");
         journal_free(&state);
         return STOPPED;
     }
@@ -1017,7 +1013,7 @@ int main(int argc, char **argv)
                                error, sizeof(error));
     if (hash_rc == STOPPED) {
         unlink_if_exists(state.stage);
-        result(mode, "stopped", "Stopped before any SFS source writes.");
+        ld_emit_result_event(stdout, mode, "stopped", "Stopped before any SFS source writes.");
         journal_free(&state);
         return STOPPED;
     }
@@ -1033,7 +1029,7 @@ int main(int argc, char **argv)
     }
     if (ld_stop_requested()) {
         transaction_cleanup(journal, &state);
-        result(mode, "stopped", "Stopped before any SFS source writes.");
+        ld_emit_result_event(stdout, mode, "stopped", "Stopped before any SFS source writes.");
         journal_free(&state);
         return STOPPED;
     }
@@ -1049,7 +1045,7 @@ int main(int argc, char **argv)
     const int commit_rc = safe_commit_stage(
         state.stage, state.device, &state, &written, error, sizeof(error));
     if (commit_rc == STOPPED) {
-        result(mode, "stopped",
+        ld_emit_result_event(stdout, mode, "stopped",
                "Run Recover to resume the verified SFS transaction.");
         journal_free(&state);
         return STOPPED;
@@ -1069,7 +1065,7 @@ int main(int argc, char **argv)
     }
     (void)printf("SFS0 %s completed; committed %" PRIu64 " KiB.\n",
                  growth ? "Growth Defrag" : "Defrag", written / 1024U);
-    result(mode, "completed", "");
+    ld_emit_result_event(stdout, mode, "completed", "");
     journal_free(&state);
     return 0;
 
