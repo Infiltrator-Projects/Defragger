@@ -95,6 +95,11 @@ size_t ntfs_fragment_count(const NtfsRunVec *runs) {
     return count;
 }
 
+/*
+ * NTFS mapping pairs encode run length plus a signed little-endian LCN delta
+ * from the previous non-sparse run. Decoding to a full-width signed value first
+ * makes sign extension and negative-delta underflow checks explicit.
+ */
 static int64_t decode_signed(const uint8_t *bytes, size_t length) {
     uint64_t value = 0;
     for (size_t index = 0; index < length; ++index) value |= (uint64_t)bytes[index] << (index * 8U);
@@ -179,6 +184,11 @@ int ntfs_encode_single_run(uint64_t lcn, uint64_t length, uint8_t *output, size_
     return 0;
 }
 
+/*
+ * The Update Sequence Array is a torn-sector detector. Validate the on-disk
+ * sequence value at every sector tail before restoring the original tail words
+ * into the parsed copy; a mismatch prevents the record being trusted.
+ */
 int ntfs_apply_fixups(const uint8_t *raw, size_t length, uint32_t sector_size,
                       uint8_t *fixed, char **error) {
     if (sector_size == 0 || length % sector_size != 0) { ntfs_set_error(error, "invalid NTFS update-sequence geometry"); return -1; }
@@ -196,6 +206,11 @@ int ntfs_apply_fixups(const uint8_t *raw, size_t length, uint32_t sector_size,
     }
     return 0;
 }
+/*
+ * Inverse USA transform for a record about to be written: preserve each sector
+ * tail in the USA, advance the sequence number (skipping zero), then stamp the
+ * new sequence value into every protected tail.
+ */
 int ntfs_prepare_fixups(const uint8_t *fixed, size_t length, uint32_t sector_size,
                         uint8_t *raw, char **error) {
     if (sector_size == 0 || length % sector_size != 0) { ntfs_set_error(error, "invalid NTFS update-sequence geometry"); return -1; }
