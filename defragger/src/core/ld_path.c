@@ -3,6 +3,8 @@
 
 #include "ld_runtime.h"
 
+#include "infiltratr/arithmetic.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -15,9 +17,13 @@ char *ld_path_append_suffix(const char *base, const char *suffix)
 {
     const size_t base_length = strlen(base);
     const size_t suffix_length = strlen(suffix);
-    if (suffix_length > SIZE_MAX - base_length - 1U)
+    size_t combined_length = 0U;
+    size_t allocation_size = 0U;
+    if (!infiltratr_size_add_checked(base_length, suffix_length,
+                                     &combined_length) ||
+        !infiltratr_size_add_checked(combined_length, 1U, &allocation_size))
         ld_die("path suffix length overflow");
-    char *result = ld_xmalloc(base_length + suffix_length + 1U);
+    char *result = ld_xmalloc(allocation_size);
     memcpy(result, base, base_length);
     memcpy(result + base_length, suffix, suffix_length + 1U);
     return result;
@@ -30,8 +36,10 @@ bool ld_path_is_derived_from(const char *candidate, const char *base,
     const size_t candidate_length = strlen(candidate);
     const size_t base_length = strlen(base);
     const size_t suffix_length = strlen(suffix);
-    if (base_length > SIZE_MAX - suffix_length ||
-        candidate_length != base_length + suffix_length)
+    size_t expected_length = 0U;
+    if (!infiltratr_size_add_checked(base_length, suffix_length,
+                                     &expected_length) ||
+        candidate_length != expected_length)
         return false;
     return memcmp(candidate, base, base_length) == 0 &&
            memcmp(candidate + base_length, suffix, suffix_length) == 0;
