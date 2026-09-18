@@ -271,7 +271,10 @@ int ntfs_open_volume(const char *path, bool write, NtfsVolume *volume, char **er
     else {
         LdDevice d = ld_device_open(real, false); device_size = d.size_bytes; ld_device_close(&d);
     }
-    if (sectors == 0 || clusters == 0 || sectors > UINT64_MAX / bps || sectors * bps > device_size) {
+    uint64_t volume_bytes = 0U;
+    if (sectors == 0 || clusters == 0 ||
+        !infiltratr_u64_multiply_checked(sectors, bps, &volume_bytes) ||
+        volume_bytes > device_size) {
         ntfs_set_error(error, "NTFS volume boundary exceeds the target device"); close(fd); free(real); return -1;
     }
     int8_t encoded_record = (int8_t)boot[64];
@@ -279,7 +282,7 @@ int ntfs_open_volume(const char *path, bool write, NtfsVolume *volume, char **er
     if (record_size < 512U || record_size > 1024U * 1024U || record_size % bps != 0U) {
         ntfs_set_error(error, "invalid NTFS MFT record size"); close(fd); free(real); return -1;
     }
-    volume->path=real; volume->fd=fd; volume->device_size=device_size; volume->volume_bytes=sectors*bps;
+    volume->path=real; volume->fd=fd; volume->device_size=device_size; volume->volume_bytes=volume_bytes;
     volume->bytes_per_sector=bps; volume->sectors_per_cluster=spc; volume->cluster_size=cluster;
     volume->total_clusters=clusters; volume->mft_lcn=ntfs_u64(boot,48); volume->mftmirr_lcn=ntfs_u64(boot,56);
     volume->record_size=(uint32_t)record_size; memcpy(volume->serial,boot+72,8);
@@ -324,8 +327,10 @@ int ntfs_write_stream(const NtfsVolume *volume, const NtfsRunVec *runs,
 int ntfs_read_record(const NtfsVolume *volume, const NtfsRunVec *mft_runs,
                      uint64_t record_number, uint8_t **raw, uint8_t **fixed, char **error) {
     *raw=ld_xmalloc(volume->record_size); *fixed=ld_xmalloc(volume->record_size);
-    if (record_number > UINT64_MAX / volume->record_size ||
-        ntfs_read_stream(volume,mft_runs,record_number*volume->record_size,*raw,volume->record_size,error)!=0 ||
+    uint64_t record_offset = 0U;
+    if (!infiltratr_u64_multiply_checked(record_number, volume->record_size,
+                                         &record_offset) ||
+        ntfs_read_stream(volume,mft_runs,record_offset,*raw,volume->record_size,error)!=0 ||
         ntfs_apply_fixups(*raw,volume->record_size,volume->bytes_per_sector,*fixed,error)!=0) {
         free(*raw); free(*fixed); *raw=NULL; *fixed=NULL; return -1;
     }
@@ -333,8 +338,13 @@ int ntfs_read_record(const NtfsVolume *volume, const NtfsRunVec *mft_runs,
 }
 int ntfs_write_record(const NtfsVolume *volume, const NtfsRunVec *mft_runs,
                       uint64_t record_number, const uint8_t *raw, char **error) {
-    if (record_number > UINT64_MAX / volume->record_size) { ntfs_set_error(error,"NTFS MFT record offset overflow"); return -1; }
-    return ntfs_write_stream(volume,mft_runs,record_number*volume->record_size,raw,volume->record_size,error);
+    uint64_t record_offset = 0U;
+    if (!infiltratr_u64_multiply_checked(record_number, volume->record_size,
+                                         &record_offset)) {
+        ntfs_set_error(error,"NTFS MFT record offset overflow");
+        return -1;
+    }
+    return ntfs_write_stream(volume,mft_runs,record_offset,raw,volume->record_size,error);
 }
 
 static void attr_free(NtfsAttribute *attr) { ntfs_runs_free(&attr->runs); }
