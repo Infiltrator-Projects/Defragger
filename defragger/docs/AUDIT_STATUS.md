@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-164
-Audited source commit: 9c984d5e3ae116794de98f539e73ee13e5ef0a22
+Applies to: release version 1.8.0-165
+Audited source commit: 49e20783f3c74177d18f9c858ef27e74938340e9
 Audited release-governance commit: 9c984d5e3ae116794de98f539e73ee13e5ef0a22
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -318,13 +318,29 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     are unchanged, and release governance is now bound to
     `29ea8bc75a51bb8779d5507bee866152802f678f`.
 
+35. A postgraduate engineering-documentation pass makes the existing safety
+    argument explicit without changing filesystem algorithms. Native core and
+    filesystem headers now document ownership, units, target-identity and Stop
+    contracts; NTFS/exFAT comments explain non-obvious on-disk codec rules.
+    `DESIGN.md` now records objectives, non-goals, trust boundaries, eight
+    safety invariants, trade-offs and resource bounds. `VALIDATION.md` adds
+    claim-to-evidence traceability and residual-risk limits, while
+    `REFERENCES.md` records authoritative/corroborating technical sources.
+    During qualification, two stale 1.8.0-164 rename assertions and a lost
+    executable bit on `packaging/build-deb.sh` were also corrected. Exact
+    production/package baseline `49e20783f3c74177d18f9c858ef27e74938340e9` and qualification head
+    `21620048f6215413924fe0175ef3e38007b16d7b` built with warnings as errors; the complete 33-test
+    native/filesystem/GUI/release suite and Hosted ASan/UBSan lane passed.
+    The only remaining gate failure was the intentional stale-audit-baseline
+    assertion that this extension advances.
+
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-163 audit extension is bound to Defragger source baseline
-`b999eb48a57456f34e3ce5ecb366bffc287b0276`. Release qualification rejects any later change beneath the
+The current 1.8.0-165 audit extension is bound to Defragmenter source baseline
+`49e20783f3c74177d18f9c858ef27e74938340e9`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `29ea8bc75a51bb8779d5507bee866152802f678f`; changes beneath `.github/workflows`
@@ -361,7 +377,7 @@ refresh workflow for that exact release SHA, and the same exact version/SHA can
 be supplied to its manual dispatch path if central publication needs to be
 retried.
 
-Version 1.8.0-163 is explicitly authorized for release on 2026-09-18. Any later
+Version 1.8.0-165 is explicitly authorized for release on 2026-09-18. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
