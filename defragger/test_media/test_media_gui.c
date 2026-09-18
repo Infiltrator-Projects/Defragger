@@ -717,7 +717,7 @@ int ldtm_gui_main(int argc, char **argv) {
                                               G_TYPE_STRING, G_TYPE_STRING);
 
     app.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(app.window), "Linux Defragger Test Media");
+    gtk_window_set_title(GTK_WINDOW(app.window), "Defragmenter Test Media");
     gtk_window_set_default_size(GTK_WINDOW(app.window), 1240, 820);
     gtk_window_set_position(GTK_WINDOW(app.window), GTK_WIN_POS_CENTER);
     geometry.min_width = 820;
@@ -727,7 +727,7 @@ int ldtm_gui_main(int argc, char **argv) {
     g_signal_connect(app.window, "destroy", G_CALLBACK(window_destroyed), &app);
 
     header = gtk_header_bar_new();
-    gtk_header_bar_set_title(GTK_HEADER_BAR(header), "Linux Defragger Test Media");
+    gtk_header_bar_set_title(GTK_HEADER_BAR(header), "Defragmenter Test Media");
     gtk_header_bar_set_subtitle(GTK_HEADER_BAR(header),
                                 "Dedicated destructive filesystem test-media builder");
     gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header), TRUE);

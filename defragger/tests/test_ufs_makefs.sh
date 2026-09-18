@@ -13,9 +13,9 @@ command -v makefs >/dev/null 2>&1 || exit 77
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-ufs-makefs.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
-mkdir -p "$WORK/source/LinuxDefragger-TestData/fragmented-files"
-printf '%s\n' 'Linux Defragger genuine UFS2 makefs integration test' \
-    >"$WORK/source/LinuxDefragger-TestData/fragmented-files/probe.txt"
+mkdir -p "$WORK/source/Defragmenter-TestData/fragmented-files"
+printf '%s\n' 'Defragmenter genuine UFS2 makefs integration test' \
+    >"$WORK/source/Defragmenter-TestData/fragmented-files/probe.txt"
 
 echo '+ makefs -t ffs -B little -s 64m -o version=2,bsize=8192,fsize=1024,minfree=5'
 makefs -t ffs -B little -s 64m \

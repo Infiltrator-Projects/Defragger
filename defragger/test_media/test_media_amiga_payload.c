@@ -371,7 +371,7 @@ int ldtm_populate_amiga_volume(const char *path, uint8_t dostype,
     if (allocate_one(&volume, &metadata_cursor, &data_dir_block) != 0 ||
         allocate_one(&volume, &metadata_cursor, &files_dir_block) != 0 ||
         allocate_one(&volume, &metadata_cursor, &fragmented_dir_block) != 0) goto cleanup_volume;
-    init_directory_block(data_dir, data_dir_block, volume.root, "LinuxDefragger-TestData");
+    init_directory_block(data_dir, data_dir_block, volume.root, "Defragmenter-TestData");
     init_directory_block(files_dir, files_dir_block, data_dir_block, "fragmented-files");
     init_directory_block(fragmented_dir, fragmented_dir_block, data_dir_block, "fragmented-directory");
 
@@ -446,7 +446,7 @@ int ldtm_populate_amiga_volume(const char *path, uint8_t dostype,
     fix_checksum(data_dir, 5U);
     if (write_block(volume.fd, data_dir_block, data_dir) != 0) goto cleanup_volume;
     if (read_block(volume.fd, volume.root, root) != 0 ||
-        link_child(volume.fd, root, data_dir_block, "LinuxDefragger-TestData") != 0) goto cleanup_volume;
+        link_child(volume.fd, root, data_dir_block, "Defragmenter-TestData") != 0) goto cleanup_volume;
     fix_checksum(root, 5U);
     if (write_block(volume.fd, volume.root, root) != 0 || rewrite_bitmap(&volume) != 0 || fsync(volume.fd) != 0) {
         goto cleanup_volume;

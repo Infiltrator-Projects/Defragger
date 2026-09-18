@@ -30,7 +30,7 @@ static const LdtmFilesystemSpec LDTM_SPECS[LDTM_SPEC_COUNT] = {
     {"sfs", "LD_SFS", 64U, 25U, LDTM_CREATOR_AFFS, "",
      "Amiga Smart File System SFS0 v3; built-in raw C creator makes a 25 MiB file with 100 extents and an intentionally unsatisfied Growth Defrag reserve."},
     {"pfs3", "LD_PFS3", 1024U, 200U, LDTM_CREATOR_MANUAL, "",
-     "Amiga Professional File System PFS3 roadmap slot; no Linux Defragger engine or creator yet."},
+     "Amiga Professional File System PFS3 roadmap slot; no Defragmenter engine or creator yet."},
     {"hfs", "LD_HFS", 1024U, 200U, LDTM_CREATOR_HFS, "hfsutils", ""},
     {"hfsplus", "LD_HFSPLUS", 2048U, 200U, LDTM_CREATOR_HFSPLUS, "hfsprogs", ""},
     {"minix", "LD_MINIX", 1024U, 200U, LDTM_CREATOR_MINIX, "util-linux", ""},

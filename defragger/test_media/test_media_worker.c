@@ -494,7 +494,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
     if (record_count == NULL || directory_entries == NULL || spec == NULL) return -1;
     *record_count = 0U;
     *directory_entries = 0U;
-    if (join_path(root, sizeof(root), mountpoint, "LinuxDefragger-TestData") != 0 ||
+    if (join_path(root, sizeof(root), mountpoint, "Defragmenter-TestData") != 0 ||
         join_path(anchors, sizeof(anchors), root, "anchors") != 0 ||
         join_path(targets, sizeof(targets), root, "fragmented-files") != 0 ||
         join_path(directory_test, sizeof(directory_test), root, "fragmented-directory") != 0) return -1;
@@ -1217,7 +1217,7 @@ static int verify_mounted_payload(const LdtmFilesystemSpec *spec, const char *mo
     size_t index;
     char root[PATH_MAX];
     char directory_path[PATH_MAX];
-    if (join_path(root, sizeof(root), mountpoint, "LinuxDefragger-TestData") != 0) return -1;
+    if (join_path(root, sizeof(root), mountpoint, "Defragmenter-TestData") != 0) return -1;
     for (index = 0U; index < expected->target_count; ++index) {
         char path[PATH_MAX];
         if (join_path(path, sizeof(path), root, expected->targets[index].relative_path) != 0 ||

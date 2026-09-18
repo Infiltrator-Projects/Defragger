@@ -16,7 +16,7 @@ static void usage(const char *program) {
 
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-        printf("Linux Defragger Test Media %s\n", LD_VERSION);
+        printf("Defragmenter Test Media %s\n", LD_VERSION);
         return 0;
     }
     if (argc >= 2 && strcmp(argv[1], "--worker") == 0) {
