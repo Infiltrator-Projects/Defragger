@@ -15,7 +15,6 @@ void ld_warn_errno(const char *what);
 
 void *ld_xmalloc(size_t size);
 void *ld_xcalloc(size_t count, size_t size);
-void *ld_xrealloc(void *pointer, size_t size);
 char *ld_xstrdup(const char *text);
 char *ld_xstrndup(const char *text, size_t length);
 
