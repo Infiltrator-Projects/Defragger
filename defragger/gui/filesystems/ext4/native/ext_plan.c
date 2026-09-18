@@ -5,6 +5,8 @@
 #include "ld_runtime.h"
 #include "ld_stop.h"
 
+#include "infiltratr/arithmetic.h"
+
 #include <com_err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -343,6 +345,7 @@ typedef struct {
 typedef struct {
     Mapping *items;
     size_t count;
+    size_t capacity;
     size_t position;
     size_t changed;
     bool mismatch;
@@ -423,7 +426,12 @@ static int apply_mappings(const char *stage, sqlite3 *db, bool allow_stop,
         MappingContext context = {0};
         int mstate;
         while ((mstate = sqlite3_step(mappings)) == SQLITE_ROW) {
-            context.items = ld_xrealloc(context.items, (context.count + 1U) * sizeof(*context.items));
+            if (context.count == SIZE_MAX ||
+                !infiltratr_array_reserve((void **)&context.items,
+                                          &context.capacity,
+                                          sizeof(*context.items),
+                                          context.count + 1U, 32U))
+                ld_die("cannot grow EXT inode mapping vector");
             Mapping *item = &context.items[context.count++];
             item->logical = sqlite3_column_int64(mappings, 0);
             item->old_block = (uint64_t)sqlite3_column_int64(mappings, 1);
@@ -490,6 +498,7 @@ typedef struct {
 typedef struct {
     ExtDigestBlock *items;
     size_t count;
+    size_t capacity;
 } ExtDigestContext;
 
 static int collect_digest_block(ext2_filsys fs, blk64_t *blocknr,
@@ -500,8 +509,12 @@ static int collect_digest_block(ext2_filsys fs, blk64_t *blocknr,
     (void)ref_offset;
     ExtDigestContext *context = private_data;
     if (blockcnt >= 0 && *blocknr != 0) {
-        context->items = ld_xrealloc(
-            context->items, (context->count + 1U) * sizeof(*context->items));
+        if (context->count == SIZE_MAX ||
+            !infiltratr_array_reserve((void **)&context->items,
+                                      &context->capacity,
+                                      sizeof(*context->items),
+                                      context->count + 1U, 32U))
+            ld_die("cannot grow EXT digest block vector");
         context->items[context->count++] = (ExtDigestBlock){
             .physical = (uint64_t)*blocknr,
             .logical = (int64_t)blockcnt,
