@@ -6,6 +6,7 @@
 #include "ld_runtime.h"
 #include "ld_stop.h"
 #include "infiltratr/arithmetic.h"
+#include "infiltratr/core.h"
 
 #include <errno.h>
 #include <fcntl.h>
