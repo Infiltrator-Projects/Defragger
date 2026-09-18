@@ -6,7 +6,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VERSION=$(tr -d '\r\n' <"$ROOT/VERSION")
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-artifact-test.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
-RUN="$WORK/Defragmenter-${VERSION}-local-folder.run
+RUN="$WORK/Defragmenter-${VERSION}-local-folder.run"
 SOURCE_ZIP="$WORK/Defragmenter-${VERSION}.zip"
 
 sh -n "$ROOT/packaging/build-deb.sh"
