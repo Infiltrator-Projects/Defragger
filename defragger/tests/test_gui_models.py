@@ -365,7 +365,7 @@ def test_about_dialog_matches_the_standard_project_identity() -> None:
     for required in (
         'APP_ICON_NAME = "io.github.linuxdefragger"',
         'COPYRIGHT = "Copyright © 2026 Shannon Smith"',
-        'PROJECT_URL = "https://github.com/Infiltrator-Projects/Defragger"',
+        'PROJECT_URL = "https://github.com/Infiltrator-Projects/Defragmenter"',
         "Gtk.Image.new_from_icon_name(APP_ICON_NAME, Gtk.IconSize.DIALOG)",
         'Gtk.Label(label=f"Version {self.gui_version}")',
         '("Build", self.build_label)',

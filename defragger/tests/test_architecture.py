@@ -604,7 +604,7 @@ def test_version_and_registry_are_dynamic() -> None:
 
 
 def test_user_facing_branding_is_defragmenter() -> None:
-    repository_identifier = "Infiltrator-Projects/Defragger"
+    repository_identifier = "Infiltrator-Projects/Defragmenter"
     user_facing = (
         ROOT.parent / "README.md",
         ROOT / "README.md",
@@ -633,8 +633,28 @@ def test_user_facing_branding_is_defragmenter() -> None:
     release_workflow = (ROOT.parent / ".github" / "workflows" / "release.yml").read_text()
     assert 'ARCHIVE_BASENAME="Defragmenter-${VERSION}"' in source_builder
     assert "Defragmenter-${VERSION}.zip" in release_workflow
+    assert "Defragmenter-${VERSION}-amd64.deb" in release_workflow
+    assert "Defragmenter-${VERSION}-local-folder.run" in release_workflow
+    assert "linux-defragger_${VERSION}_amd64.deb" not in release_workflow
+    assert "linux-defragger-${VERSION}-local-folder.run" not in release_workflow
     assert "Defragger-${VERSION}.zip" not in source_builder
     assert "Defragger-${VERSION}.zip" not in release_workflow
+
+    test_media_user_facing = (
+        ROOT / "test_media" / "test_media_main.c",
+        ROOT / "test_media" / "test_media_gui.c",
+        ROOT / "test_media" / "test_media_core.c",
+        ROOT / "test_media" / "test_media_worker.c",
+        ROOT / "test_media" / "test_media_amiga_payload.c",
+    )
+    for candidate in test_media_user_facing:
+        source = candidate.read_text()
+        assert "Linux Defragger" not in source, (
+            f"{candidate.relative_to(ROOT.parent)} retained the retired product name"
+        )
+        assert "LinuxDefragger-TestData" not in source, (
+            f"{candidate.relative_to(ROOT.parent)} retained the retired test-data label"
+        )
 
 
 def test_test_media_companion_is_all_c() -> None:

@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Defragmenter
 
-> **Safety status:** The version 1.8.0-166 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
+> **Safety status:** The version 1.8.0-167 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
 
 Defragmenter is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 
@@ -84,8 +84,8 @@ Each numbered release uses three project deliverables:
 
 | File | Purpose |
 |---|---|
-| `linux-defragger_${VERSION}_amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
-| `linux-defragger-${VERSION}-local-folder.run` | Hardware-optimised local compile-and-install program (`-march=native -mtune=native`). |
+| `Defragmenter-${VERSION}-amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
+| `Defragmenter-${VERSION}-local-folder.run` | Hardware-optimised local compile-and-install program (`-march=native -mtune=native`). |
 | `Defragmenter-${VERSION}.zip` | Clean source archive built and tested from the exact release commit. |
 
 Release publication is gated: the release workflow only publishes the requested version after the reusable project quality gate succeeds. GitHub's automatic tag source links may also be displayed, but `Defragmenter-${VERSION}.zip` is the project's verified source deliverable.
