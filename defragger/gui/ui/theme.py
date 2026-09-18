@@ -1,10 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Canonical Mercedes-Benz inspired GTK3 theme shared by Linux Defragger windows."""
+"""Runtime theme policy for Linux Defragger.
+
+Three explicit modes are supported:
+- system: keep GTK/Cinnamon colours and apply only Infiltrator typography;
+- day: force the light Infiltrator palette;
+- night: force the graphite/silver Infiltrator palette.
+
+The preference is per-user and shared by every Defragger window.
+"""
 
 from __future__ import annotations
 
-import subprocess
+from enum import Enum
 from pathlib import Path
+import os
+import subprocess
 
 import gi
 
@@ -13,8 +23,41 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
 _FONT = Path("/usr/share/fonts/truetype/linux-defragger/mb_corpo_s_regular.ttf")
-_applied = False
+_CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "linux-defragger"
+_CONFIG_FILE = _CONFIG_DIR / "theme"
+
 _provider: Gtk.CssProvider | None = None
+
+
+class ThemeMode(str, Enum):
+    SYSTEM = "system"
+    DAY = "day"
+    NIGHT = "night"
+
+
+def theme_label(mode: ThemeMode) -> str:
+    return {
+        ThemeMode.SYSTEM: "Follow system",
+        ThemeMode.DAY: "Day",
+        ThemeMode.NIGHT: "Night",
+    }[mode]
+
+
+def load_theme_mode() -> ThemeMode:
+    try:
+        value = _CONFIG_FILE.read_text(encoding="utf-8").strip()
+        return ThemeMode(value)
+    except (OSError, ValueError):
+        return ThemeMode.SYSTEM
+
+
+def save_theme_mode(mode: ThemeMode) -> None:
+    try:
+        _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        _CONFIG_FILE.write_text(mode.value + "\n", encoding="utf-8")
+    except OSError:
+        # Appearance persistence must never stop a storage/safety tool starting.
+        pass
 
 
 def _mb_family() -> str:
@@ -35,330 +78,124 @@ def _mb_family() -> str:
     return "Sans"
 
 
-def apply_mb_theme() -> None:
-    """Apply the project-wide MB black/silver theme once per process."""
-    global _applied, _provider
-    if _applied:
-        return
-    screen = Gdk.Screen.get_default()
-    if screen is None:
-        return
-    family = _mb_family()
-    css = f"""
-    * {{
-        font-family: \"{family}\", Sans;
-        color: #edf0f2;
-    }}
-
-    window, dialog, .background, .app-shell {{
-        background-color: #080a0b;
-    }}
-
-    headerbar, .titlebar {{
-        background-image: none;
-        background-color: #151719;
-        border-bottom: 1px solid #34383c;
-        color: #f5f6f7;
-        box-shadow: none;
-    }}
-    headerbar label, .titlebar label {{
-        color: #c8cdd1;
-        font-weight: normal;
-    }}
-
-    menubar, .app-menubar {{
-        background-color: #0d0f10;
-        border-bottom: 1px solid #25292c;
-        padding: 4px 8px;
-    }}
-    menubar menuitem {{
-        color: #c7ccd0;
-        padding: 5px 9px;
-    }}
-    menu {{
-        background-color: #15181a;
-        border: 1px solid #454b50;
-    }}
-    menuitem {{ padding: 7px 11px; }}
-    menuitem:hover {{ background-color: #282c30; }}
-
+def _base_css(family: str) -> str:
+    return f"""
+    * {{ font-family: "{family}", Sans; }}
     .app-title, .about-title {{
-        font-family: \"MB Corpo A Title Cond WEB\", \"{family}\", Sans;
-        color: #f6f7f8;
+        font-family: "MB Corpo A Title Cond WEB", "{family}", Sans;
         font-weight: normal;
     }}
     .app-title {{ font-size: 23pt; }}
-    .app-subtitle {{
-        color: #939ba2;
-        font-size: 9.5pt;
-    }}
-
-    .version-badge {{
-        background-color: #0b0d0f;
-        border: 1px solid #2f3438;
-        border-left: 2px solid #aeb4b9;
-        border-radius: 4px;
-        padding: 5px 8px;
-    }}
-    .version-primary {{
-        color: #d7dbde;
-        font-size: 9pt;
-        font-weight: bold;
-    }}
-    .version-secondary {{
-        color: #727b82;
-        font-size: 8.5pt;
-    }}
-
-    .section-title {{
-        color: #aab1b7;
-        font-size: 9.5pt;
-        font-weight: bold;
-        padding: 0 5px;
-    }}
-    frame.section-panel > border,
-    frame.map-panel > border,
-    frame.action-panel > border,
-    frame.summary-card > border {{
-        background-color: #0b0d0f;
-        border: 1px solid #2c3135;
-        border-radius: 5px;
-        box-shadow: none;
-    }}
-    frame.summary-card > border {{
-        background-color: #0c0f11;
-        border-color: #31373c;
-        border-top-color: #555c62;
-    }}
-    .summary-title {{
-        color: #7f8991;
-        font-size: 8.75pt;
-        font-weight: normal;
-    }}
-    .summary-value {{
-        color: #f4f5f6;
-        font-size: 15pt;
-        font-weight: bold;
-    }}
-
-    combobox button, entry, spinbutton {{
-        background-image: none;
-        background-color: #111416;
-        color: #e8ebed;
-        border: 1px solid #444a4f;
-        border-radius: 3px;
-        box-shadow: none;
-        min-height: 28px;
-    }}
-    combobox button:hover, entry:focus, spinbutton:focus {{
-        border-color: #7f878d;
-        background-color: #15191c;
-    }}
-
-    button {{
-        background-image: none;
-        background-color: #191c1f;
-        color: #dde1e4;
-        border: 1px solid #5f666c;
-        border-radius: 3px;
-        padding: 7px 13px;
-        min-height: 27px;
-        box-shadow: none;
-        text-shadow: none;
-    }}
-    button:hover {{
-        background-color: #24282c;
-        border-color: #9da3a8;
-        color: #ffffff;
-    }}
-    button:active, button:checked {{
-        background-color: #30353a;
-        border-color: #b6bbc0;
-    }}
-    button:disabled {{
-        color: #555d63;
-        border-color: #2a2e31;
-        background-color: #101214;
-    }}
-
-    button.primary-action {{
-        background-color: #c3c8cc;
-        color: #090a0b;
-        border-color: #e4e7e9;
-        font-weight: bold;
-        min-width: 82px;
-    }}
-    button.primary-action:hover {{
-        background-color: #e0e3e5;
-        color: #050505;
-    }}
-    button.primary-action:active {{
-        background-color: #aeb5ba;
-        color: #050505;
-    }}
-    button.primary-action:disabled {{
-        background-color: #171a1c;
-        color: #596168;
-        border-color: #30353a;
-    }}
-    button.operation-action {{
-        border-color: #757d83;
-        color: #e2e5e7;
-        font-weight: bold;
-        min-width: 96px;
-    }}
-    button.destructive-action {{
-        border-color: #6c4545;
-        color: #d8c5c5;
-    }}
-    button.destructive-action:hover {{
-        background-color: #3a2222;
-        border-color: #aa6262;
-        color: #f3dddd;
-    }}
-    button.destructive-action:disabled {{
-        color: #4f5356;
-        border-color: #2a2e31;
-        background-color: #101214;
-    }}
-
-    .legend-strip {{
-        background-color: transparent;
-        padding: 2px 0;
-    }}
-    .legend-item label {{
-        color: #aab1b6;
-        font-size: 8.75pt;
-    }}
-    .map-caption {{
-        color: #707a82;
-        font-size: 8.75pt;
-    }}
-
-    progressbar.operation-progress trough, progressbar trough {{
-        min-height: 8px;
-        background-color: #101315;
-        border: 1px solid #30363a;
-        border-radius: 2px;
-    }}
-    progressbar.operation-progress progress, progressbar progress {{
-        background-color: #aeb4b9;
-        border-radius: 1px;
-    }}
-    progressbar text {{
-        color: #9ba2a8;
-        font-size: 8pt;
-    }}
-
-    .log-expander {{
-        color: #aeb4b9;
-        font-size: 9.5pt;
-        font-weight: bold;
-    }}
-    scrolledwindow.log-scroll {{
-        background-color: #080a0b;
-        border: 1px solid #2c3135;
-        border-radius: 4px;
-    }}
-    textview.log-view,
-    textview.log-view text {{
-        background-color: #090b0d;
-        color: #c9ced2;
-        font-size: 9.25pt;
-    }}
-    textview.log-view text selection {{
-        background-color: #555d63;
-        color: #ffffff;
-    }}
-
-    .status-strip {{
-        background-color: #0a0c0e;
-        border-top: 1px solid #24292d;
-        border-bottom: 1px solid #15181a;
-    }}
-    .status-prefix {{
-        color: #5f6870;
-        font-size: 8pt;
-        font-weight: bold;
-    }}
-    .status-text {{
-        color: #8c959c;
-        font-size: 8.75pt;
-    }}
-
-    .about-title {{ font-size: 21pt; }}
-    .about-version {{
-        color: #8e979e;
-        font-size: 9.5pt;
-    }}
-    .about-copy {{
-        color: #c9ced2;
-        font-size: 9.5pt;
-    }}
-    .about-meta-key {{
-        color: #747e86;
-        font-size: 8.75pt;
-        font-weight: bold;
-    }}
-    .about-meta-value {{
-        color: #c5cace;
-        font-size: 9pt;
-    }}
-    linkbutton button {{
-        background-color: transparent;
-        border-color: #353b40;
-        color: #c5cbd0;
-        box-shadow: none;
-    }}
-    linkbutton button:hover {{
-        background-color: #161a1d;
-        border-color: #666e74;
-    }}
-
-    textview, textview text, treeview, viewport, scrolledwindow {{
-        background-color: #0d1012;
-        color: #dde1e4;
-        border-color: #373d42;
-    }}
-    entry:selected, textview text selection, treeview.view:selected {{
-        background-color: #555d63;
-        color: #ffffff;
-    }}
-    treeview.view header button {{
-        background-color: #171a1d;
-        border-color: #41474c;
-        font-weight: bold;
-    }}
-    notebook > header {{
-        background-color: #0b0d0f;
-        border-color: #343a3f;
-    }}
-    notebook tab {{
-        background-color: #111416;
-        padding: 7px 12px;
-    }}
-    notebook tab:checked {{ background-color: #24282c; }}
-
-    scrollbar slider {{
-        background-color: #555d63;
-        border-radius: 3px;
-        min-width: 7px;
-        min-height: 7px;
-    }}
-    scrollbar slider:hover {{ background-color: #858c92; }}
-    separator {{ background-color: #30353a; }}
-    tooltip {{
-        background-color: #1a1d20;
-        color: #f1f2f3;
-        border: 1px solid #5d646a;
-    }}
+    .app-subtitle {{ font-size: 9.5pt; }}
+    .summary-title {{ font-size: 8.75pt; }}
+    .summary-value {{ font-size: 15pt; font-weight: bold; }}
+    .section-title {{ font-size: 9.5pt; font-weight: bold; padding: 0 5px; }}
+    button {{ border-radius: 3px; padding: 7px 13px; min-height: 27px; }}
+    button.primary-action, button.operation-action {{ font-weight: bold; }}
+    progressbar trough {{ min-height: 8px; }}
+    .status-prefix {{ font-size: 8pt; font-weight: bold; }}
+    .status-text {{ font-size: 8.75pt; }}
     """
-    provider = Gtk.CssProvider()
-    provider.load_from_data(css.encode("utf-8"))
-    Gtk.StyleContext.add_provider_for_screen(
-        screen,
-        provider,
-        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 50,
-    )
-    _provider = provider
-    _applied = True
+
+
+def _night_css() -> str:
+    return """
+    window, dialog, .background, .app-shell { background-color: #050608; color: #e8ecef; }
+    headerbar, .titlebar { background-image: none; background-color: #101318; color: #eef1f3; border-bottom: 1px solid #353a40; }
+    menubar, .app-menubar { background-color: #0d1014; border-bottom: 1px solid #353a40; }
+    menu { background-color: #101318; border: 1px solid #454b50; }
+    menuitem:hover { background-color: #2b3137; }
+    .app-title, .about-title, .summary-value { color: #eef1f3; }
+    .app-subtitle, .summary-title, .map-caption, .status-text { color: #899198; }
+    .section-title, .legend-item label, .log-expander { color: #aeb6bd; }
+    .version-badge, frame.section-panel > border, frame.map-panel > border,
+    frame.action-panel > border, frame.summary-card > border {
+        background-color: #0d1014; border: 1px solid #353a40;
+    }
+    button, combobox button, entry, spinbutton {
+        background-image: none; background-color: #171b20; color: #e8ecef;
+        border: 1px solid #5f666c; box-shadow: none;
+    }
+    button:hover { background-color: #22272d; border-color: #9da3a8; }
+    button:active, button:checked { background-color: #2b3137; border-color: #bec7cf; }
+    button:disabled { color: #59636c; border-color: #2a2e31; background-color: #0e1115; }
+    button.primary-action { background-color: #d7dde2; color: #111418; border-color: #eef1f3; }
+    button.primary-action:hover { background-color: #eef1f3; color: #111418; }
+    button.destructive-action { border-color: #8f5555; color: #d8c5c5; }
+    button.destructive-action:hover { background-color: #4a2525; border-color: #c36a6a; }
+    progressbar trough { background-color: #101318; border: 1px solid #353a40; }
+    progressbar progress { background-color: #bec7cf; }
+    textview, textview text, treeview, viewport, scrolledwindow {
+        background-color: #0e1115; color: #e8ecef; border-color: #353a40;
+    }
+    textview.log-view, textview.log-view text { background-color: #090b0d; color: #d9dde0; }
+    entry selection, textview text selection, treeview.view:selected { background-color: #2b3137; color: #eef1f3; }
+    .status-strip { background-color: #0d1014; border-top: 1px solid #353a40; }
+    scrollbar slider { background-color: #555d63; }
+    tooltip { background-color: #171b20; color: #eef1f3; border: 1px solid #5d646a; }
+    """
+
+
+def _day_css() -> str:
+    return """
+    window, dialog, .background, .app-shell { background-color: #f4f5f7; color: #20252b; }
+    headerbar, .titlebar { background-image: none; background-color: #ffffff; color: #111418; border-bottom: 1px solid #c7cdd3; }
+    menubar, .app-menubar { background-color: #ffffff; border-bottom: 1px solid #c7cdd3; }
+    menu { background-color: #ffffff; border: 1px solid #c7cdd3; }
+    menuitem:hover { background-color: #eceff2; }
+    .app-title, .about-title, .summary-value { color: #111418; }
+    .app-subtitle, .summary-title, .map-caption, .status-text { color: #737d86; }
+    .section-title, .legend-item label, .log-expander { color: #59636c; }
+    .version-badge, frame.section-panel > border, frame.map-panel > border,
+    frame.action-panel > border, frame.summary-card > border {
+        background-color: #ffffff; border: 1px solid #c7cdd3;
+    }
+    button, combobox button, entry, spinbutton {
+        background-image: none; background-color: #f8f9fa; color: #20252b;
+        border: 1px solid #aeb6bd; box-shadow: none;
+    }
+    button:hover { background-color: #eceff2; border-color: #6f7881; }
+    button:active, button:checked { background-color: #dde2e7; border-color: #6f7881; }
+    button:disabled { color: #9aa2a9; border-color: #d8dde2; background-color: #f4f5f7; }
+    button.primary-action { background-color: #20252b; color: #ffffff; border-color: #20252b; }
+    button.primary-action:hover { background-color: #343b42; color: #ffffff; }
+    button.destructive-action { border-color: #b54848; color: #8f3636; }
+    button.destructive-action:hover { background-color: #f7e5e5; border-color: #b54848; }
+    progressbar trough { background-color: #eceff2; border: 1px solid #c7cdd3; }
+    progressbar progress { background-color: #6f7881; }
+    textview, textview text, treeview, viewport, scrolledwindow {
+        background-color: #ffffff; color: #20252b; border-color: #c7cdd3;
+    }
+    textview.log-view, textview.log-view text { background-color: #ffffff; color: #20252b; }
+    entry selection, textview text selection, treeview.view:selected { background-color: #dde2e7; color: #111418; }
+    .status-strip { background-color: #ffffff; border-top: 1px solid #c7cdd3; }
+    scrollbar slider { background-color: #aeb6bd; }
+    tooltip { background-color: #ffffff; color: #20252b; border: 1px solid #aeb6bd; }
+    """
+
+
+def apply_theme(mode: ThemeMode | str | None = None) -> ThemeMode:
+    """Apply one theme globally to GTK; system mode leaves OS colours intact."""
+    global _provider
+
+    resolved = load_theme_mode() if mode is None else ThemeMode(mode)
+    screen = Gdk.Screen.get_default()
+    if screen is None:
+        return resolved
+
+    family = _mb_family()
+    css = _base_css(family)
+    if resolved is ThemeMode.DAY:
+        css += _day_css()
+    elif resolved is ThemeMode.NIGHT:
+        css += _night_css()
+
+    if _provider is None:
+        _provider = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_screen(
+            screen,
+            _provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 50,
+        )
+    _provider.load_from_data(css.encode("utf-8"))
+    return resolved
