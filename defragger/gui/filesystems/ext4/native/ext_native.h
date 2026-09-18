@@ -8,6 +8,15 @@
 
 #include <ext2fs/ext2fs.h>
 #include <sqlite3.h>
+/*
+ * Native EXT2/3/4 representation contract.
+ *
+ * Block numbers and range endpoints are filesystem blocks. ExtRange is
+ * half-open [start, end). Catalogue/vector storage is owned by the containing
+ * object and released by the matching *_free() routine. Geometry describes the
+ * source; plan databases and verified catalogues are derived state and are not
+ * authority until verification succeeds.
+ */
 
 typedef struct {
     char filesystem[8];
