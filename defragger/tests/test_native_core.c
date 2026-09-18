@@ -3,6 +3,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_path.h"
+#include "ld_protocol.h"
 #include "ld_runtime.h"
 #include "ld_stop.h"
 
@@ -28,6 +29,22 @@ int main(void) {
     if (ld_path_is_derived_from("/tmp/other.ext-stage.img",
                                 "/tmp/a.journal", ".ext-stage.img"))
         return fail("unbound recovery path");
+
+    FILE *protocol_stream = tmpfile();
+    if (protocol_stream == NULL) return fail("protocol tmpfile");
+    if (ld_emit_result_event(protocol_stream, "defrag", "failed",
+                             "quoted \"value\"\\path\nnext") != 0)
+        return fail("protocol result emission");
+    if (fseek(protocol_stream, 0L, SEEK_SET) != 0)
+        return fail("protocol rewind");
+    char protocol_line[256] = {0};
+    if (fgets(protocol_line, sizeof(protocol_line), protocol_stream) == NULL)
+        return fail("protocol readback");
+    fclose(protocol_stream);
+    if (strcmp(protocol_line,
+               "@@RESULT {\\\"operation\\\":\\\"defrag\\\",\\\"status\\\":\\\"failed\\\","
+               "\\\"message\\\":\\\"quoted \\\\\\\"value\\\\\\\"\\\\\\\\path\\\\nnext\\\"}\\n") != 0)
+        return fail("protocol JSON escaping");
 
     char victim_path[] = "/tmp/linux-defragger-core-victim.XXXXXX";
     int victim_fd = mkstemp(victim_path);
