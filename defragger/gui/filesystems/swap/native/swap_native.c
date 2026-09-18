@@ -3,6 +3,7 @@
 
 #include "ld_io.h"
 
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/endian.h"
 
 #include <errno.h>
@@ -150,11 +151,13 @@ static int ld_swap_parse_current(const unsigned char *page, uint32_t page_size,
     }
 
     const uint64_t filesystem_pages = (uint64_t)last_page + 1U;
-    if (filesystem_pages > UINT64_MAX / (uint64_t)page_size) {
+    uint64_t filesystem_bytes = 0U;
+    if (!infiltratr_u64_multiply_checked(filesystem_pages,
+                                         (uint64_t)page_size,
+                                         &filesystem_bytes)) {
         ld_swap_error(error, error_size, "Linux swap extent overflows address space");
         return -1;
     }
-    const uint64_t filesystem_bytes = filesystem_pages * (uint64_t)page_size;
     if (filesystem_bytes > container_bytes) {
         ld_swap_error(error, error_size,
                       "Linux swap area is shorter than its header declares");
@@ -496,15 +499,20 @@ int ld_swap_runtime_usage(const char *path, const char *proc_swaps_path,
         ld_swap_resolve_path(decoded_path, candidate, sizeof(candidate));
         if (strcmp(candidate, wanted) != 0)
             continue;
-        if (total_kib > UINT64_MAX / 1024ULL || used_kib > UINT64_MAX / 1024ULL) {
+        uint64_t total_bytes = 0U;
+        uint64_t used_bytes = 0U;
+        if (!infiltratr_u64_multiply_checked((uint64_t)total_kib, 1024U,
+                                             &total_bytes) ||
+            !infiltratr_u64_multiply_checked((uint64_t)used_kib, 1024U,
+                                             &used_bytes)) {
             free(line);
             (void)fclose(file);
             ld_swap_error(error, error_size, "swap runtime usage overflows byte counter");
             return -1;
         }
         usage->active = true;
-        usage->total_bytes = (uint64_t)total_kib * 1024U;
-        usage->used_bytes = (uint64_t)used_kib * 1024U;
+        usage->total_bytes = total_bytes;
+        usage->used_bytes = used_bytes;
         if (usage->used_bytes > usage->total_bytes)
             usage->used_bytes = usage->total_bytes;
         usage->priority = priority;
