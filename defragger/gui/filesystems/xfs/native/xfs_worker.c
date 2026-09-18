@@ -12,6 +12,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "ld_protocol.h"
 #include "ld_path.h"
 
 #include "infiltratr/core.h"
@@ -64,12 +65,7 @@ static void usage(FILE *stream) {
             PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME);
 }
 
-static void emit_result(const char *operation, const char *status, const char *message) {
-    /* Operation/status values are fixed tokens.  Messages used here contain no JSON metacharacters. */
-    printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"%s\"}\n",
-           operation, status, message == NULL ? "" : message);
-    fflush(stdout);
-}
+
 
 static void uuid_hex(const uint8_t uuid[16], char out[33]) {
     static const char digits[] = "0123456789abcdef";
@@ -570,7 +566,7 @@ static int build_and_commit(const char *device, const char *operation, const cha
     }
     if (xfs_plan_already_applied(&staged, &plan)) {
         transaction_cleanup(journal_path, &state);
-        puts("Not needed; canonical XFS layout already verified."); emit_result(operation, "not-needed", "");
+        puts("Not needed; canonical XFS layout already verified."); ld_emit_result_event(stdout, operation, "not-needed", "");
         result = 0; goto done;
     }
     if (xfs_open_plan_db(state.plan, true, &db, error) != 0) goto precommit_fail;
@@ -622,13 +618,13 @@ static int build_and_commit(const char *device, const char *operation, const cha
     transaction_cleanup(journal_path, &state);
     printf("XFS %s completed with UUID and full device capacity preserved.\n",
            strcmp(operation, "growth-defrag") == 0 ? "Growth Defrag" : "Defragment");
-    emit_result(operation, ld_stop_requested() ? "stopped" : "completed", "");
+    ld_emit_result_event(stdout, operation, ld_stop_requested() ? "stopped" : "completed", "");
     result = ld_stop_requested() ? 130 : 0;
     goto done;
 stopped:
     transaction_cleanup(journal_path, &state);
     puts("Stop requested before source commit; the original XFS filesystem is unchanged.");
-    emit_result(operation, "stopped", ""); result = 130; goto done;
+    ld_emit_result_event(stdout, operation, "stopped", ""); result = 130; goto done;
 precommit_fail:
     transaction_cleanup(journal_path, &state);
     goto done;
@@ -690,7 +686,7 @@ static int recover_transaction(const char *device, const char *journal_path, cha
     }
     xfs_catalogue_free(&committed); sqlite3_close(db); xfs_catalogue_free(&staged);
     transaction_cleanup(journal_path, &state);
-    puts("XFS recovery completed successfully."); emit_result("recover", "completed", ""); result = 0;
+    puts("XFS recovery completed successfully."); ld_emit_result_event(stdout, "recover", "completed", ""); result = 0;
 done:
     free(real); free(identity); journal_free(&state); return result;
 }
