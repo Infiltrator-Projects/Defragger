@@ -653,8 +653,22 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[i], "--live-updates") == 0) live_updates = true;
         else if (strcmp(argv[i], "--confirm") == 0 && i + 1 < argc) confirm = argv[++i];
         else if (strcmp(argv[i], "--journal") == 0 && i + 1 < argc) journal = argv[++i];
-        else if (strcmp(argv[i], "--growth-percent") == 0 && i + 1 < argc) growth_percent = atoi(argv[++i]);
-        else if (strcmp(argv[i], "--live-map-cells") == 0 && i + 1 < argc) { live_updates = atoi(argv[++i]) > 0; }
+        else if (strcmp(argv[i], "--growth-percent") == 0 && i + 1 < argc) {
+            uint64_t parsed = 0U;
+            if (parse_u64(argv[++i], &parsed) != 0 || parsed > 100U) {
+                fprintf(stderr, "%s: --growth-percent requires an integer from 0 to 100\n", PROGRAM_NAME);
+                return 2;
+            }
+            growth_percent = (int)parsed;
+        }
+        else if (strcmp(argv[i], "--live-map-cells") == 0 && i + 1 < argc) {
+            uint64_t parsed = 0U;
+            if (parse_u64(argv[++i], &parsed) != 0) {
+                fprintf(stderr, "%s: --live-map-cells requires a non-negative integer\n", PROGRAM_NAME);
+                return 2;
+            }
+            live_updates = parsed > 0U;
+        }
         else if (strcmp(argv[i], "--ram-buffer") == 0 && i + 1 < argc) { ram_bytes = parse_ram_bytes(argv[++i]); if (ram_bytes == 0U) { fprintf(stderr, "%s: invalid RAM buffer size\n", PROGRAM_NAME); return 2; } }
         else if (strcmp(argv[i], "--batch-clusters") == 0 && i + 1 < argc) { batch_clusters = parse_batch_clusters(argv[++i]); if (batch_clusters == 0U) { fprintf(stderr, "%s: invalid batch cluster count\n", PROGRAM_NAME); return 2; } }
         else if (strcmp(argv[i], "--workers") == 0 && i + 1 < argc) { i++; }
