@@ -6,8 +6,8 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-160
-Audited source commit: bab7b42bf057ef3e08e39748425a70d8f5eae20f
+Applies to: release version 1.8.0-161
+Audited source commit: a45642c2ed4175cbd43967713d87fdc022223620
 Audited release-governance commit: 0f7536d6b917e8ccdd7ebe47c697695809c6dc8e
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -253,8 +253,8 @@ Recover.
     native/filesystem/GUI tests and the hosted ASan/UBSan lane. Its only
     quality-gate failure was the intentional stale-audit-baseline guard, which
     this extension advances.
-32. Theme palette ownership is now centralised in Infiltratr Common 1.19.1
-    at exact commit `f7674047a270422862ec8d459b5646a81fe1bfa2`.
+32. Theme palette ownership is now centralised in Infiltratr Common 1.19.2
+    at exact commit `44409af17c89b6ece6b4bcb2c0c133213c695c23`.
     Defragger's Python GTK layer retains only toolkit selectors and preference
     mechanics; its generated Day/Night token module is regression-checked
     directly against Common's canonical design JSON. No filesystem-specific
