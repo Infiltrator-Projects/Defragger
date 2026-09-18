@@ -223,10 +223,14 @@ def test_infiltratr_common_integration() -> None:
     assert "infiltratr_realpath_copy" in device
     assert "infiltratr_read_u64_file" in device
     assert "infiltratr_string_starts_with" in device
+    assert "infiltratr_path_basename" in device
     fat = (GUI / "filesystems" / "fat" / "native" / "writer.c").read_text()
     assert "infiltratr_parse_u64_range" in fat
     assert "infiltratr_parse_binary_quantity_u64" in fat
     assert "strtoull(" not in fat
+    assert "infiltratr_path_basename" in fat
+    assert "infiltratr_size_add_checked" in fat
+    assert "while (new_cap" not in fat
     fat_journal = (GUI / "filesystems" / "fat" / "native" / "fat_journal.c").read_text()
     assert "infiltratr_parse_u64" in fat_journal
     assert "infiltratr_parse_u64_range" in fat_journal
@@ -270,6 +274,14 @@ def test_infiltratr_common_integration() -> None:
     exfat = (GUI / "filesystems" / "exfat" / "native" / "exfat_worker.c").read_text()
     assert "infiltratr_parse_binary_quantity_u64" in exfat
     assert "strtoull(" not in exfat
+    ext_common = (GUI / "filesystems" / "ext4" / "native" / "ext_common.c").read_text()
+    ext_catalog = (GUI / "filesystems" / "ext4" / "native" / "ext_catalog.c").read_text()
+    assert "infiltratr_array_reserve" in ext_common
+    assert "infiltratr_array_reserve" in ext_catalog
+    for filesystem, worker in (("ext4", "ext_worker.c"), ("ntfs", "ntfs_worker.c"),
+                               ("exfat", "exfat_worker.c"), ("xfs", "xfs_worker.c")):
+        source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
+        assert "atoi(" not in source
     sfs_native = (GUI / "filesystems" / "sfs" / "native" / "sfs_native.c").read_text()
     assert "infiltratr_array_reserve" in sfs_native
     assert "realloc(" not in sfs_native
