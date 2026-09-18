@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "infiltratr/core.h"
+#include "infiltratr/posix.h"
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_path.h"
@@ -54,20 +55,20 @@ int main(void) {
         (ssize_t)sizeof(victim_payload))
         return fail("victim write");
     close(victim_fd);
+
     char journal_path[] = "/tmp/linux-defragger-core-journal.XXXXXX";
     int journal_fd = mkstemp(journal_path);
     if (journal_fd < 0) return fail("journal mkstemp");
     close(journal_fd);
     unlink(journal_path);
-    char journal_link[128];
-    if (snprintf(journal_link, sizeof(journal_link), "%s.tmp", journal_path) < 0)
-        return fail("journal temp path");
-    if (symlink(victim_path, journal_link) != 0) return fail("journal temp symlink");
-    char *atomic_path = NULL;
-    FILE *atomic_file = ld_path_open_atomic_temp(journal_path, &atomic_path);
-    if (atomic_file == NULL || atomic_path == NULL) return fail("safe atomic journal temp");
-    if (fputs("new-journal\n", atomic_file) < 0 || fclose(atomic_file) != 0)
-        return fail("atomic journal write");
+    if (symlink(victim_path, journal_path) != 0)
+        return fail("journal target symlink");
+    const char journal_payload[] = "new-journal\n";
+    if (infiltratr_atomic_file_write_bytes(
+            journal_path, INFILTRATR_ATOMIC_FILE_PRIVATE,
+            journal_payload, sizeof(journal_payload) - 1U) != 0)
+        return fail("Common atomic journal write");
+
     victim_fd = open(victim_path, O_RDONLY | O_CLOEXEC);
     if (victim_fd < 0) return fail("victim reopen");
     char victim_readback[sizeof(victim_payload)] = {0};
@@ -75,10 +76,13 @@ int main(void) {
     close(victim_fd);
     if (victim_read != (ssize_t)sizeof(victim_payload) ||
         memcmp(victim_readback, victim_payload, sizeof(victim_payload)) != 0)
-        return fail("atomic journal temp followed symlink");
-    unlink(atomic_path);
+        return fail("Common atomic write followed target symlink");
+    struct stat journal_status;
+    if (lstat(journal_path, &journal_status) != 0 ||
+        !S_ISREG(journal_status.st_mode))
+        return fail("Common atomic write did not replace symlink");
+    unlink(journal_path);
     unlink(victim_path);
-    free(atomic_path);
 
     char target_path[] = "/tmp/linux-defragger-core-target.XXXXXX";
     int target_fd = mkstemp(target_path);
