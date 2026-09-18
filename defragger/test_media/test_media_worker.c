@@ -2,6 +2,10 @@
 #include "test_media.h"
 #include "ufs_native.h"
 
+#include "infiltratr/arithmetic.h"
+#include "infiltratr/core.h"
+#include "infiltratr/posix_path.h"
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -121,9 +125,9 @@ static int capture_process(const char *const argv[], char **output) {
     int output_pipe[2];
     pid_t child;
     int status = 0;
-    size_t capacity = 4096U;
+    size_t capacity = 0U;
     size_t used = 0U;
-    char *buffer;
+    char *buffer = NULL;
     if (output == NULL || argv == NULL || argv[0] == NULL) return -1;
     *output = NULL;
     if (pipe(output_pipe) != 0) return -1;
@@ -141,8 +145,7 @@ static int capture_process(const char *const argv[], char **output) {
         _exit(127);
     }
     (void)close(output_pipe[1]);
-    buffer = malloc(capacity);
-    if (buffer == NULL) {
+    if (!infiltratr_array_reserve((void **)&buffer, &capacity, 1U, 4096U, 4096U)) {
         (void)close(output_pipe[0]);
         (void)waitpid(child, &status, 0);
         return -1;
@@ -150,16 +153,15 @@ static int capture_process(const char *const argv[], char **output) {
     for (;;) {
         ssize_t got;
         if (capacity - used < 2048U) {
-            size_t next_capacity = capacity * 2U;
-            char *next = realloc(buffer, next_capacity);
-            if (next == NULL) {
+            size_t required = 0U;
+            if (!infiltratr_size_add_checked(used, 2049U, &required) ||
+                !infiltratr_array_reserve((void **)&buffer, &capacity, 1U,
+                                          required, 4096U)) {
                 free(buffer);
                 (void)close(output_pipe[0]);
                 (void)waitpid(child, &status, 0);
                 return -1;
             }
-            buffer = next;
-            capacity = next_capacity;
         }
         got = read(output_pipe[0], buffer + used, capacity - used - 1U);
         if (got < 0) {
@@ -186,17 +188,6 @@ static int capture_process(const char *const argv[], char **output) {
     }
     *output = buffer;
     return 0;
-}
-
-static void trim_ascii(char *text) {
-    char *start = text;
-    char *end;
-    if (text == NULL) return;
-    while (*start != '\0' && isspace((unsigned char)*start)) ++start;
-    if (start != text) memmove(text, start, strlen(start) + 1U);
-    end = text + strlen(text);
-    while (end > text && isspace((unsigned char)end[-1])) --end;
-    *end = '\0';
 }
 
 static int extract_pair(const char *line, const char *key, char *value, size_t capacity) {
@@ -233,7 +224,7 @@ int ldtm_is_whole_block_device(const char *device) {
     int result;
     if (device == NULL || stat(device, &st) != 0 || !S_ISBLK(st.st_mode)) return 0;
     if (capture_process(argv, &output) != 0) return 0;
-    trim_ascii(output);
+    infiltratr_trim(output);
     result = strcmp(output, "disk") == 0;
     free(output);
     return result;
@@ -247,7 +238,7 @@ static int mount_source_disk(const char *mountpoint, char *disk, size_t capacity
     char *saveptr = NULL;
     int found = 0;
     if (capture_process(findmnt_argv, &source) != 0) return 0;
-    trim_ascii(source);
+    infiltratr_trim(source);
     if (strncmp(source, "/dev/", 5U) != 0) {
         free(source);
         return 0;
@@ -303,7 +294,9 @@ int ldtm_device_safety_check(const char *device, int allow_non_removable,
     char rm_text[16] = "0";
     char ro_text[16] = "0";
     char transport[64] = "";
-    unsigned long long bytes;
+    uint64_t bytes = 0U;
+    uint64_t removable_value = 0U;
+    uint64_t readonly_value = 0U;
     int removable;
     int readonly;
     if (detail == NULL || detail_capacity == 0U) return -1;
@@ -329,9 +322,15 @@ int ldtm_device_safety_check(const char *device, int allow_non_removable,
     (void)extract_pair(output, "RO", ro_text, sizeof(ro_text));
     (void)extract_pair(output, "TRAN", transport, sizeof(transport));
     free(output);
-    bytes = strtoull(size_text, NULL, 10);
-    removable = atoi(rm_text);
-    readonly = atoi(ro_text);
+    if (!infiltratr_parse_u64(size_text, 10U, &bytes) ||
+        !infiltratr_parse_u64_range(rm_text, 10U, 0U, 1U, &removable_value) ||
+        !infiltratr_parse_u64_range(ro_text, 10U, 0U, 1U, &readonly_value)) {
+        (void)snprintf(detail, detail_capacity,
+                       "Unable to parse target properties for %s", canonical);
+        return -1;
+    }
+    removable = (int)removable_value;
+    readonly = (int)readonly_value;
     if (readonly != 0) {
         (void)snprintf(detail, detail_capacity, "Refusing read-only target: %s", canonical);
         return -1;
@@ -362,7 +361,7 @@ static int unmount_descendants(const char *device) {
     if (capture_process(argv, &output) != 0) return -1;
     line = strtok_r(output, "\n", &saveptr);
     while (line != NULL) {
-        trim_ascii(line);
+        infiltratr_trim(line);
         if (*line != '\0') {
             const char *const umount_argv[] = {"umount", line, NULL};
             if (run_process(umount_argv, NULL, 0) != 0) result = -1;
@@ -737,9 +736,8 @@ static void sanitize_tsv(char *text) {
 }
 
 static int state_path_for_device(const char *device, char *path, size_t capacity) {
-    const char *base = strrchr(device, '/');
+    const char *base = infiltratr_path_basename(device);
     int count;
-    base = base != NULL ? base + 1 : device;
     count = snprintf(path, capacity, "%s/%s.tsv", LDTM_STATE_ROOT, base);
     return count < 0 || (size_t)count >= capacity ? -1 : 0;
 }
@@ -1172,7 +1170,7 @@ static int load_verify_state(const char *state_path, LdtmVerifyFilesystem state[
         char *cursor = line;
         char *token;
         char *saveptr = NULL;
-        trim_ascii(cursor);
+        infiltratr_trim(cursor);
         token = strtok_r(cursor, "\t", &saveptr);
         while (token != NULL && field_count < 6U) {
             fields[field_count++] = token;
@@ -1197,7 +1195,13 @@ static int load_verify_state(const char *state_path, LdtmVerifyFilesystem state[
             size_t index;
             for (index = 0U; index < LDTM_SPEC_COUNT; ++index) {
                 if (strcmp(ldtm_specs()[index].key, fields[1]) == 0) {
-                    state[index].directory_entries = (uint32_t)strtoul(fields[2], NULL, 10);
+                    uint64_t parsed = 0U;
+                    if (!infiltratr_parse_u64_range(fields[2], 10U, 0U,
+                                                    UINT32_MAX, &parsed)) {
+                        (void)fclose(stream);
+                        return -1;
+                    }
+                    state[index].directory_entries = (uint32_t)parsed;
                 }
             }
         } else if (strcmp(fields[0], "file") == 0 && field_count >= 5U) {
@@ -1206,9 +1210,14 @@ static int load_verify_state(const char *state_path, LdtmVerifyFilesystem state[
                 LdtmVerifyFilesystem *filesystem = &state[index];
                 if (strcmp(ldtm_specs()[index].key, fields[1]) == 0 &&
                     filesystem->target_count < LDTM_MAX_TARGET_FILES) {
+                    uint64_t parsed_size = 0U;
+                    if (!infiltratr_parse_u64(fields[3], 10U, &parsed_size)) {
+                        (void)fclose(stream);
+                        return -1;
+                    }
                     LdtmTargetRecord *record = &filesystem->targets[filesystem->target_count++];
                     (void)snprintf(record->relative_path, sizeof(record->relative_path), "%s", fields[2]);
-                    record->size = strtoull(fields[3], NULL, 10);
+                    record->size = parsed_size;
                     (void)snprintf(record->sha256, sizeof(record->sha256), "%s", fields[4]);
                 }
             }
