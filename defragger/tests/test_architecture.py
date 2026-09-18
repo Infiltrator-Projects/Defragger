@@ -316,7 +316,7 @@ def test_infiltratr_common_integration() -> None:
     for path in result_workers:
         source = path.read_text()
         assert "ld_emit_result_event" in source
-        assert '@@RESULT {"operation"' not in source
+        assert r'@@RESULT {\"operation' not in source
 
     for path in (
         GUI / "filesystems" / "btrfs" / "native" / "btrfs_worker.c",
@@ -343,9 +343,22 @@ def test_infiltratr_common_integration() -> None:
     assert "atoi(" not in test_media_gui
     assert "infiltratr_array_reserve" in test_media_worker
     assert "infiltratr_path_basename" in test_media_worker
+    assert "infiltratr_string_starts_with" in test_media_worker
+    test_media_cmake = (ROOT / "cmake" / "test_media.cmake").read_text()
+    assert "InfiltratrCommon::Common" in test_media_cmake
     assert "infiltratr_array_reserve" in test_media_amiga
     assert "infiltratr_load_be32" in test_media_amiga
     assert "infiltratr_store_be32" in test_media_amiga
+    ext_worker = (GUI / "filesystems" / "ext4" / "native" / "ext_worker.c").read_text()
+    ntfs_worker = (GUI / "filesystems" / "ntfs" / "native" / "ntfs_worker.c").read_text()
+    assert "infiltratr_string_starts_with" in ext_worker
+    assert "infiltratr_string_starts_with" in ntfs_worker
+    path_source = (ROOT / "src" / "core" / "ld_path.c").read_text()
+    path_header = (ROOT / "src" / "core" / "ld_path.h").read_text()
+    assert "infiltratr_size_add_checked" in path_source
+    assert "ld_path_open_atomic_temp" not in path_source + path_header
+    assert "ld_path_fsync_parent" not in path_source + path_header
+
     for filesystem, worker in (("affs", "affs_worker.c"), ("sfs", "sfs_worker.c"),
                                ("hfsplus", "hfsplus_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
