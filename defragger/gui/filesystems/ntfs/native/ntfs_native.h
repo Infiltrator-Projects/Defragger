@@ -6,6 +6,14 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sqlite3.h>
+/*
+ * Native NTFS representation contract.
+ *
+ * LCN/run lengths are clusters; stream and record sizes are bytes. Dynamic
+ * vectors are zero-initialised by callers and released by matching free
+ * routines. NtfsVolume binds raw geometry, NtfsLayout represents allocation
+ * metadata, and catalogue/placement structures are derived planning state.
+ */
 
 #define NTFS_ATTR_ATTRIBUTE_LIST UINT32_C(0x20)
 #define NTFS_ATTR_FILE_NAME UINT32_C(0x30)
