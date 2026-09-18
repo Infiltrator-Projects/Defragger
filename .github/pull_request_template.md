@@ -1,4 +1,10 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+This template is for external or exceptional pull requests. The maintainer
+workflow is intentionally direct-to-main and is release-gated by the permanent
+quality gate; a PR branch is not the release authority.
+-->
+
 ## Purpose
 
 Describe one bounded change and why it is necessary.
