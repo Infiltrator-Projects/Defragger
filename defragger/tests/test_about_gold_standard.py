@@ -20,7 +20,7 @@ for required in (
     "dialog.set_wrap_license(True)",
     'website_label="Project website"',
     "APP_ICON_NAME",
-    'subtitle="LINUX DEFRAGGER · NATIVE FILESYSTEM OPTIMISATION"',
+    'subtitle="DEFRAGMENTER · NATIVE FILESYSTEM OPTIMISATION"',
     '"Shannon Smith — Author and project maintainer"',
 ):
     assert required in ABOUT, required
