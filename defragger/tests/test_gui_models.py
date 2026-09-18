@@ -401,6 +401,38 @@ def test_ui_polish_preserves_allocation_map_visual_contract() -> None:
         assert required in source
 
 
+def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
+    theme_source = (GUI / "ui" / "theme.py").read_text()
+    view_source = (GUI / "ui" / "window_view.py").read_text()
+    application_source = (GUI / "ui" / "application.py").read_text()
+
+    for required in (
+        'SYSTEM = "system"',
+        'DAY = "day"',
+        'NIGHT = "night"',
+        "def load_theme_mode()",
+        "def save_theme_mode(",
+        "def apply_theme(",
+        '"Follow system"',
+        '"Day"',
+        '"Night"',
+        "XDG_CONFIG_HOME",
+    ):
+        assert required in theme_source
+
+    assert 'Gtk.MenuItem.new_with_label("Theme")' in view_source
+    assert "Gtk.RadioMenuItem" in view_source
+    assert "save_theme_mode(mode)" in view_source
+    assert "apply_theme(mode)" in view_source
+    assert "sync_theme_menu" in view_source
+    assert "apply_theme(load_theme_mode())" in application_source
+
+    # Follow-system must leave host colours authoritative rather than
+    # reapplying the old hard-coded dark palette unconditionally.
+    assert "if resolved is ThemeMode.DAY:" in theme_source
+    assert "elif resolved is ThemeMode.NIGHT:" in theme_source
+
+
 def test_main_window_remains_resizable_maximisable_and_workarea_bounded() -> None:
     window_source = (GUI / "ui" / "window.py").read_text()
     view_source = (GUI / "ui" / "window_view.py").read_text()
@@ -445,6 +477,7 @@ def main() -> None:
     test_result_protocol_replaces_worker_output_text_matching()
     test_about_dialog_matches_the_standard_project_identity()
     test_ui_polish_preserves_allocation_map_visual_contract()
+    test_theme_modes_are_persistent_and_shared_across_windows()
     test_main_window_remains_resizable_maximisable_and_workarea_bounded()
     print("GUI model and worker-result contract tests passed")
 
