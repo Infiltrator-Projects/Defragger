@@ -26,6 +26,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "ld_protocol.h"
 #include "ld_stop.h"
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
@@ -1980,10 +1981,7 @@ static void print_relayout_timing(const char *layout_name,
     }
 }
 
-static void emit_result_event(const char *operation, const char *status) {
-    printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"\"}\n",
-           operation, status);
-}
+
 
 int main(int argc, char **argv) {
     (void)setvbuf(stdout, NULL, _IOLBF, 0);
@@ -2138,7 +2136,7 @@ int main(int argc, char **argv) {
             ld_die("journal has an unrecognised format");
         }
         print_io_statistics();
-        emit_result_event("recover", "completed");
+        ld_emit_result_event(stdout, "recover", "completed", "");
         fat32_unload(&fs);
         free(journal_path);
         return EXIT_SUCCESS;
@@ -2283,7 +2281,7 @@ int main(int argc, char **argv) {
             &operation_stats, verification_seconds);
     }
     if (result_operation != NULL && result_status != NULL) {
-        emit_result_event(result_operation, result_status);
+        ld_emit_result_event(stdout, result_operation, result_status, "");
     }
 
     filelist_free(&files);
