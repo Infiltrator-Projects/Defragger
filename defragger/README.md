@@ -90,6 +90,22 @@ Each numbered release uses three project deliverables:
 
 Release publication is gated: the release workflow only publishes the requested version after the reusable project quality gate succeeds. GitHub's automatic tag source links may also be displayed, but `Defragger-${VERSION}.zip` is the project's verified source deliverable.
 
+## Engineering documentation
+
+The project separates current design rationale from validation evidence and
+release history:
+
+- [`docs/DESIGN.md`](docs/DESIGN.md) defines architectural responsibilities,
+  trust assumptions, safety invariants, trade-offs and resource bounds.
+- [`docs/VALIDATION.md`](docs/VALIDATION.md) explains how those claims are
+  verified, which test oracles are independent, and what the evidence does not
+  prove.
+- [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md) binds the enabled native
+  writer set and release decision to exact audited commits.
+- [`docs/REFERENCES.md`](docs/REFERENCES.md) records the external filesystem
+  and platform references used to interpret on-disk structures and durability
+  semantics.
+
 ## Repository layout
 
 This directory is the canonical project root. It contains the implementation, native engines, CMake modules, tests, test-media code, packaging, design documentation and pinned shared dependency.
