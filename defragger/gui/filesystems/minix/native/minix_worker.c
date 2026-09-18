@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "minix_native.h"
 #include "version.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 
 #include <errno.h>
@@ -78,10 +79,14 @@ static int print_map(const char *path, uint64_t requested_cells)
     if (cell_count == 0U)
         cell_count = 1U;
 
-    if (cell_count > SIZE_MAX / sizeof(MinixMapCell)) {
+    size_t map_bytes = 0U;
+    if (cell_count > SIZE_MAX ||
+        !infiltratr_size_multiply_checked((size_t)cell_count,
+                                          sizeof(MinixMapCell), &map_bytes)) {
         (void)fprintf(stderr, "%s: map cell count is too large\n", PROG);
         return 1;
     }
+    (void)map_bytes;
     MinixMapCell *cells = calloc((size_t)cell_count, sizeof(*cells));
     if (cells == NULL) {
         (void)fprintf(stderr, "%s: out of memory allocating map cells\n", PROG);
