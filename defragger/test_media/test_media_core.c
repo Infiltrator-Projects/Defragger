@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "test_media.h"
 
+#include "infiltratr/posix.h"
+
 #include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -226,12 +228,5 @@ int ldtm_spec_creator_available(const LdtmFilesystemSpec *spec,
 }
 
 int ldtm_canonicalize_device(const char *input, char *output, size_t output_capacity) {
-    char resolved[PATH_MAX];
-    size_t length;
-    if (input == NULL || output == NULL || output_capacity == 0U) return -1;
-    if (realpath(input, resolved) == NULL) return -1;
-    length = strlen(resolved);
-    if (length + 1U > output_capacity) return -1;
-    memcpy(output, resolved, length + 1U);
-    return 0;
+    return infiltratr_realpath_copy(input, output, output_capacity) ? 0 : -1;
 }
