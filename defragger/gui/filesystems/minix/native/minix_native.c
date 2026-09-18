@@ -2,6 +2,7 @@
 #include "minix_native.h"
 
 #include "ld_io.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/endian.h"
 
 #include <errno.h>
@@ -387,15 +388,17 @@ static int load_bitmaps(int fd, const MinixSummary *summary,
                     "exact Minix analysis requires zone size equal to block size");
         return -1;
     }
-    if ((uint64_t)summary->imap_blocks > SIZE_MAX / summary->block_size ||
-        (uint64_t)summary->zmap_blocks > SIZE_MAX / summary->block_size) {
+    size_t imap_bytes = 0U;
+    size_t zmap_bytes = 0U;
+    if (!infiltratr_size_multiply_checked((size_t)summary->imap_blocks,
+                                          (size_t)summary->block_size,
+                                          &imap_bytes) ||
+        !infiltratr_size_multiply_checked((size_t)summary->zmap_blocks,
+                                          (size_t)summary->block_size,
+                                          &zmap_bytes)) {
         minix_error(error, error_size, "Minix bitmap size overflows address space");
         return -1;
     }
-    const size_t imap_bytes =
-        (size_t)summary->imap_blocks * summary->block_size;
-    const size_t zmap_bytes =
-        (size_t)summary->zmap_blocks * summary->block_size;
     uint8_t *imap = malloc(imap_bytes);
     uint8_t *zmap = malloc(zmap_bytes);
     if (imap == NULL || zmap == NULL) {
