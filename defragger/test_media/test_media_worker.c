@@ -451,7 +451,7 @@ static int write_pattern_file(const char *path, uint64_t size, uint64_t seed) {
     while (remaining > 0U) {
         const size_t chunk = remaining < (uint64_t)sizeof(buffer) ? (size_t)remaining : sizeof(buffer);
         deterministic_fill(buffer, chunk, seed ^ block);
-        if (write_all(fd, buffer, chunk) != 0) {
+        if (infiltratr_write_full(fd, buffer, chunk) != 0) {
             (void)close(fd);
             return -1;
         }
@@ -538,7 +538,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
             const size_t chunk_bytes = (size_t)profile.chunk_kib * 1024U;
             const uint64_t seed = ((uint64_t)file_index << 48) ^ ((uint64_t)index << 16) ^ UINT64_C(0x4c44544d);
             deterministic_fill(chunk_buffer, chunk_bytes, seed);
-            if (write_all(fds[file_index], chunk_buffer, chunk_bytes) != 0 ||
+            if (infiltratr_write_full(fds[file_index], chunk_buffer, chunk_bytes) != 0 ||
                 EVP_DigestUpdate(contexts[file_index], chunk_buffer, chunk_bytes) != 1 ||
                 fsync(fds[file_index]) != 0) goto cleanup;
         }
@@ -580,7 +580,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
         if (fd < 0) goto cleanup;
         length = snprintf(contents, sizeof(contents), "first %u\n", index);
-        if (length < 0 || write_all(fd, contents, (size_t)length) != 0) {
+        if (length < 0 || infiltratr_write_full(fd, contents, (size_t)length) != 0) {
             (void)close(fd);
             goto cleanup;
         }
@@ -604,7 +604,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
         if (fd < 0) goto cleanup;
         length = snprintf(contents, sizeof(contents), "second %u\n", entry_index);
-        if (length < 0 || write_all(fd, contents, (size_t)length) != 0) {
+        if (length < 0 || infiltratr_write_full(fd, contents, (size_t)length) != 0) {
             (void)close(fd);
             goto cleanup;
         }
@@ -869,7 +869,7 @@ static int copy_image_to_partition(const char *image, const char *partition) {
             goto cleanup;
         }
         if (got == 0) break;
-        if (write_all(output, buffer, (size_t)got) != 0) goto cleanup;
+        if (infiltratr_write_full(output, buffer, (size_t)got) != 0) goto cleanup;
     }
     if (fsync(output) != 0) goto cleanup;
     result = 0;
