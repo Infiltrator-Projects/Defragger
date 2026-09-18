@@ -5,6 +5,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 #include "ld_runtime.h"
+#include "ld_protocol.h"
 #include "ld_path.h"
 
 #include "infiltratr/core.h"
@@ -58,11 +59,7 @@ static void usage(FILE *stream) {
         PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME, PROGRAM_NAME);
 }
 
-static void emit_result(const char *operation, const char *status, const char *message) {
-    printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"%s\"}\n",
-           operation, status, message == NULL ? "" : message);
-    fflush(stdout);
-}
+
 
 
 
@@ -588,7 +585,7 @@ static int try_workspace_relayout(const char *device, const char *operation,
             sqlite3_close(db); db = NULL;
             transaction_cleanup(journal_path, state);
             puts("Not needed; canonical EXT layout already verified.");
-            emit_result(operation, "not-needed", "");
+            ld_emit_result_event(stdout, operation, "not-needed", "");
             return 0;
         }
         goto fallback;
@@ -622,7 +619,7 @@ static int try_workspace_relayout(const char *device, const char *operation,
         sqlite3_close(db); db = NULL;
         transaction_cleanup(journal_path, state);
         puts("Stop requested during EXT workspace staging; original filesystem metadata and payload remain unchanged.");
-        emit_result(operation, "stopped", "");
+        ld_emit_result_event(stdout, operation, "stopped", "");
         return 130;
     }
     if (staged != 0) goto fail_clean;
@@ -633,7 +630,7 @@ static int try_workspace_relayout(const char *device, const char *operation,
         sqlite3_close(db); db = NULL;
         transaction_cleanup(journal_path, state);
         puts("Stop requested after EXT workspace staging; original filesystem remains unchanged.");
-        emit_result(operation, "stopped", "");
+        ld_emit_result_event(stdout, operation, "stopped", "");
         return 130;
     }
     if (check_unchanged_target(device, state, source_geometry, error) != 0)
@@ -683,10 +680,10 @@ static int try_workspace_relayout(const char *device, const char *operation,
     sqlite3_close(db); db = NULL;
     transaction_cleanup(journal_path, state);
     if (ld_stop_requested()) {
-        emit_result(operation, "stopped", "");
+        ld_emit_result_event(stdout, operation, "stopped", "");
         return 130;
     }
-    emit_result(operation, "completed", "");
+    ld_emit_result_event(stdout, operation, "completed", "");
     return 0;
 
 stop_restore:
@@ -707,7 +704,7 @@ stop_restore:
     sqlite3_close(db); db = NULL;
     transaction_cleanup(journal_path, state);
     puts("Growth/Defrag Stop restored the original EXT allocation from the durable workspace at a complete transaction boundary.");
-    emit_result(operation, "stopped", "");
+    ld_emit_result_event(stdout, operation, "stopped", "");
     return 130;
 
 fail_restore:
@@ -805,7 +802,7 @@ static int build_and_commit(const char *device, const char *operation,
         ext_catalogue_free(&already);
         if (okay) {
             transaction_cleanup(journal_path, &state);
-            puts("Not needed; canonical EXT layout already verified."); emit_result(operation, "not-needed", "");
+            puts("Not needed; canonical EXT layout already verified."); ld_emit_result_event(stdout, operation, "not-needed", "");
             result = 0; goto done;
         }
     }
@@ -831,12 +828,12 @@ static int build_and_commit(const char *device, const char *operation,
     printf("%s %s completed with UUID and active filesystem capacity preserved.\n",
            source_geometry.filesystem,
            strcmp(operation, "growth-defrag") == 0 ? "Growth Defrag" : "Defragment");
-    emit_result(operation, ld_stop_requested() ? "stopped" : "completed", "");
+    ld_emit_result_event(stdout, operation, ld_stop_requested() ? "stopped" : "completed", "");
     result = ld_stop_requested() ? 130 : 0; goto done;
 stopped:
     transaction_cleanup(journal_path, &state);
     puts("Stop requested before source commit; the original EXT filesystem is unchanged.");
-    emit_result(operation, "stopped", ""); result = 130; goto done;
+    ld_emit_result_event(stdout, operation, "stopped", ""); result = 130; goto done;
 precommit_fail:
     transaction_cleanup(journal_path, &state); goto done;
 commit_fail:
@@ -880,7 +877,7 @@ static int recover(const char *device, const char *journal_path, char **error) {
             transaction_cleanup(journal_path, &state);
             puts("Discarded an incomplete EXT workspace stage; source filesystem was unchanged.");
             journal_free(&state);
-            emit_result("recover", "completed", "");
+            ld_emit_result_event(stdout, "recover", "completed", "");
             return 0;
         }
         ExtWorkspace workspace;
@@ -901,7 +898,7 @@ static int recover(const char *device, const char *journal_path, char **error) {
                 transaction_cleanup(journal_path, &state);
                 puts("EXT direct workspace recovery verified the completed canonical layout.");
                 journal_free(&state);
-                emit_result("recover", "completed", "");
+                ld_emit_result_event(stdout, "recover", "completed", "");
                 return 0;
             }
             ext_catalogue_free(&verified);
@@ -932,13 +929,13 @@ static int recover(const char *device, const char *journal_path, char **error) {
         transaction_cleanup(journal_path, &state);
         puts("EXT direct workspace recovery restored the exact original allocated filesystem state.");
         journal_free(&state);
-        emit_result("recover", "completed", "");
+        ld_emit_result_event(stdout, "recover", "completed", "");
         return 0;
     }
     if (strcmp(state.phase, "commit") != 0 && strcmp(state.phase, "verifying-source") != 0) {
         transaction_cleanup(journal_path, &state);
         puts("Discarded an incomplete EXT working image; the source filesystem was unchanged.");
-        journal_free(&state); emit_result("recover", "completed", ""); return 0;
+        journal_free(&state); ld_emit_result_event(stdout, "recover", "completed", ""); return 0;
     }
     struct stat stage_status;
     if (stat(state.stage, &stage_status) != 0 || (uint64_t)stage_status.st_size != state.physical_bytes) {
@@ -962,7 +959,7 @@ static int recover(const char *device, const char *journal_path, char **error) {
     }
     ext_catalogue_free(&committed); sqlite3_close(db);
     transaction_cleanup(journal_path, &state); journal_free(&state);
-    puts("EXT recovery completed successfully."); emit_result("recover", "completed", ""); return 0;
+    puts("EXT recovery completed successfully."); ld_emit_result_event(stdout, "recover", "completed", ""); return 0;
 }
 
 int main(int argc, char **argv) {
