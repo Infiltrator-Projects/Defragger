@@ -278,6 +278,14 @@ def test_infiltratr_common_integration() -> None:
     ext_catalog = (GUI / "filesystems" / "ext4" / "native" / "ext_catalog.c").read_text()
     assert "infiltratr_array_reserve" in ext_common
     assert "infiltratr_array_reserve" in ext_catalog
+    for path in (
+        GUI / "filesystems" / "fat" / "native" / "fat_io.c",
+        GUI / "filesystems" / "minix" / "native" / "minix_native.c",
+        GUI / "filesystems" / "minix" / "native" / "minix_worker.c",
+        GUI / "filesystems" / "sfs" / "native" / "sfs_worker.c",
+        GUI / "filesystems" / "ufs" / "native" / "ufs_worker.c",
+    ):
+        assert "infiltratr_size_multiply_checked" in path.read_text()
     for filesystem, worker in (("ext4", "ext_worker.c"), ("ntfs", "ntfs_worker.c"),
                                ("exfat", "exfat_worker.c"), ("xfs", "xfs_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()
