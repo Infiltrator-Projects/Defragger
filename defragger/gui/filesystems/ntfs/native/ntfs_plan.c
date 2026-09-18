@@ -45,9 +45,17 @@ static int select_best_fit(PlanItem *items,size_t count,uint64_t target,bool *se
                            uint64_t *filled,char **error){
     *filled = 0;
     if (target == 0) return 0;
-    if (target > SIZE_MAX / sizeof(int32_t) - 1U) {ntfs_set_error(error,"NTFS low-layout target exceeds addressable memory");return -1;}
-    uint64_t bytes=(target+1U)*sizeof(int32_t);if(bytes>NTFS_SUBSET_MEMORY_LIMIT){ntfs_set_error(error,"NTFS low-layout planning would exceed the fixed 256 MiB memory safety limit");return -1;}
-    int32_t *choice=ld_xmalloc((size_t)bytes);for(uint64_t s=0;s<=target;++s)choice[s]=-1;choice[0]=-2;
+    uint64_t choice_count_u64 = 0U;
+    size_t bytes = 0U;
+    if (!infiltratr_u64_add_checked(target, 1U, &choice_count_u64) ||
+        choice_count_u64 > SIZE_MAX ||
+        !infiltratr_size_multiply_checked((size_t)choice_count_u64,
+                                          sizeof(int32_t), &bytes)) {
+        ntfs_set_error(error,"NTFS low-layout target exceeds addressable memory");
+        return -1;
+    }
+    if ((uint64_t)bytes > NTFS_SUBSET_MEMORY_LIMIT) {ntfs_set_error(error,"NTFS low-layout planning would exceed the fixed 256 MiB memory safety limit");return -1;}
+    int32_t *choice=ld_xmalloc(bytes);for(uint64_t s=0;s<=target;++s)choice[s]=-1;choice[0]=-2;
     for(size_t i=0;i<count;++i){uint64_t span=items[i].span;if(span==0||span>target)continue;for(uint64_t sum=target;;--sum){if(sum>=span&&choice[sum]<0&&choice[sum-span]!=-1)choice[sum]=(int32_t)i;if(sum==span)break;}}
     uint64_t best=target;while(best>0&&choice[best]==-1)best--;
     uint64_t remaining=best;while(remaining){int32_t index=choice[remaining];if(index<0||(size_t)index>=count||items[index].span>remaining){free(choice);ntfs_set_error(error,"NTFS low-layout subset recovery failed");return -1;}selected[index]=true;remaining-=items[index].span;}
