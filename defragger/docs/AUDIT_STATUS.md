@@ -6,9 +6,9 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-167
-Audited source commit: 9299cfe323b55281a698de7b9e78e0898d19fbef
-Audited release-governance commit: 121f174a1a745036f2df1b9facc5bfd33bafac61
+Applies to: release version 1.8.0-168
+Audited source commit: 0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2
+Audited release-governance commit: 0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -389,16 +389,28 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     `121f174a1a745036f2df1b9facc5bfd33bafac61` completes the branded installer
     path used by release verification.
 
+41. Release packaging is simplified for 1.8.0-168 by removing the duplicate
+    project-built source ZIP. The deleted `packaging/build-source-zip.sh` path is
+    now guarded by architecture and release-contract regressions so it cannot be
+    silently reintroduced. GitHub's standard immutable tag archives remain the
+    source-code download links, while Defragmenter publishes only the generic
+    Debian package, hardware-native local installer and their SHA-256 manifest.
+    No filesystem parser, analyser, planner, writer, journal, recovery path,
+    target-safety control or installed compatibility identifier changed. Exact
+    source and release-governance baseline
+    `0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2` passed the complete 33-test
+    native/filesystem/GUI/release suite before this audit baseline was advanced.
+
 ## Shared Common dependency
 
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-167 audit extension is bound to Defragmenter source baseline
-`9299cfe323b55281a698de7b9e78e0898d19fbef`. Release qualification rejects any later change beneath the
+The current 1.8.0-168 audit extension is bound to Defragmenter source baseline
+`0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`121f174a1a745036f2df1b9facc5bfd33bafac61`; changes beneath `.github/workflows`
+`0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.19.2 at exact commit
 `44409af17c89b6ece6b4bcb2c0c133213c695c23`. CMake, the gitlink and the local
@@ -432,7 +444,7 @@ refresh workflow for that exact release SHA, and the same exact version/SHA can
 be supplied to its manual dispatch path if central publication needs to be
 retried.
 
-Version 1.8.0-167 is explicitly authorized for release on 2026-09-18. Any later
+Version 1.8.0-168 is explicitly authorized for release on 2026-09-18. Any later
 version requires a new explicit release decision and a separate `Release <version>`
 commit whose exact head passes the Project quality gate.
 
