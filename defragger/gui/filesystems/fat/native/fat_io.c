@@ -76,7 +76,13 @@ static IoExtentList build_cluster_extents(
             continue;
         }
         size_t cluster_count = index - first;
-        if (cluster_count > SIZE_MAX / (size_t)fs->cluster_size) {
+        size_t buffer_offset = 0U;
+        size_t extent_length = 0U;
+        if (!infiltratr_size_multiply_checked(first, (size_t)fs->cluster_size,
+                                              &buffer_offset) ||
+            !infiltratr_size_multiply_checked(cluster_count,
+                                              (size_t)fs->cluster_size,
+                                              &extent_length)) {
             extent_list_free(&list);
             ld_die("I/O extent is too large for this build");
         }
@@ -87,10 +93,8 @@ static IoExtentList build_cluster_extents(
                     fs,
                     clusters[first]
                 ),
-                .buffer_offset =
-                    first * (size_t)fs->cluster_size,
-                .length =
-                    cluster_count * (size_t)fs->cluster_size,
+                .buffer_offset = buffer_offset,
+                .length = extent_length,
             }
         );
         first = index;
