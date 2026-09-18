@@ -1,13 +1,17 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Linux Defragger
 
-> **Safety status:** The version 1.8.0-142 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
+> **Safety status:** The version 1.8.0-158 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
 
 Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 
 The current software version is defined by [`VERSION`](VERSION). Installable builds are published on the repository's Releases page.
 
 > **Important:** defragmentation changes filesystem allocation metadata and data placement. Use verified backups and test media before using write-capable operations on important filesystems.
+
+## Appearance
+
+The main GTK application supports **Follow system**, **Day** and **Night** themes from **View → Theme**. Follow system preserves the desktop's GTK/Mint colour authority; Day and Night apply explicit Infiltrator palettes. The preference is stored per user and applies consistently to every open window.
 
 ## Filesystem support
 
