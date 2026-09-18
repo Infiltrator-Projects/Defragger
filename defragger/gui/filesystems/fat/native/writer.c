@@ -27,8 +27,10 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "ld_stop.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 #include "infiltratr/posix.h"
+#include "infiltratr/posix_path.h"
 #include "infiltratr/quantity.h"
 #include "version.h"
 #include "fat_analysis.h"
@@ -70,12 +72,22 @@ static void detail_log(const char *format, ...) {
 }
 
 static char *default_journal_path(const char *device_path) {
-    const char *base = strrchr(device_path, '/');
-    base = base == NULL ? device_path : base + 1;
-    size_t n = strlen(base) + 40;
+    const char *base = infiltratr_path_basename(device_path);
+    size_t n = 0U;
+    if (!infiltratr_size_add_checked(strlen(base), 40U, &n))
+        ld_die("default FAT journal path is too long");
     char *path = ld_xmalloc(n);
     snprintf(path, n, ".linux-defragger-fat-worker-%s.journal", base);
     return path;
+}
+
+static void reserve_relocation_moves(RelocationMove **moves, size_t *capacity,
+                                     size_t count, size_t additional) {
+    size_t required = 0U;
+    if (!infiltratr_size_add_checked(count, additional, &required) ||
+        !infiltratr_array_reserve((void **)moves, capacity, sizeof(**moves),
+                                  required, additional == 0U ? 1U : additional))
+        ld_die("cannot grow FAT relocation move array");
 }
 
 static bool cluster_is_movable_allocation(const Fat32 *fs, uint32_t cluster) {
@@ -119,10 +131,8 @@ static size_t terminal_workspace_capacity(const Fat32 *fs) {
 static size_t relayout_object_cluster_total(const FatRelayoutObjectList *objects) {
     size_t total = 0;
     for (size_t i = 0; i < objects->len; i++) {
-        if (objects->v[i].clusters > SIZE_MAX - total) {
+        if (!infiltratr_size_add_checked(total, objects->v[i].clusters, &total))
             ld_die("FAT relayout object-cluster total overflow");
-        }
-        total += objects->v[i].clusters;
     }
     return total;
 }
@@ -413,13 +423,8 @@ static bool execute_forward_compaction(
                 return false;
             }
 
-            if (stage_move_count + chain->len > stage_move_cap) {
-                size_t new_cap = stage_move_cap == 0 ? chain->len : stage_move_cap;
-                while (new_cap < stage_move_count + chain->len) new_cap *= 2;
-                stage_moves = ld_xrealloc(
-                    stage_moves, new_cap * sizeof(*stage_moves));
-                stage_move_cap = new_cap;
-            }
+            reserve_relocation_moves(
+                &stage_moves, &stage_move_cap, stage_move_count, chain->len);
             uint32_t staged_at = workspace_start + (uint32_t)stage_move_count;
             for (size_t i = 0; i < chain->len; i++) {
                 uint32_t source = chain->v[i];
@@ -993,12 +998,8 @@ static bool execute_adaptive_dependency_layout(
                 continue;
             }
 
-            if (move_count + chain->len > move_cap) {
-                size_t new_cap = move_cap == 0 ? chain->len : move_cap;
-                while (new_cap < move_count + chain->len) new_cap *= 2;
-                moves = ld_xrealloc(moves, new_cap * sizeof(*moves));
-                move_cap = new_cap;
-            }
+            reserve_relocation_moves(
+                &moves, &move_cap, move_count, chain->len);
             for (size_t i = 0; i < chain->len; i++) {
                 uint32_t source = chain->v[i];
                 uint32_t destination = object->target + (uint32_t)i;
@@ -1201,26 +1202,8 @@ static bool execute_adaptive_dependency_layout(
             }
             if (candidate_at == 0) continue;
 
-            if (stage_move_count + chain->len > stage_move_cap) {
-                size_t new_cap = stage_move_cap == 0 ? chain->len : stage_move_cap;
-                while (new_cap < stage_move_count + chain->len) {
-                    if (new_cap > SIZE_MAX / 2) {
-                        free(stage_moves);
-                        adaptive_blocker_candidates_free(candidates, candidate_count);
-                        free(workspace_available);
-                        free(target_needed);
-                        free(staged);
-                        free(nonexact);
-                        filelist_free(&current_files);
-                        dirreflist_free(&current_refs);
-                        ld_die("adaptive blocker move array overflow");
-                    }
-                    new_cap *= 2;
-                }
-                stage_moves = ld_xrealloc(
-                    stage_moves, new_cap * sizeof(*stage_moves));
-                stage_move_cap = new_cap;
-            }
+            reserve_relocation_moves(
+                &stage_moves, &stage_move_cap, stage_move_count, chain->len);
             for (size_t i = 0; i < chain->len; i++) {
                 stage_moves[stage_move_count++] = (RelocationMove){
                     .source = chain->v[i],
@@ -1639,12 +1622,8 @@ static FatRelayoutStats fat_relayout_volume(Fat32 *fs, const char *journal_path,
                 break;
             }
 
-            if (batch_move_count + chain->len > batch_move_cap) {
-                size_t new_cap = batch_move_cap == 0 ? chain->len : batch_move_cap;
-                while (new_cap < batch_move_count + chain->len) new_cap *= 2;
-                batch_moves = ld_xrealloc(batch_moves, new_cap * sizeof(*batch_moves));
-                batch_move_cap = new_cap;
-            }
+            reserve_relocation_moves(
+                &batch_moves, &batch_move_cap, batch_move_count, chain->len);
             for (size_t i = 0; i < chain->len; i++) {
                 uint32_t source = chain->v[i];
                 uint32_t destination = object->target + (uint32_t)i;
