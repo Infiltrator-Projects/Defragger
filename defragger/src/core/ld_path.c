@@ -37,40 +37,6 @@ bool ld_path_is_derived_from(const char *candidate, const char *base,
            memcmp(candidate + base_length, suffix, suffix_length) == 0;
 }
 
-FILE *ld_path_open_atomic_temp(const char *target_path, char **temporary_path)
-{
-    if (target_path == NULL || temporary_path == NULL) {
-        errno = EINVAL;
-        return NULL;
-    }
-    *temporary_path = NULL;
-    char *temporary = ld_path_append_suffix(target_path, ".tmp");
-    if (unlink(temporary) != 0 && errno != ENOENT) {
-        free(temporary);
-        return NULL;
-    }
-    int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC;
-#ifdef O_NOFOLLOW
-    flags |= O_NOFOLLOW;
-#endif
-    int fd = open(temporary, flags, 0600);
-    if (fd < 0) {
-        free(temporary);
-        return NULL;
-    }
-    FILE *file = fdopen(fd, "w");
-    if (file == NULL) {
-        int saved_errno = errno;
-        close(fd);
-        (void)unlink(temporary);
-        free(temporary);
-        errno = saved_errno;
-        return NULL;
-    }
-    *temporary_path = temporary;
-    return file;
-}
-
 char *ld_path_parent_directory(const char *path)
 {
     char *copy = ld_xstrdup(path);
@@ -163,13 +129,4 @@ int ld_path_ensure_trusted_directory_tree(const char *path)
     return result;
 }
 
-void ld_path_fsync_parent(const char *path)
-{
-    char *parent = ld_path_parent_directory(path);
-    const int fd = open(parent, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (fd >= 0) {
-        (void)fsync(fd);
-        (void)close(fd);
-    }
-    free(parent);
-}
+
