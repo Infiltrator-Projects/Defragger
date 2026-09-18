@@ -5,6 +5,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+/*
+ * Native exFAT representation contract.
+ *
+ * Heap cluster numbers use the on-disk domain (first legal cluster is 2);
+ * stream lengths are bytes, while target/reserve values are clusters.
+ * ExfatVolume owns loaded FAT/boot regions and ExfatCatalogue owns object,
+ * bitmap and vector storage.
+ */
 
 #define EXFAT_EOC_MIN UINT32_C(0xfffffff8)
 #define EXFAT_EOC UINT32_C(0xffffffff)
