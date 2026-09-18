@@ -487,7 +487,8 @@ static void emit_live_reset(const ExfatVolume *volume, const ExfatCatalogue *cat
 static int analyse_json(const char *device, char **error) {
     ExfatVolume volume; ExfatCatalogue catalogue;
     if (exfat_scan(device, true, &volume, &catalogue, error) != 0) return -1;
-    double percent = catalogue.regular_files == 0 ? 0.0 : (double)catalogue.fragmented_files * 100.0 / (double)catalogue.regular_files;
+    double percent = infiltratr_percent_u64(
+        catalogue.fragmented_files, catalogue.regular_files);
     printf("{\"filesystem\":\"exfat\",\"cluster_size\":%u,\"total_clusters\":%u,\"serial\":\"%08x\",", volume.cluster_size, volume.cluster_count, volume.serial);
     printf("\"regular_files\":%" PRIu64 ",\"directories\":%" PRIu64 ",\"fragmented_files\":%" PRIu64 ",\"fragmented_directories\":%" PRIu64 ",\"fragmentation_percent\":%.6f,\"growth_10_satisfied\":%s,\"free_ranges\":",
            catalogue.regular_files, catalogue.directories, catalogue.fragmented_files, catalogue.fragmented_directories, percent, catalogue.growth_10_satisfied ? "true" : "false");
