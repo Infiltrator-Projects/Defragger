@@ -44,6 +44,8 @@ The following invariants are design requirements, not implementation hints:
 
 These invariants are mapped to executable evidence in [`VALIDATION.md`](VALIDATION.md) and to the release-specific safety case in [`AUDIT_STATUS.md`](AUDIT_STATUS.md).
 
+The rationale for the project's long-lived architectural choices is recorded separately in [`DECISIONS.md`](DECISIONS.md), so alternatives and consequences remain visible without turning this current-state design document into a historical changelog.
+
 ## Engineering trade-offs
 
 Direct userspace mutation increases implementation complexity compared with asking a mounted kernel driver to relocate files. It is retained because the project requires deterministic physical placement and a uniform recovery model that can be independently inspected. The consequence is a deliberately narrower write-support matrix and a larger verification burden.
