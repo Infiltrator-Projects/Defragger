@@ -32,17 +32,20 @@ treating one third-party implementation as infallible.
   system `libext2fs` API in-process; no external mutation command is part of
   the production path.
 - **XFS** - Linux kernel XFS documentation and the xfsprogs reference source:
-  <https://docs.kernel.org/filesystems/xfs.html> and
+  <https://docs.kernel.org/filesystems/xfs/index.html> and
   <https://git.kernel.org/pub/scm/fs/xfs/xfsprogs-dev.git/>. Mutation is
   restricted to the explicitly validated XFS v5 feature subset.
 - **Btrfs** - Btrfs development documentation, *On-disk Format*:
-  <https://btrfs.readthedocs.io/en/latest/dev/On-disk-format.html>.
-  Defragmenter currently uses this for read-only raw analysis.
+  <https://btrfs.readthedocs.io/en/latest/dev/On-disk-format.html>. That
+  document explicitly warns that parts are incomplete/outdated, so it is
+  treated as corroborating rather than sole authority. Defragmenter currently
+  uses Btrfs only for read-only raw analysis.
 - **HFS+ / HFSX** - Apple Technical Note TN1150, *HFS Plus Volume Format*:
   <https://developer.apple.com/library/archive/technotes/tn/tn1150.html>.
-- **APFS** - Apple, *Apple File System Reference* (public developer
-  documentation). Defragmenter currently exposes summary read-only analysis and
-  does not claim a write contract.
+- **APFS** - Apple, *Apple File System Reference*:
+  <https://developer.apple.com/support/apple-file-system/Apple-File-System-Reference.pdf>.
+  Defragmenter currently exposes summary read-only analysis and does not claim
+  a write contract.
 - **UFS/FFS** - BSD Fast File System literature and current FreeBSD filesystem
   sources are corroborating references. UFS write support is not enabled.
 - **Amiga OFS/FFS/SFS** - public format descriptions, first-party deterministic
