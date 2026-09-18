@@ -7,7 +7,7 @@
 # Comments describe design intent and non-obvious behaviour. They are kept
 # concise so that the implementation remains readable and maintainable.
 
-"""Persistent privileged helper for the Linux Defragger GTK application.
+"""Persistent privileged helper for the Defragmenter GTK application.
 
 The helper is started once through pkexec and remains attached to the GUI over
 stdin/stdout. It accepts only a small fixed command set, streams child output
@@ -249,7 +249,7 @@ def stop_active_and_wait() -> None:
 
 def main() -> int:
     if os.geteuid() != 0:
-        print("Linux Defragger privileged helper must run as root", file=sys.stderr)
+        print("Defragmenter privileged helper must run as root", file=sys.stderr)
         return 1
     emit({"type": "ready", "protocol": PROTOCOL_VERSION, "pid": os.getpid()})
     for raw in sys.stdin:

@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger
+# Defragmenter
 # Author: Shannon Smith
 # Purpose: Launch the installed GTK application. Updates are managed by APT.
 

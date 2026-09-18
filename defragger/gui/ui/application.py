@@ -32,7 +32,7 @@ class LinuxDefraggerApplication(Gtk.Application):
                 modal=True,
                 message_type=Gtk.MessageType.ERROR,
                 buttons=Gtk.ButtonsType.CLOSE,
-                text="Unable to start Linux Defragger",
+                text="Unable to start Defragmenter",
             )
             dialog.format_secondary_text(str(exc))
             dialog.run()

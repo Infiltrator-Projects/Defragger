@@ -1,9 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Linux Defragger local hardware-optimised compile-and-install program.
+# Defragmenter local hardware-optimised compile-and-install program.
 set -eu
 
-PROGRAM='Linux Defragger local compiler'
+PROGRAM='Defragmenter local compiler'
 APP_VERSION='@APP_VERSION@'
 NATIVE_PACKAGE_VERSION='@NATIVE_PACKAGE_VERSION@'
 PAYLOAD_SHA256='@PAYLOAD_SHA256@'
@@ -92,7 +92,7 @@ esac
 
 BUILD="$WORK/native-build"
 PACKAGE="$WORK/linux-defragger_${NATIVE_PACKAGE_VERSION}_amd64.deb"
-printf 'Compiling Linux Defragger %s for this machine with -march=native and -mtune=native...\n' \
+printf 'Compiling Defragmenter %s for this machine with -march=native and -mtune=native...\n' \
     "$APP_VERSION"
 env LD_BUILD_FLAVOR=native \
     LD_BUILD_TESTING=OFF \
@@ -118,7 +118,7 @@ FINAL_VERSION=$(dpkg-query -W -f='${Version}' linux-defragger 2>/dev/null || tru
 [ "$FINAL_VERSION" = "$NATIVE_PACKAGE_VERSION" ] || \
     fail 'Package installation could not be verified.'
 
-printf '\nLinux Defragger %s is installed.\n' "$FINAL_VERSION"
+printf '\nDefragmenter %s is installed.\n' "$FINAL_VERSION"
 printf '%s\n' 'The native package replaced the generic package in Debian package management.'
 printf '%s\n' 'Future releases are delivered through the configured Infiltrator APT repository and the normal system updater.'
 exit 0

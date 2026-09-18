@@ -163,7 +163,7 @@ jobs:
           fi
 
           cat > release-body.md <<BODY
-          Linux Defragger ${VERSION}.
+          Defragmenter ${VERSION}.
 
           Verified release artefacts:
           - Generic AMD64 Debian package
@@ -182,7 +182,7 @@ jobs:
             "RELEASE_SHA256SUMS.txt" \
             --verify-tag \
             --target "$EXPECTED_SHA" \
-            --title "Linux Defragger ${VERSION}" \
+            --title "Defragmenter ${VERSION}" \
             --notes-file release-body.md
 
           expected_assets=$(printf '%s\n%s\n%s\n%s\n' \

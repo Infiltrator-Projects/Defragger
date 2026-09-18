@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 [Desktop Entry]
 Type=Application
-Name=Linux Defragger
+Name=Defragmenter
 Comment=Analyse filesystems and create packed or growth-reserved layouts
 TryExec=/usr/bin/linux-defragger
 Exec=/usr/bin/linux-defragger

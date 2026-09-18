@@ -2,7 +2,7 @@
 # Legacy contract note: Exec=linux-defragger-test-media was replaced by the absolute launcher below.
 [Desktop Entry]
 Type=Application
-Name=Linux Defragger Test Media
+Name=Defragmenter Test Media
 GenericName=Filesystem Test Media Builder
 Comment=Build and verify deliberately fragmented sacrificial filesystem test disks
 TryExec=/usr/bin/linux-defragger-test-media

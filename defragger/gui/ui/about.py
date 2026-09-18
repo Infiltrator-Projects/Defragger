@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""LINK-standard About presentation for Linux Defragger."""
+"""LINK-standard About presentation for Defragmenter."""
 
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ class LinkStandardWindowView(WindowView):
             self.window,
             AboutInfo(
                 product_name=APP_NAME,
-                subtitle="LINUX DEFRAGGER · NATIVE FILESYSTEM OPTIMISATION",
+                subtitle="DEFRAGMENTER · NATIVE FILESYSTEM OPTIMISATION",
                 version=self.gui_version,
                 description=ABOUT_COMMENTS,
                 authors=("Shannon Smith — Author and project maintainer",),

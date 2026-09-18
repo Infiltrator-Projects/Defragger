@@ -13,7 +13,7 @@ from .theme import ThemeMode, apply_theme, load_theme_mode, save_theme_mode, the
 from .widgets import DiskMap, SummaryCard
 
 
-APP_NAME = "Linux Defragger"
+APP_NAME = "Defragmenter"
 APP_ICON_NAME = "io.github.linuxdefragger"
 PROJECT_URL = "https://github.com/Infiltrator-Projects/Defragger"
 COPYRIGHT = "Copyright © 2026 Shannon Smith"
@@ -22,7 +22,7 @@ ABOUT_COMMENTS = (
     "authored by Shannon Smith."
 )
 ABOUT_LICENSE = (
-    "Linux Defragger is free software licensed under the GNU General Public "
+    "Defragmenter is free software licensed under the GNU General Public "
     "License version 3 or, at your option, any later version "
     "(GPL-3.0-or-later).\n\n"
     "See LICENSE in the source package or COPYING.GPL-3.0 in the installed "
@@ -109,7 +109,7 @@ class WindowView:
         title_row.set_border_width(2)
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
 
-        title = Gtk.Label(label="Linux Defragger")
+        title = Gtk.Label(label="Defragmenter")
         title.set_xalign(0)
         title.get_style_context().add_class("app-title")
         title_box.pack_start(title, False, False, 0)
@@ -372,7 +372,7 @@ class WindowView:
         about_item = Gtk.MenuItem.new_with_mnemonic("_About")
         about_menu = Gtk.Menu()
         about_item.set_submenu(about_menu)
-        about_dialog_item = Gtk.MenuItem.new_with_label("About Linux Defragger")
+        about_dialog_item = Gtk.MenuItem.new_with_label("About Defragmenter")
         about_dialog_item.connect("activate", lambda _item: self.show_about())
         about_menu.append(about_dialog_item)
 
@@ -510,7 +510,7 @@ class WindowView:
 
     def _show_license(self, parent: Gtk.Window) -> None:
         dialog = Gtk.Dialog(
-            title="Linux Defragger licence",
+            title="Defragmenter licence",
             transient_for=parent,
             modal=True,
         )

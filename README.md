@@ -1,18 +1,18 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Linux Defragger
+# Defragmenter
 
 [![Project quality gate](https://github.com/Infiltrator-Projects/Defragger/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/Infiltrator-Projects/Defragger/actions/workflows/quality-gate.yml)
 
-Linux Defragger is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
+Defragmenter is a C-first offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-163
+**Current version:** 1.8.0-164
 
 **Platform:** Linux
 
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** The version 1.8.0-163 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
+> **Safety status:** The version 1.8.0-164 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
 
 ## Appearance
 
@@ -39,7 +39,7 @@ Filesystem implementations are organised below `defragger/gui/filesystems/<forma
 
 The operating system supplies raw block I/O, but filesystem parsing, placement planning, staging and metadata updates are owned by the project. Architecture and regression tests reject known external filesystem mutation/repair orchestration and duplicate implementation paths.
 
-Shared first-party primitives are consumed from the pinned Infiltratr Common dependency; filesystem-specific rules remain in Defragger.
+Shared first-party primitives are consumed from the pinned Common dependency; filesystem-specific rules remain in Defragger.
 
 ## Build and test
 
@@ -84,10 +84,10 @@ Existing version tags and published releases are immutable and are never moved, 
 
 ## Safety
 
-Defragmentation changes filesystem allocation metadata and data placement. Keep verified backups and use sacrificial/test media during development and validation. The **Linux Defragger Test Media** utility is intentionally destructive and must never be pointed at a system/boot disk or irreplaceable media.
+Defragmentation changes filesystem allocation metadata and data placement. Keep verified backups and use sacrificial/test media during development and validation. The **Defragmenter Test Media** utility is intentionally destructive and must never be pointed at a system/boot disk or irreplaceable media.
 
 ## Licence
 
 Copyright © 2026 Shannon Smith.
 
-Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under the GNU General Public License version 3 or, at your option, any later version (`GPL-3.0-or-later`). The canonical licence text is `LICENSE`.
+Defragmenter first-party code, scripts, tests, packaging and documentation are licensed under the GNU General Public License version 3 or, at your option, any later version (`GPL-3.0-or-later`). The canonical licence text is `LICENSE`.

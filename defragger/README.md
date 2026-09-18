@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-# Linux Defragger
+# Defragmenter
 
-> **Safety status:** The version 1.8.0-163 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
+> **Safety status:** The version 1.8.0-164 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
 
-Linux Defragger is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
+Defragmenter is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 
 The current software version is defined by [`VERSION`](VERSION). Installable builds are published on the repository's Releases page.
 
@@ -40,7 +40,7 @@ Unsupported on-disk layouts fail closed rather than being guessed. Exact writers
 
 ## Design
 
-Linux Defragger is intentionally filesystem-driver independent for placement work. The operating system still provides ordinary raw device I/O, but filesystem parsing, allocation planning, staging and metadata updates are owned by the project rather than delegated to the mounted kernel filesystem implementation.
+Defragmenter is intentionally filesystem-driver independent for placement work. The operating system still provides ordinary raw device I/O, but filesystem parsing, allocation planning, staging and metadata updates are owned by the project rather than delegated to the mounted kernel filesystem implementation.
 
 Each filesystem has one authoritative implementation under `defragger/gui/filesystems/<format>/`, with native C under `native/` where exact low-level analysis or mutation is implemented. Filesystem-neutral device safety, raw I/O, Stop handling and shared runtime support live under `defragger/src/core/`.
 
@@ -52,7 +52,7 @@ For the detailed technical contract, see [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Operations
 
-Linux Defragger exposes three production operations:
+Defragmenter exposes three production operations:
 
 - **Defragment** — places supported movable allocations into the earliest legal canonical layout.
 - **Growth Defrag** — uses the same canonical placement model while reserving exactly 10% free space immediately after each regular file.
@@ -62,7 +62,7 @@ Stop requests are honoured at filesystem-safe transaction boundaries rather than
 
 ## Test Media
 
-The package includes **Linux Defragger Test Media**, a separate all-C GTK utility for preparing sacrificial test disks. It can use removable media or a dedicated secondary fixed disk, while protecting the system/boot disk and repeating destructive-target checks after privilege elevation.
+The package includes **Defragmenter Test Media**, a separate all-C GTK utility for preparing sacrificial test disks. It can use removable media or a dedicated secondary fixed disk, while protecting the system/boot disk and repeating destructive-target checks after privilege elevation.
 
 The standard test layout provides dedicated slots for FAT12, FAT16, FAT32, exFAT, NTFS, ext2, ext3, ext4, XFS, Btrfs, Amiga OFS, Amiga FFS, Amiga SFS/SFS2, Amiga PFS3, classic HFS, HFS+, Minix, UFS, ZFS, APFS and Swap. Unsupported creator/engine combinations remain explicitly reserved rather than receiving fake filesystem signatures.
 
@@ -98,4 +98,4 @@ This directory is the canonical project root. It contains the implementation, na
 
 Copyright © 2026 Shannon Smith.
 
-Linux Defragger first-party code, scripts, tests, packaging and documentation are licensed under the **GNU General Public License version 3 or, at your option, any later version** (`GPL-3.0-or-later`). The canonical licence text is [`LICENSE`](LICENSE).
+Defragmenter first-party code, scripts, tests, packaging and documentation are licensed under the **GNU General Public License version 3 or, at your option, any later version** (`GPL-3.0-or-later`). The canonical licence text is [`LICENSE`](LICENSE).

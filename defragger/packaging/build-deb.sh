@@ -15,7 +15,7 @@ STAGE=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-deb.XXXXXX")
 trap 'rm -rf "$STAGE"' EXIT HUP INT TERM
 
 if [ "$ARCH" != amd64 ]; then
-    printf '%s\n' "Linux Defragger $VERSION release packages support amd64 only." >&2
+    printf '%s\n' "Defragmenter $VERSION release packages support amd64 only." >&2
     exit 1
 fi
 
@@ -62,12 +62,12 @@ INSTALLED_SIZE=$(du -sk "$STAGE/root/usr" | awk '{print $1}')
     printf 'Depends: python3, python3-gi, python3-cairo, gir1.2-gtk-3.0, libgtk-3-0t64, fontconfig, policykit-1, ca-certificates, desktop-file-utils, udisks2, util-linux, makefs, libext2fs2, libsqlite3-0, libssl3t64\n'
     printf 'Installed-Size: %s\n' "$INSTALLED_SIZE"
     printf 'Description: Safe direct filesystem analysis and canonical layout rewriting\n'
-    printf ' Linux Defragger analyses filesystem allocation and safely rewrites\n'
+    printf ' Defragmenter analyses filesystem allocation and safely rewrites\n'
     printf ' supported unmounted FAT, exFAT, NTFS, EXT2/3/4, XFS, Amiga OFS/FFS,\n'
     printf ' Amiga SFS0 and HFS+/HFSX filesystems. Btrfs, classic HFS, APFS, Minix, UFS and ZFS\n'
     printf ' remain analysis-only. The package also includes the separate all-C GTK\n'
-    printf ' Linux Defragger Test Media program for building sacrificial field-test disks.\n'
-    printf ' The supplied MB Corpo typography is installed for the Defragger interfaces.\n'
+    printf ' Defragmenter Test Media program for building sacrificial field-test disks.\n'
+    printf ' The supplied MB Corpo typography is installed for the Defragmenter interfaces.\n'
     printf ' %s\n' "$FLAVOR_DESCRIPTION"
 } >"$STAGE/root/DEBIAN/control"
 cat >"$STAGE/root/DEBIAN/postinst" <<'EOF'

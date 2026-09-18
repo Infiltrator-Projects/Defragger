@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve().parents[1]
 
 def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
-        description="Dispatch a Linux Defragger operation through a filesystem plugin"
+        description="Dispatch a Defragmenter operation through a filesystem plugin"
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--list-plugins", action="store_true")
