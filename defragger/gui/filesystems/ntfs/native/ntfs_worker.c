@@ -422,8 +422,8 @@ static int analyse_json(const char *path, char **error) {
         ntfs_layout_free(&layout); ntfs_close_volume(&volume); return -1;
     }
     char serial[17]; serial_hex(volume.serial, serial);
-    double percentage = catalogue.regular_files == 0 ? 0.0 :
-        (double)catalogue.fragmented_files * 100.0 / (double)catalogue.regular_files;
+    double percentage = infiltratr_percent_u64(
+        catalogue.fragmented_files, catalogue.regular_files);
     printf("{\"filesystem\":\"ntfs\",\"cluster_size\":%u,\"total_clusters\":%" PRIu64
            ",\"serial\":\"%s\",\"mft_records_scanned\":%" PRIu64
            ",\"mft_malformed_records\":%" PRIu64 ",\"regular_files\":%" PRIu64
