@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-18
 
 Applies to: release version 1.8.0-157
-Audited source commit: 3b7d0b37283c8b493ca7fbb11c969861c83a9377
+Audited source commit: 80194442f9234360f0b5e9eaaec61021a2c2bb5a
 Audited release-governance commit: 0e6deda16fbf01a882bed0e45ee33df2622e87eb
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -245,6 +245,18 @@ Recover.
     hosted native/filesystem/GUI tests, and passed the hosted ASan/UBSan lane.
     Its only initial quality-gate failure was the intentional stale-audit-
     baseline guard, which this extension advances.
+31. The main Linux Defragger GUI now has an explicit three-state appearance
+    contract: Follow system, Day and Night. Follow system deliberately leaves
+    GTK/Mint colours authoritative while preserving Infiltrator typography;
+    Day and Night apply scoped light and graphite/silver palettes. The selected
+    mode is persisted per user and synchronised across every open Defragger
+    window. This is a presentation-only change: filesystem engines, allocation
+    maps, operation planning, raw-device safety, journals and recovery semantics
+    are unchanged. Exact production tree
+    `80194442f9234360f0b5e9eaaec61021a2c2bb5a` passed all 33 hosted
+    native/filesystem/GUI tests and the hosted ASan/UBSan lane. Its only
+    quality-gate failure was the intentional stale-audit-baseline guard, which
+    this extension advances.
 
 ## Shared Common dependency
 
@@ -252,7 +264,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-157 audit extension is bound to Defragger source baseline
-`3b7d0b37283c8b493ca7fbb11c969861c83a9377`. Release qualification rejects any later change beneath the
+`80194442f9234360f0b5e9eaaec61021a2c2bb5a`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `0e6deda16fbf01a882bed0e45ee33df2622e87eb`; changes beneath `.github/workflows`
