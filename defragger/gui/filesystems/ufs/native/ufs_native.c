@@ -3,6 +3,7 @@
 
 #include "ld_io.h"
 #include "infiltratr/arithmetic.h"
+#include "infiltratr/core.h"
 #include "infiltratr/endian.h"
 
 #include <errno.h>
