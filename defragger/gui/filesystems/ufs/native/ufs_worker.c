@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ufs_native.h"
 #include "version.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 
 #include <errno.h>
@@ -186,10 +187,14 @@ static int print_exact_map(const char *path, uint64_t requested_cells)
         cell_count = analysis.total_units;
     if (cell_count == 0U)
         cell_count = 1U;
-    if (cell_count > SIZE_MAX / sizeof(LdUfsMapCell)) {
+    size_t map_bytes = 0U;
+    if (cell_count > SIZE_MAX ||
+        !infiltratr_size_multiply_checked((size_t)cell_count,
+                                          sizeof(LdUfsMapCell), &map_bytes)) {
         (void)fprintf(stderr, "%s: map cell count is too large\n", PROG);
         return 1;
     }
+    (void)map_bytes;
 
     LdUfsMapCell *cells = calloc((size_t)cell_count, sizeof(*cells));
     if (cells == NULL) {
