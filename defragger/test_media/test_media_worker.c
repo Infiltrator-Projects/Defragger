@@ -5,6 +5,7 @@
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 #include "infiltratr/posix_path.h"
+#include "infiltratr/posix_io.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -55,22 +56,6 @@ static void emit_status(const char *filesystem, const char *status, const char *
     fflush(stdout);
 }
 
-static int write_all(int fd, const void *buffer, size_t length) {
-    const unsigned char *cursor = (const unsigned char *)buffer;
-    size_t remaining = length;
-    while (remaining > 0U) {
-        const ssize_t written = write(fd, cursor, remaining);
-        if (written < 0) {
-            if (errno == EINTR) continue;
-            return -1;
-        }
-        if (written == 0) return -1;
-        cursor += (size_t)written;
-        remaining -= (size_t)written;
-    }
-    return 0;
-}
-
 static int run_process(const char *const argv[], const char *stdin_text, int quiet) {
     int input_pipe[2] = {-1, -1};
     pid_t child;
@@ -107,7 +92,7 @@ static int run_process(const char *const argv[], const char *stdin_text, int qui
     if (stdin_text != NULL) {
         const size_t length = strlen(stdin_text);
         (void)close(input_pipe[0]);
-        if (write_all(input_pipe[1], stdin_text, length) != 0) {
+        if (infiltratr_write_full(input_pipe[1], stdin_text, length) != 0) {
             (void)close(input_pipe[1]);
             (void)waitpid(child, &status, 0);
             return -1;
