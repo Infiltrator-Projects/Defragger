@@ -359,7 +359,7 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
 
 38. Qualification of the completed branding pass exposed one accidental
     compatibility break: the Debian control-field identifier
-    `X-Linux-Defragger-Build` had been changed as though it were display
+    the legacy build-profile metadata header had been changed as though it were display
     branding. The package builder and local compiler now retain that established
     metadata key while all user-visible product text remains Defragmenter.
     This correction changes no filesystem algorithm, package name, executable,
