@@ -42,8 +42,8 @@ int main(void) {
         return fail("protocol readback");
     fclose(protocol_stream);
     if (strcmp(protocol_line,
-               "@@RESULT {\\\"operation\\\":\\\"defrag\\\",\\\"status\\\":\\\"failed\\\","
-               "\\\"message\\\":\\\"quoted \\\\\\\"value\\\\\\\"\\\\\\\\path\\\\nnext\\\"}\\n") != 0)
+               "@@RESULT {\"operation\":\"defrag\",\"status\":\"failed\","
+               "\"message\":\"quoted \\\"value\\\"\\\\path\\nnext\"}\n") != 0)
         return fail("protocol JSON escaping");
 
     char victim_path[] = "/tmp/linux-defragger-core-victim.XXXXXX";
