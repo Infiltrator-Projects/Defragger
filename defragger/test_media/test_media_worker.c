@@ -239,7 +239,7 @@ static int mount_source_disk(const char *mountpoint, char *disk, size_t capacity
     int found = 0;
     if (capture_process(findmnt_argv, &source) != 0) return 0;
     infiltratr_trim(source);
-    if (strncmp(source, "/dev/", 5U) != 0) {
+    if (!infiltratr_string_starts_with(source, "/dev/")) {
         free(source);
         return 0;
     }
