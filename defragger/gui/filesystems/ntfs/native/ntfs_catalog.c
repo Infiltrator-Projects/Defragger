@@ -184,8 +184,10 @@ int ntfs_scan_catalogue(NtfsVolume *volume, NtfsLayout *layout,
     for(uint64_t number=0; number<record_count; ++number) {
         catalogue->records_scanned++;
         uint8_t *raw=ld_xmalloc(volume->record_size),*fixed=ld_xmalloc(volume->record_size);
-        if (number > UINT64_MAX / volume->record_size ||
-            ntfs_read_stream(volume, &layout->mft_runs, number * volume->record_size,
+        uint64_t record_offset = 0U;
+        if (!infiltratr_u64_multiply_checked(number, volume->record_size,
+                                             &record_offset) ||
+            ntfs_read_stream(volume, &layout->mft_runs, record_offset,
                              raw, volume->record_size, error) != 0) {
             free(raw); free(fixed); free(*error); *error=NULL; catalogue->malformed_records++; continue;
         }
