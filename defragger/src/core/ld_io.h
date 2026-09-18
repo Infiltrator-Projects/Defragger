@@ -7,11 +7,28 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+/*
+ * Defragmenter I/O adapters.
+ *
+ * Common owns the interruption-safe exact positioned-I/O loop. These wrappers
+ * adapt that primitive to the ssize_t/fatal-policy contracts used by the native
+ * engines. A non-negative return equals the requested length; -1 indicates
+ * failure and preserves errno for diagnostics.
+ */
 ssize_t ld_pread_full(int fd, void *buffer, size_t length, uint64_t offset);
 ssize_t ld_pwrite_full(int fd, const void *buffer, size_t length, uint64_t offset);
-void ld_pread_exact(int fd, void *buffer, size_t length, uint64_t offset, const char *what);
-void ld_pwrite_exact(int fd, const void *buffer, size_t length, uint64_t offset, const char *what);
 
+/* Fatal variants for invariants whose violation cannot be recovered locally. */
+void ld_pread_exact(int fd, void *buffer, size_t length, uint64_t offset,
+                    const char *what);
+void ld_pwrite_exact(int fd, const void *buffer, size_t length, uint64_t offset,
+                     const char *what);
+
+/*
+ * Resource-selection helpers are best-effort performance policy, not safety
+ * boundaries. Writers must remain correct with smaller resources and fail
+ * closed when a required workspace cannot be obtained.
+ */
 uint64_t ld_available_memory_bytes(void);
 size_t ld_default_ram_limit(void);
 size_t ld_online_cpu_count(void);
