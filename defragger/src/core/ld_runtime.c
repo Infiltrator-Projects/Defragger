@@ -38,12 +38,6 @@ void *ld_xcalloc(size_t count, size_t size) {
     return pointer;
 }
 
-void *ld_xrealloc(void *pointer, size_t size) {
-    void *replacement = realloc(pointer, size == 0 ? 1 : size);
-    if (replacement == NULL) ld_die_errno("realloc");
-    return replacement;
-}
-
 char *ld_xstrdup(const char *text) {
     char *copy = strdup(text);
     if (copy == NULL) ld_die_errno("strdup");
