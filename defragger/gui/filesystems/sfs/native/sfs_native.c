@@ -4,6 +4,7 @@
 #include "ld_device.h"
 #include "ld_io.h"
 
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/endian.h"
 
 #include <errno.h>
@@ -132,27 +133,10 @@ typedef struct {
 
 static int reserve_array(void **items, size_t *capacity, size_t need,
                          size_t item_size, char *error, size_t error_size) {
-    if (need <= *capacity) return 0;
-    size_t next = *capacity == 0U ? 16U : *capacity;
-    while (next < need) {
-        if (next > SIZE_MAX / 2U) {
-            set_error(error, error_size, "SFS catalogue is too large");
-            return -1;
-        }
-        next *= 2U;
-    }
-    if (next > SIZE_MAX / item_size) {
-        set_error(error, error_size, "SFS catalogue allocation overflows");
-        return -1;
-    }
-    void *grown = realloc(*items, next * item_size);
-    if (grown == NULL) {
-        set_error(error, error_size, "out of memory building SFS catalogue");
-        return -1;
-    }
-    *items = grown;
-    *capacity = next;
-    return 0;
+    if (infiltratr_array_reserve(items, capacity, item_size, need, 16U))
+        return 0;
+    set_error(error, error_size, "cannot grow SFS catalogue");
+    return -1;
 }
 
 static int extent_push(SfsExtentVec *vec, SfsExtent value,
