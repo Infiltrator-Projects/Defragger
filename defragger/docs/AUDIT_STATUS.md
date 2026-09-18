@@ -7,7 +7,7 @@ Completed: 2026-08-25
 Extended: 2026-09-18
 
 Applies to: release version 1.8.0-166
-Audited source commit: fe992e2252d7b4995388de0bc90652f52b759dd3
+Audited source commit: f4c538e4d8bfa724d8de53b391d76325e2f993d3
 Audited release-governance commit: 24efb9f41a449148b49547cb7db9d1c6f24f1403
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -345,7 +345,7 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     variables and journal magic retain their established identifiers. A
     permanent architecture regression rejects the retired product labels from
     selected user-facing surfaces and verifies the Defragmenter source-archive
-    contract. Exact audited source baseline `fe992e2252d7b4995388de0bc90652f52b759dd3` contains the completed rename;
+    contract. Exact audited source baseline `f4c538e4d8bfa724d8de53b391d76325e2f993d3` contains the completed rename;
     release-governance is independently bound below; publication remains
     conditional on the exact-head quality gate and immutable release checks.
 
@@ -356,7 +356,16 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     sanitizer qualification, release invariants and cancel-in-progress
     semantics are unchanged. The governance-only change is bound to exact
     commit `24efb9f41a449148b49547cb7db9d1c6f24f1403`; the audited product source remains
-    `fe992e2252d7b4995388de0bc90652f52b759dd3`.
+    `f4c538e4d8bfa724d8de53b391d76325e2f993d3`.
+
+38. Qualification of the completed branding pass exposed one accidental
+    compatibility break: the Debian control-field identifier
+    `X-Linux-Defragger-Build` had been changed as though it were display
+    branding. The package builder and local compiler now retain that established
+    metadata key while all user-visible product text remains Defragmenter.
+    This correction changes no filesystem algorithm, package name, executable,
+    application ID, state path or journal format. The corrected audited source
+    baseline is `f4c538e4d8bfa724d8de53b391d76325e2f993d3`.
 
 ## Shared Common dependency
 
@@ -364,7 +373,7 @@ The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
 The current 1.8.0-166 audit extension is bound to Defragmenter source baseline
-`fe992e2252d7b4995388de0bc90652f52b759dd3`. Release qualification rejects any later change beneath the
+`f4c538e4d8bfa724d8de53b391d76325e2f993d3`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
 `24efb9f41a449148b49547cb7db9d1c6f24f1403`; changes beneath `.github/workflows`
