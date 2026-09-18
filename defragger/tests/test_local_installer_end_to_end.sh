@@ -70,7 +70,7 @@ PATH="$WORK:$PATH" \
     "$RUN" >"$WORK/output.log"
 
 [ "$(cat "$WORK/installed-version")" = "$EXPECTED_VERSION" ]
-grep -Fq "Linux Defragger $EXPECTED_VERSION is installed." "$WORK/output.log"
+grep -Fq "Defragmenter $EXPECTED_VERSION is installed." "$WORK/output.log"
 grep -Fq 'The native package replaced the generic package' "$WORK/output.log"
 
 printf '%s\n' 'Local compiler end-to-end package-version test passed.'
