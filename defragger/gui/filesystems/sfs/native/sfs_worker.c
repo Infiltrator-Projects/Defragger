@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sfs_native.h"
 #include "version.h"
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 #include "infiltratr/posix.h"
 #include "ld_device.h"
@@ -102,10 +103,14 @@ static int print_map(const char *path, uint64_t requested_cells)
     uint64_t cells = requested_cells;
     if (cells > total_units) cells = total_units;
     if (cells == 0U) cells = 1U;
-    if (cells > SIZE_MAX / sizeof(SfsMapCell)) {
+    size_t map_bytes = 0U;
+    if (cells > SIZE_MAX ||
+        !infiltratr_size_multiply_checked((size_t)cells,
+                                          sizeof(SfsMapCell), &map_bytes)) {
         (void)fprintf(stderr, "%s: allocation map is too large\n", PROG);
         return -1;
     }
+    (void)map_bytes;
     SfsMapCell *map = calloc((size_t)cells, sizeof(*map));
     if (map == NULL) {
         (void)fprintf(stderr, "%s: out of memory building SFS allocation map\n", PROG);
