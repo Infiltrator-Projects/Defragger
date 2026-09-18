@@ -9,6 +9,7 @@
 #include "ld_io.h"
 #include "ld_path.h"
 #include "ld_runtime.h"
+#include "ld_protocol.h"
 #include "ld_stop.h"
 
 #include <errno.h>
@@ -63,11 +64,7 @@ static void usage(FILE *stream) {
         "[--growth-percent 10] [--live-updates]\n", PROG);
 }
 
-static void result(const char *operation, const char *status, const char *message) {
-    printf("@@RESULT {\"operation\":\"%s\",\"status\":\"%s\",\"message\":\"%s\"}\n",
-           operation, status, message == NULL ? "" : message);
-    fflush(stdout);
-}
+
 
 static bool parse_unsigned(const char *text, unsigned *value) {
     uint64_t parsed = 0;
@@ -582,7 +579,7 @@ static int handle_recovery(const char *device, const char *journal,
     char digest[65];
     int digest_rc = stage_sha256(state.stage, digest, error);
     if (digest_rc == STOPPED) {
-        result("recover", "stopped", "Stopped before source writes; recovery artifacts remain intact.");
+        ld_emit_result_event(stdout, "recover", "stopped", "Stopped before source writes; recovery artifacts remain intact.");
         journal_free(&state);
         return STOPPED;
     }
@@ -603,7 +600,7 @@ static int handle_recovery(const char *device, const char *journal,
             return 1;
         }
         transaction_cleanup(journal, &state);
-        result("recover", "completed", "Verified an already committed HFS+ transaction.");
+        ld_emit_result_event(stdout, "recover", "completed", "Verified an already committed HFS+ transaction.");
         journal_free(&state);
         return 0;
     }
@@ -615,7 +612,7 @@ static int handle_recovery(const char *device, const char *journal,
     int commit_rc = safe_commit_stage(state.stage, device, &state, &written, error);
     if (commit_rc == STOPPED) {
         printf("HFS+ recovery stopped at a durable source-write boundary; journal and verified stage were retained.\n");
-        result("recover", "stopped", "Recovery can be resumed safely.");
+        ld_emit_result_event(stdout, "recover", "stopped", "Recovery can be resumed safely.");
         journal_free(&state);
         return STOPPED;
     }
@@ -634,7 +631,7 @@ static int handle_recovery(const char *device, const char *journal,
     }
     printf("Recovered verified HFS+ source; committed %" PRIu64 " KiB of allocated blocks.\n",
            written / 1024U);
-    result("recover", "completed", "");
+    ld_emit_result_event(stdout, "recover", "completed", "");
     journal_free(&state);
     return 0;
 }
@@ -755,14 +752,14 @@ int main(int argc, char **argv) {
     }
     if (ld_stop_requested()) {
         unlink_if_exists(state.stage);
-        result(mode, "stopped", "Stopped before any source writes.");
+        ld_emit_result_event(stdout, mode, "stopped", "Stopped before any source writes.");
         journal_free(&state);
         return STOPPED;
     }
     int hash_rc = stage_sha256(state.stage, state.stage_sha256, &error);
     if (hash_rc == STOPPED) {
         unlink_if_exists(state.stage);
-        result(mode, "stopped", "Stopped before any source writes.");
+        ld_emit_result_event(stdout, mode, "stopped", "Stopped before any source writes.");
         journal_free(&state);
         return STOPPED;
     }
@@ -777,7 +774,7 @@ int main(int argc, char **argv) {
     }
     if (ld_stop_requested()) {
         transaction_cleanup(journal, &state);
-        result(mode, "stopped", "Stopped before any source writes.");
+        ld_emit_result_event(stdout, mode, "stopped", "Stopped before any source writes.");
         journal_free(&state);
         return STOPPED;
     }
@@ -789,7 +786,7 @@ int main(int argc, char **argv) {
     int commit_rc = safe_commit_stage(state.stage, device, &state, &written, &error);
     if (commit_rc == STOPPED) {
         printf("HFS+ Stop reached a durable source-write boundary; recovery journal and verified stage were retained.\n");
-        result(mode, "stopped", "Run Recover to resume the verified transaction.");
+        ld_emit_result_event(stdout, mode, "stopped", "Run Recover to resume the verified transaction.");
         journal_free(&state);
         free(error);
         return STOPPED;
@@ -804,7 +801,7 @@ int main(int argc, char **argv) {
     }
     printf("HFS+ %s completed; committed %" PRIu64 " KiB of allocated blocks.\n",
            growth ? "Growth Defrag" : "Defrag", written / 1024U);
-    result(mode, "completed", "");
+    ld_emit_result_event(stdout, mode, "completed", "");
     journal_free(&state);
     free(error);
     return 0;
