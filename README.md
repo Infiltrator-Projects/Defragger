@@ -78,8 +78,10 @@ Existing version tags and published releases are immutable and are never moved, 
 ## Documentation
 
 - `defragger/README.md` — detailed project manual and filesystem-support matrix.
-- `defragger/docs/AUDIT_STATUS.md` — current safety-audit status.
-- `defragger/docs/DESIGN.md` — technical architecture and filesystem contracts.
+- `defragger/docs/DESIGN.md` — architecture, assumptions, invariants and trade-offs.
+- `defragger/docs/VALIDATION.md` — verification methodology, evidence traceability and limitations.
+- `defragger/docs/AUDIT_STATUS.md` — release-specific safety case and exact audited baselines.
+- `defragger/docs/REFERENCES.md` — filesystem/platform technical references.
 - `defragger/VERSION` — current source version.
 
 ## Safety
