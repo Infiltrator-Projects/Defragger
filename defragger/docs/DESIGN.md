@@ -1,5 +1,70 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-# Linux Defragger design
+# Defragmenter design
+
+## Purpose and scope
+
+This document records the architectural rationale and safety contracts of the current implementation. It is intentionally different from a changelog: Git history records when a change happened; this document explains why the present design exists, what assumptions it relies on, and which invariants must remain true when the implementation changes.
+
+The design is for an offline Linux storage tool that can inspect many filesystems and can mutate only those formats for which a first-party, recoverable writer contract is implemented. On-disk metadata is treated as untrusted input and every authoritative write is treated as a safety-critical operation.
+
+## Design objectives and non-goals
+
+The primary objectives are:
+
+1. **Fail closed on uncertainty.** Unsupported features, contradictory geometry, malformed metadata, stale recovery state and ambiguous target identity stop mutation rather than triggering a best-effort guess.
+2. **Bind writes to the selected object.** A pathname alone is insufficient; block identity or regular-file identity, capacity and filesystem-specific identity are revalidated across privileged/open/commit boundaries.
+3. **Make interruption recoverable.** Once an authoritative source byte may have changed, durable transaction state must be sufficient to complete or safely recover the operation.
+4. **Separate planning from authority.** Catalogue and placement state are derived data. They become authoritative only after validation and, where applicable, staged verification.
+5. **Verify success independently.** A writer returning without error is not sufficient; the resulting filesystem is reopened and checked against canonical layout and payload invariants.
+6. **Keep one implementation of each policy.** Filesystem-neutral mechanics live in the native core or Common; filesystem-format semantics remain with the owning engine.
+7. **Bound hostile inputs and resource use.** Integer arithmetic, vector growth, tree traversal and selected planning algorithms have explicit overflow or resource limits.
+
+The project is not a general-purpose filesystem repair suite, an online defragmenter, a replacement kernel filesystem driver, or a promise to support every valid historical feature combination. It does not attempt automatic journal replay for formats whose writer contract does not explicitly implement it. Unsupported cases are expected to be rejected.
+
+## Assumptions and trust boundaries
+
+The implementation assumes that the Linux kernel, libc, required system libraries and storage hardware honour their documented interfaces. Filesystem bytes, recovery artefacts outside the trusted state namespace, GUI input and user-selected paths are not trusted merely because they were previously validated.
+
+A privileged-process or root compromise is outside the threat model. Hardware that acknowledges durable writes but later loses or silently corrupts them is also outside what software alone can prove. `fsync()`/durable-publication contracts are therefore used as the strongest software-visible persistence boundary, not as a claim that storage firmware is infallible.
+
+Regular image files may be replaced between preflight and open, and block devices may change mount relationships. The native target-opening sequence therefore validates object identity and mounted overlap on both sides of the open boundary. Filesystem writers then bind the descriptor to format-specific identity such as UUID, serial number and geometry where that format provides it.
+
+## Safety invariants
+
+The following invariants are design requirements, not implementation hints:
+
+- **I1 - target identity:** authoritative writes are issued only to a descriptor that still matches the transaction's selected target and expected capacity.
+- **I2 - mounted-overlap exclusion:** raw mutation refuses a mounted target and any block-topology mapping whose address space overlaps the selected target.
+- **I3 - validated plan:** no filesystem metadata is rewritten from an unvalidated catalogue or placement plan.
+- **I4 - durable recovery boundary:** before an operation enters a phase from which source bytes may require recovery, the state needed by Recover is durably published.
+- **I5 - monotonic transaction state:** recovery phases cannot silently move backwards or replace an existing unfinished transaction with unrelated state.
+- **I6 - safe Stop:** Stop is cooperative and is observed only at boundaries where on-disk state is unchanged, valid or recoverable.
+- **I7 - independent completion check:** mutation success requires a reopened read-only verification of payload/layout invariants.
+- **I8 - unsupported means no write:** unknown features, impossible geometry and failed integrity checks reject mutation before the affected structure is trusted.
+
+These invariants are mapped to executable evidence in [`VALIDATION.md`](VALIDATION.md) and to the release-specific safety case in [`AUDIT_STATUS.md`](AUDIT_STATUS.md).
+
+## Engineering trade-offs
+
+Direct userspace mutation increases implementation complexity compared with asking a mounted kernel driver to relocate files. It is retained because the project requires deterministic physical placement and a uniform recovery model that can be independently inspected. The consequence is a deliberately narrower write-support matrix and a larger verification burden.
+
+Persistent staging consumes temporary storage and I/O, but it gives recovery a stable source of truth across process interruption. Engines use smaller terminal workspaces only where the filesystem-specific dependency graph makes that safe; otherwise a verified stage is preferred over reducing temporary-space cost.
+
+The exact 10% Growth Defrag reserve is intentionally stricter than a heuristic 'leave some room' policy. It makes the postcondition deterministic and testable at the cost of rejecting layouts that cannot satisfy the exact reserve.
+
+Generic parsing, arithmetic, escaping and I/O mechanics are delegated to the pinned Common library only when their semantics match. Device safety, filesystem geometry, placement and transaction policy stay local even when a generic abstraction might superficially reduce code, because moving policy into Common would weaken the ownership boundary.
+
+## Complexity and resource bounds
+
+The project does not claim one complexity bound for every filesystem format, but it makes resource behaviour explicit where hostile metadata could cause unbounded work:
+
+- catalogue scans are bounded by filesystem geometry and by format-specific limits on traversed blocks, inodes or extents;
+- range/vector normalisation is generally linear to collect plus O(n log n) where sorting is required;
+- allocation bitmaps use storage proportional to the represented allocation domain and are rejected when size arithmetic cannot be represented safely;
+- the NTFS low-layout subset planner is pseudo-polynomial in its bounded target and is capped by a fixed 256 MiB planning-memory limit rather than allowing unbounded allocation;
+- XFS and Btrfs metadata walks apply explicit defensive traversal ceilings so corrupt cyclic/adversarial trees terminate with failure.
+
+These are engineering bounds, not a formal proof of worst-case execution time. Performance changes must preserve the safety invariants above.
 
 ## Canonical layouts
 
@@ -46,13 +111,14 @@ the UI share it without importing each other's orchestration packages.
 
 ### Shared native core — `src/core/`
 
-Filesystem-neutral C mechanics are implemented once:
+Filesystem-neutral Defragmenter mechanics are implemented once:
 
-- exact interruption-safe `pread` and `pwrite` loops;
+- adapters over Common's exact positioned I/O with Defragmenter's error policy;
 - exclusive raw-device opening, geometry and overlap-aware mounted-target rejection;
+- target identity/capacity binding across authoritative write boundaries;
 - rotational/serial-flash policy and resource defaults;
-- checked allocation and endian codecs;
-- signal-safe Stop state;
+- signal-safe cooperative Stop state;
+- machine-readable result emission using Common JSON escaping;
 - generated version ownership.
 
 Generic C primitives that are also useful to other Infiltrator applications are
@@ -60,10 +126,11 @@ not reimplemented here. Linux Defragger pins Infiltratr Common 1.19.2 at
 exact commit `44409af17c89b6ece6b4bcb2c0c133213c695c23` and links the canonical
 `InfiltratrCommon::Common` CMake target. Common owns strict integer parsing and
 range validation, bounded strings, line-end trimming, checked and saturating
-arithmetic, endian byte access, exact interruption-safe positioned I/O, bounded
-realpath handling, small sysfs scalar reads and prefix matching. Device safety,
-raw-storage policy, Stop state and each filesystem's journalled staging and
-transaction mechanics remain local because those semantics are
+arithmetic, checked geometric growth, endian byte access, percentage
+calculation, exact sequential/positioned I/O, bounded realpath handling, JSON
+escaping, small sysfs scalar reads and lexical prefix/path helpers. Device
+safety, raw-storage policy, Stop state and each filesystem's journalled staging
+and transaction mechanics remain local because those semantics are
 application-specific.
 
 This directory contains no filesystem registration or dispatch logic.
@@ -140,7 +207,7 @@ Normal raw I/O system calls still pass through Linux; the filesystem driver does
 
 ## EXT native staged transaction
 
-Revision 83 moves EXT2/3/4 mutation into a native C engine below
+The EXT2/3/4 mutation path is a native C engine below
 `gui/filesystems/ext4/native/`. The worker links `libext2fs` directly in-process
 and performs its own catalogue, deterministic placement, raw block permutation,
 inode/block-map updates, staged verification, durable commit and recovery. No
@@ -166,7 +233,7 @@ source commit.
 
 `gui/filesystems/hfsplus/native/` owns HFS+ and HFSX identification, allocation-file decoding, Catalog and Extents Overflow B-tree traversal, fork placement, extent-descriptor updates, payload hashing, live-map emission, staged verification, allocated-range commit and Recover. Filesystem B-tree topology stays fixed. Existing overflow-record keys and extent counts are preserved while physical extent starts are rewritten to make the fork contiguous.
 
-The writer accepts journaled volumes only when the internal JournalInfoBlock/journal header proves that no transaction needs replay. The journal allocation remains fixed. A non-empty journal is a pre-write failure; journal replay is intentionally outside revision 94.
+The writer accepts journaled volumes only when the internal JournalInfoBlock/journal header proves that no transaction needs replay. The journal allocation remains fixed. A non-empty journal is a pre-write failure; journal replay is intentionally outside the supported HFS+/HFSX writer contract.
 
 ## Filesystem plugin and worker contract
 
@@ -192,3 +259,13 @@ invariants.
 ## Licensing invariant
 
 All first-party Linux Defragger implementation code, GUI glue, build/packaging logic, tests and project documentation use `SPDX-License-Identifier: GPL-3.0-or-later`. The exact comment syntax follows the file format. Non-commentable first-party artefacts use an adjacent `.license` sidecar. `tests/test_spdx_licensing.py` enforces this rule. The repository contains no vendored third-party source; system-provided build/runtime libraries retain their own licence terms.
+
+## Validation and evidence
+
+The design is exercised through warnings-as-errors builds, native/unit tests, disposable filesystem-image tests, independent post-operation verification, fault-injected transaction tests, architecture/safety regressions, ASan/UBSan, packaging tests and exact-head release gating. The methodology, evidence independence and known validation limits are documented in [`VALIDATION.md`](VALIDATION.md).
+
+The release-specific audit is deliberately separate from this design document. [`AUDIT_STATUS.md`](AUDIT_STATUS.md) binds the enabled writer set and current release to exact audited source/governance commits.
+
+## Technical references
+
+Filesystem and platform references used to interpret on-disk structures and system-call durability/identity semantics are catalogued in [`REFERENCES.md`](REFERENCES.md). Implementation comments should cite a reference when a non-obvious algorithm follows a published on-disk rule; comments should otherwise explain project-specific invariants and rationale rather than restate the code.
