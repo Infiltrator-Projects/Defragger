@@ -8,7 +8,7 @@ Extended: 2026-09-18
 
 Applies to: release version 1.8.0-167
 Audited source commit: 9299cfe323b55281a698de7b9e78e0898d19fbef
-Audited release-governance commit: 9299cfe323b55281a698de7b9e78e0898d19fbef
+Audited release-governance commit: 121f174a1a745036f2df1b9facc5bfd33bafac61
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -379,13 +379,15 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     `Defragmenter-<version>-local-folder.run` and
     `Defragmenter-<version>.zip`; the About/project link targets the renamed
     `Infiltrator-Projects/Defragmenter` repository; and Defragmenter Test Media
-    no longer displays the retired pre-1.8.0-167 product name or creates a
-    `LinuxDefragger-TestData` directory. The Debian package identity,
+    no longer displays the retired pre-1.8.0-167 product name and creates the
+    branded `Defragmenter-TestData` directory. The Debian package identity,
     installed executable family, application ID, state paths, environment
     variables and journal formats remain unchanged for upgrade and persisted
-    state compatibility. Exact source and release-governance baseline
-    `9299cfe323b55281a698de7b9e78e0898d19fbef` contains these branding-only
-    corrections and the 1.8.0-167 version advance.
+    state compatibility. Exact source baseline
+    `9299cfe323b55281a698de7b9e78e0898d19fbef` contains the product branding
+    corrections and 1.8.0-167 version advance; release-governance baseline
+    `121f174a1a745036f2df1b9facc5bfd33bafac61` completes the branded installer
+    path used by release verification.
 
 ## Shared Common dependency
 
@@ -396,7 +398,7 @@ The current 1.8.0-167 audit extension is bound to Defragmenter source baseline
 `9299cfe323b55281a698de7b9e78e0898d19fbef`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
-`9299cfe323b55281a698de7b9e78e0898d19fbef`; changes beneath `.github/workflows`
+`121f174a1a745036f2df1b9facc5bfd33bafac61`; changes beneath `.github/workflows`
 likewise require the governance audit baseline to be advanced. The source baseline
 validates Infiltratr Common 1.19.2 at exact commit
 `44409af17c89b6ece6b4bcb2c0c133213c695c23`. CMake, the gitlink and the local
