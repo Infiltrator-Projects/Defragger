@@ -3,6 +3,7 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "infiltratr/arithmetic.h"
+#include "infiltratr/core.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -1008,8 +1009,8 @@ int xfs_emit_analysis_json(const char *path, char **error) {
                ag->longest_free_extent, ag->free_extents,
                ag->free_count_matches_agf ? "true" : "false");
     }
-    double fragmentation = 100.0 * (double)catalogue.fragmented_files /
-                           (double)(catalogue.regular_files == 0 ? 1 : catalogue.regular_files);
+    double fragmentation = infiltratr_percent_u64(
+        catalogue.fragmented_files, catalogue.regular_files);
     printf("],\"bnobt_blocks\":%" PRIu64 ",\"regular_files\":%" PRIu64
            ",\"directories\":%" PRIu64 ",\"fragmented_files\":%" PRIu64
            ",\"fragmented_directories\":%" PRIu64 ",\"fragmentation_percent\":%.9g"
