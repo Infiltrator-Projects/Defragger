@@ -2,6 +2,10 @@
 #include "test_media.h"
 #include "affs_native.h"
 
+#include "infiltratr/arithmetic.h"
+#include "infiltratr/core.h"
+#include "infiltratr/endian.h"
+
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -40,15 +44,11 @@ typedef struct {
 } AmigaTarget;
 
 static uint32_t get_be32(const unsigned char *p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    return infiltratr_load_be32(p);
 }
 
 static void put_be32(unsigned char *p, uint32_t value) {
-    p[0] = (unsigned char)(value >> 24);
-    p[1] = (unsigned char)(value >> 16);
-    p[2] = (unsigned char)(value >> 8);
-    p[3] = (unsigned char)value;
+    infiltratr_store_be32(p, value);
 }
 
 static uint32_t block_word(const unsigned char block[AMIGA_BLOCK_SIZE], uint32_t index) {
@@ -123,13 +123,10 @@ static void block_vec_free(AmigaBlockVec *vec) {
 }
 
 static int block_vec_push(AmigaBlockVec *vec, uint32_t value) {
-    if (vec->count == vec->capacity) {
-        const size_t next_capacity = vec->capacity == 0U ? 128U : vec->capacity * 2U;
-        uint32_t *next = realloc(vec->values, next_capacity * sizeof(*next));
-        if (next == NULL) return -1;
-        vec->values = next;
-        vec->capacity = next_capacity;
-    }
+    if (vec->count == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&vec->values, &vec->capacity,
+                                  sizeof(*vec->values), vec->count + 1U, 128U))
+        return -1;
     vec->values[vec->count++] = value;
     return 0;
 }
@@ -524,7 +521,7 @@ int ldtm_verify_amiga_payload(const char *path, uint8_t dostype,
             if (seen[target_index] != 0U || affs_fragments(&file->data) < profile->chunks ||
                 verify_target_data(&volume, file, dostype, target_index, file_size) != 0) goto cleanup_volume;
             seen[target_index] = 1U;
-        } else if (strncmp(name, "entry-", 6U) == 0 && file->byte_size == 0U && file->data.n == 0U) {
+        } else if (infiltratr_string_starts_with(name, "entry-") && file->byte_size == 0U && file->data.n == 0U) {
             ++directory_entries;
         }
     }
