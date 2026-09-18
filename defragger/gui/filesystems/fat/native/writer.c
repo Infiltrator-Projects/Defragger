@@ -9,7 +9,6 @@
  * testable without creating a second filesystem registry.
  */
 
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -30,6 +29,7 @@
 #include "ld_stop.h"
 #include "infiltratr/core.h"
 #include "infiltratr/posix.h"
+#include "infiltratr/quantity.h"
 #include "version.h"
 #include "fat_analysis.h"
 #include "fat_directory.h"
@@ -1920,31 +1920,11 @@ static size_t parse_size(const char *s) {
 }
 
 static size_t parse_byte_size(const char *s) {
-    char *end = NULL;
-    errno = 0;
-    unsigned long long value = strtoull(s, &end, 10);
-    if (errno != 0 || end == s) ld_die("invalid RAM buffer size");
-    char suffix[8] = {0};
-    size_t suffix_len = strlen(end);
-    if (suffix_len >= sizeof(suffix)) ld_die("invalid RAM buffer suffix");
-    for (size_t i = 0; i < suffix_len; i++) suffix[i] = (char)toupper((unsigned char)end[i]);
-
-    uint64_t multiplier = 1;
-    if (suffix[0] == '\0' || strcmp(suffix, "B") == 0) multiplier = 1;
-    else if (strcmp(suffix, "K") == 0 || strcmp(suffix, "KB") == 0) {
-        multiplier = UINT64_C(1024);
-    } else if (strcmp(suffix, "M") == 0 || strcmp(suffix, "MB") == 0) {
-        multiplier = UINT64_C(1024) * 1024;
-    } else if (strcmp(suffix, "G") == 0 || strcmp(suffix, "GB") == 0) {
-        multiplier = UINT64_C(1024) * 1024 * 1024;
-    } else if (strcmp(suffix, "T") == 0 || strcmp(suffix, "TB") == 0) {
-        multiplier = UINT64_C(1024) * 1024 * 1024 * 1024;
-    } else {
-        ld_die("invalid RAM buffer suffix; use K, M, G, or T");
-    }
-    if (value > UINT64_MAX / multiplier) ld_die("RAM buffer size is too large");
-    uint64_t bytes = (uint64_t)value * multiplier;
-    if (bytes == 0 || bytes > SIZE_MAX) ld_die("RAM buffer size is outside this build's range");
+    uint64_t bytes = 0U;
+    if (!infiltratr_parse_binary_quantity_u64(s, &bytes))
+        ld_die("invalid RAM buffer size");
+    if (bytes == 0U || bytes > SIZE_MAX)
+        ld_die("RAM buffer size is outside this build's range");
     return (size_t)bytes;
 }
 
