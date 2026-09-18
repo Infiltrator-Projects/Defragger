@@ -9,6 +9,7 @@ from gi.repository import Gdk, Gtk
 
 from .map_presenter import MapPresentation
 from .operation_planner import ControlState
+from .theme import ThemeMode, apply_theme, load_theme_mode, save_theme_mode, theme_label
 from .widgets import DiskMap, SummaryCard
 
 
@@ -319,6 +320,7 @@ class WindowView:
     def _build_menu_bar(self) -> Gtk.MenuBar:
         menu_bar = Gtk.MenuBar()
         menu_bar.get_style_context().add_class("app-menubar")
+
         file_item = Gtk.MenuItem.new_with_mnemonic("_File")
         file_menu = Gtk.Menu()
         file_item.set_submenu(file_menu)
@@ -343,15 +345,63 @@ class WindowView:
         quit_item.connect("activate", lambda _item: self.window.close())
         file_menu.append(quit_item)
 
+        view_item = Gtk.MenuItem.new_with_mnemonic("_View")
+        view_menu = Gtk.Menu()
+        view_item.set_submenu(view_menu)
+
+        theme_item = Gtk.MenuItem.new_with_label("Theme")
+        theme_menu = Gtk.Menu()
+        theme_item.set_submenu(theme_menu)
+        self._theme_items: dict[ThemeMode, Gtk.RadioMenuItem] = {}
+        group: Gtk.RadioMenuItem | None = None
+        active_mode = load_theme_mode()
+        for mode in (ThemeMode.SYSTEM, ThemeMode.DAY, ThemeMode.NIGHT):
+            item = (
+                Gtk.RadioMenuItem.new_with_label_from_widget(group, theme_label(mode))
+                if group is not None
+                else Gtk.RadioMenuItem.new_with_label(None, theme_label(mode))
+            )
+            if group is None:
+                group = item
+            item.set_active(mode is active_mode)
+            item.connect("toggled", self._on_theme_toggled, mode)
+            self._theme_items[mode] = item
+            theme_menu.append(item)
+        view_menu.append(theme_item)
+
         about_item = Gtk.MenuItem.new_with_mnemonic("_About")
         about_menu = Gtk.Menu()
         about_item.set_submenu(about_menu)
         about_dialog_item = Gtk.MenuItem.new_with_label("About Linux Defragger")
         about_dialog_item.connect("activate", lambda _item: self.show_about())
         about_menu.append(about_dialog_item)
+
         menu_bar.append(file_item)
+        menu_bar.append(view_item)
         menu_bar.append(about_item)
         return menu_bar
+
+    def _on_theme_toggled(
+        self,
+        item: Gtk.RadioMenuItem,
+        mode: ThemeMode,
+    ) -> None:
+        if not item.get_active():
+            return
+        save_theme_mode(mode)
+        apply_theme(mode)
+        application = self.window.get_application()
+        if application is None:
+            return
+        for window in application.get_windows():
+            view = getattr(window, "view", None)
+            if view is not None and hasattr(view, "sync_theme_menu"):
+                view.sync_theme_menu(mode)
+
+    def sync_theme_menu(self, mode: ThemeMode) -> None:
+        item = getattr(self, "_theme_items", {}).get(mode)
+        if item is not None and not item.get_active():
+            item.set_active(True)
 
     @staticmethod
     def _draw_swatch(
@@ -365,148 +415,23 @@ class WindowView:
         return False
 
     def _load_css(self) -> None:
+        """Install layout/typography rules; colour policy lives in theme.py."""
         css = b"""
-        .app-title {
-            color: #f7f8f9;
-            font-size: 21pt;
-            font-weight: bold;
-        }
-        .app-subtitle {
-            color: #a8afb5;
-            font-size: 10pt;
-        }
-        .version-badge {
-            background-color: #111416;
-            border: 1px solid #343a3f;
-            border-radius: 4px;
-        }
-        .version-primary {
-            color: #d6dadd;
-            font-size: 9.5pt;
-            font-weight: bold;
-        }
-        .version-secondary {
-            color: #8f979e;
-            font-size: 9pt;
-        }
-        .section-title {
-            color: #c4c9cd;
-            font-size: 10pt;
-            font-weight: bold;
-        }
-        frame.section-panel > border,
-        frame.map-panel > border,
-        frame.action-panel > border,
-        frame.summary-card > border {
-            border: 1px solid #30363b;
-            border-radius: 4px;
-            background-color: #0d0f11;
-        }
-        frame.summary-card > border {
-            border-color: #343a3f;
-        }
-        .summary-title {
-            color: #969ea5;
-            font-size: 9.5pt;
-        }
-        .summary-value {
-            color: #f5f6f7;
-            font-size: 16pt;
-            font-weight: bold;
-        }
-        .legend-item label {
-            color: #c2c7cb;
-            font-size: 9pt;
-        }
-        .map-caption {
-            color: #8e969d;
-            font-size: 9pt;
-        }
-        button.primary-action {
-            background-image: none;
-            background-color: #c8ccd0;
-            color: #090a0b;
-            border-color: #eceeef;
-            font-weight: bold;
-        }
-        button.primary-action:hover {
-            background-color: #e2e5e7;
-            color: #050505;
-        }
-        button.primary-action:active {
-            background-color: #adb3b8;
-            color: #050505;
-        }
-        button.operation-action {
-            border-color: #8a9197;
-            font-weight: bold;
-        }
-        button.destructive-action {
-            border-color: #8f5555;
-        }
-        button.destructive-action:hover {
-            background-color: #4a2525;
-            border-color: #c36a6a;
-        }
-        button.destructive-action:disabled {
-            border-color: #3f4144;
-        }
-        progressbar.operation-progress trough {
-            min-height: 12px;
-            background-color: #15181a;
-            border-color: #3d4348;
-        }
-        progressbar.operation-progress progress {
-            background-color: #b9bec2;
-        }
-        .log-expander {
-            color: #c4c9cd;
-            font-weight: bold;
-        }
-        .log-scroll {
-            border: 1px solid #2f3539;
-            border-radius: 3px;
-        }
-        textview.log-view {
-            background-color: #101214;
-            color: #d9dde0;
-            font-size: 9.5pt;
-        }
-        .status-strip {
-            background-color: #0d0f11;
-            border-top: 1px solid #30363b;
-        }
-        .status-prefix {
-            color: #727b82;
-            font-size: 8.5pt;
-            font-weight: bold;
-        }
-        .status-text {
-            color: #a3aab0;
-            font-size: 9pt;
-        }
-        .about-title {
-            color: #f7f8f9;
-            font-size: 19pt;
-            font-weight: bold;
-        }
-        .about-version {
-            color: #a9b0b6;
-            font-size: 10pt;
-        }
-        .about-copy {
-            color: #d8dcdf;
-            font-size: 10pt;
-        }
-        .about-meta-key {
-            color: #858e95;
-            font-size: 9.5pt;
-            font-weight: bold;
-        }
-        .about-meta-value {
-            color: #d7dbde;
-            font-size: 9.5pt;
-        }
+        .app-title { font-size: 21pt; font-weight: bold; }
+        .app-subtitle { font-size: 10pt; }
+        .version-primary { font-size: 9.5pt; font-weight: bold; }
+        .version-secondary { font-size: 9pt; }
+        .section-title { font-size: 10pt; font-weight: bold; }
+        .summary-title { font-size: 9.5pt; }
+        .summary-value { font-size: 16pt; font-weight: bold; }
+        .legend-item label, .map-caption { font-size: 9pt; }
+        button.primary-action, button.operation-action { font-weight: bold; }
+        .log-expander { font-weight: bold; }
+        textview.log-view { font-size: 9.5pt; }
+        .status-prefix { font-size: 8.5pt; font-weight: bold; }
+        .status-text { font-size: 9pt; }
+        .about-title { font-size: 19pt; font-weight: bold; }
+        .about-version, .about-copy, .about-meta-key, .about-meta-value { font-size: 9.5pt; }
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
