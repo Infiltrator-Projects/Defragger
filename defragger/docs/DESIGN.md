@@ -258,10 +258,6 @@ Every first-party plugin, native worker and associated test uses the project
 `GPL-3.0-or-later` SPDX identifier. Architecture and licensing tests enforce these
 invariants.
 
-## Licensing invariant
-
-All first-party Defragmenter implementation code, GUI glue, build/packaging logic, tests and project documentation use `SPDX-License-Identifier: GPL-3.0-or-later`. The exact comment syntax follows the file format. Non-commentable first-party artefacts use an adjacent `.license` sidecar. `tests/test_spdx_licensing.py` enforces this rule. The repository contains no vendored third-party source; system-provided build/runtime libraries retain their own licence terms.
-
 ## Validation and evidence
 
 The design is exercised through warnings-as-errors builds, native/unit tests, disposable filesystem-image tests, independent post-operation verification, fault-injected transaction tests, architecture/safety regressions, ASan/UBSan, packaging tests and exact-head release gating. The methodology, evidence independence and known validation limits are documented in [`VALIDATION.md`](VALIDATION.md).

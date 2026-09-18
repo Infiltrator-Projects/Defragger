@@ -62,8 +62,8 @@ claim.
 The hosted quality gate configures the project with
 `LD_ENABLE_WERROR=ON`, builds first-party C with warnings treated as errors,
 then runs the aggregate CTest suite. Python type/architecture tests verify
-module boundaries and worker contracts. SPDX and no-external-filesystem-tool
-tests enforce licensing and the raw-userspace design boundary.
+module boundaries and worker contracts. The no-external-filesystem-tool test
+enforces the raw-userspace design boundary.
 
 The Common dependency is pinned by version and exact commit in CMake and local
 packaging. This prevents a successful build from silently changing the generic

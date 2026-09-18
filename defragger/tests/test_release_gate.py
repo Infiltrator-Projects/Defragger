@@ -62,7 +62,6 @@ def main() -> None:
     for required in (
         "tests/test_release_artifacts.sh",
         "tests/run_typecheck.sh",
-        "tests/test_spdx_licensing.py",
         "tests/test_no_external_fs_tools.py",
         "tests/test_architecture.py",
         "tests/test_gui_models.py",

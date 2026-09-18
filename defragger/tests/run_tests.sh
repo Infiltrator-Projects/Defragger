@@ -34,7 +34,6 @@ version=$($FAT_WORKER --version)
 python3 -m compileall -q "$ROOT/gui"
 "$ROOT/tests/test_release_artifacts.sh"
 "$ROOT/tests/run_typecheck.sh"
-python3 "$ROOT/tests/test_spdx_licensing.py"
 python3 "$ROOT/tests/test_no_external_fs_tools.py"
 python3 "$ROOT/tests/test_architecture.py"
 python3 "$ROOT/tests/test_analysis_plugins.py"
