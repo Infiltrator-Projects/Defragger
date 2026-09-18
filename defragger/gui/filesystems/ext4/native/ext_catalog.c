@@ -5,6 +5,8 @@
 #include "ld_runtime.h"
 #include "ld_stop.h"
 
+#include "infiltratr/arithmetic.h"
+
 #include <com_err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -40,11 +42,10 @@ typedef struct {
 
 static void block_push(ExtBlockVec *vec, int64_t logical, uint64_t physical, bool data) {
     if (physical == 0) return;
-    if (vec->count == vec->capacity) {
-        size_t next = vec->capacity == 0 ? 32U : vec->capacity * 2U;
-        vec->items = ld_xrealloc(vec->items, next * sizeof(*vec->items));
-        vec->capacity = next;
-    }
+    if (vec->count == SIZE_MAX ||
+        !infiltratr_array_reserve((void **)&vec->items, &vec->capacity,
+                                  sizeof(*vec->items), vec->count + 1U, 32U))
+        ld_die("cannot grow EXT block vector");
     vec->items[vec->count++] = (ExtBlockRef){logical, physical, data};
 }
 
