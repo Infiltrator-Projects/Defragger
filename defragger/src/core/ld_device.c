@@ -213,6 +213,17 @@ bool ld_path_is_mounted(const char *path) {
     return S_ISBLK(status.st_mode) && ld_device_number_is_mounted(status.st_rdev);
 }
 
+/*
+ * The validation is intentionally repeated across the open boundary.
+ *
+ * A pathname is not a stable authority: another process can replace a regular
+ * image or change block-device mount state after preflight. Therefore this
+ * routine resolves and stats the candidate, rejects mounted writable block
+ * targets, opens with no-follow/exclusive semantics where applicable, compares
+ * fstat() identity with the pre-open object, then repeats the mounted-state
+ * check on the descriptor's block identity. Filesystem writers add their
+ * UUID/serial/geometry checks on top of this generic object binding.
+ */
 int ld_device_try_open(const char *path, bool writable, LdDevice *device) {
     if (path == NULL || device == NULL) {
         errno = EINVAL;
