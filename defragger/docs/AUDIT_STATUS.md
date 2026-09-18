@@ -6,7 +6,7 @@ Status: **complete**
 Completed: 2026-08-25
 Extended: 2026-09-18
 
-Applies to: release version 1.8.0-157
+Applies to: release version 1.8.0-158
 Audited source commit: 80194442f9234360f0b5e9eaaec61021a2c2bb5a
 Audited release-governance commit: 0e6deda16fbf01a882bed0e45ee33df2622e87eb
 
@@ -263,7 +263,7 @@ Recover.
 The original 1.8.0-140 audit consumed Infiltratr Common 1.15.0 at exact commit
 `d623410f55a071020539fae3f47682896473bd6f`.
 
-The current 1.8.0-157 audit extension is bound to Defragger source baseline
+The current 1.8.0-158 audit extension is bound to Defragger source baseline
 `80194442f9234360f0b5e9eaaec61021a2c2bb5a`. Release qualification rejects any later change beneath the
 runtime, native build, Common or packaging trees until the source audit baseline
 is explicitly advanced. Release-governance workflows are independently bound to
