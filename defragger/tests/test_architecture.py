@@ -215,12 +215,12 @@ def test_build_and_path_registry_install_native_workers() -> None:
 
 def test_infiltratr_common_integration() -> None:
     common = ROOT / "shared" / "infiltratr-common"
-    assert (common / "VERSION").read_text().strip() == "1.19.6"
+    assert (common / "VERSION").read_text().strip() == "1.19.8"
     gitmodules = (ROOT / ".gitmodules").read_text()
     assert "shared/infiltratr-common" in gitmodules
     assert "Infiltrator-Libraries.git" in gitmodules
     cmake = _cmake_source()
-    assert "a0e26896cc2a5674a138b29f009a7b30f0d636c6" in cmake
+    assert "3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9" in cmake
     assert "add_subdirectory(" in cmake
     assert "InfiltratrCommon::Common" in cmake
     assert "set(INFILTRATR_COMMON_BUILD_TESTS OFF)" in cmake
@@ -228,8 +228,8 @@ def test_infiltratr_common_integration() -> None:
     assert '${INFILTRATR_COMMON_DIR}/src/core.c' not in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/posix.c' not in cmake
     local_installer = (ROOT / "packaging" / "build-local-run.sh").read_text()
-    assert 'COMMON_VERSION="1.19.6"' in local_installer
-    assert 'COMMON_COMMIT="a0e26896cc2a5674a138b29f009a7b30f0d636c6"' in local_installer
+    assert 'COMMON_VERSION="1.19.8"' in local_installer
+    assert 'COMMON_COMMIT="3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9"' in local_installer
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
     assert "infiltratr_realpath_copy" in device
     assert "infiltratr_read_u64_file" in device
@@ -311,6 +311,15 @@ def test_infiltratr_common_integration() -> None:
     runtime_source = (ROOT / "src" / "core" / "ld_runtime.c").read_text()
     assert "ld_xrealloc" not in runtime_header
     assert "ld_xrealloc" not in runtime_source
+    assert "infiltratr_size_add_checked" in runtime_source
+
+    native_json = (ROOT / "native" / "json.cpp").read_text()
+    assert "infiltratr_parse_double" in native_json
+    assert "std::strtod" not in native_json
+
+    test_media_theme = (ROOT / "test_media" / "test_media_theme.c").read_text()
+    assert "infiltratr_typography()" in test_media_theme
+    assert "infiltratr_design_metrics()" in test_media_theme
 
     protocol = (ROOT / "src" / "core" / "ld_protocol.c").read_text()
     assert "infiltratr_escape_json" in protocol
