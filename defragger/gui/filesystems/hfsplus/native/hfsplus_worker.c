@@ -49,14 +49,6 @@ typedef struct {
     uint16_t version;
 } HfsPlusJournal;
 
-static uint16_t be16(const unsigned char *p) {
-    return infiltratr_load_be16(p);
-}
-
-static uint32_t be32(const unsigned char *p) {
-    return infiltratr_load_be32(p);
-}
-
 static void usage(FILE *stream) {
     fprintf(stream,
         "Usage: %s --version | identify DEVICE | analyse-json DEVICE | "
@@ -313,15 +305,15 @@ static int volume_token(const char *path, uint64_t physical_bytes,
         hfsplus_set_error(error, "cannot read HFS+ volume header for identity verification");
         return -1;
     }
-    uint16_t found_signature = be16(header);
-    uint16_t found_version = be16(header + 2U);
+    uint16_t found_signature = infiltratr_load_be16(header);
+    uint16_t found_version = infiltratr_load_be16(header + 2U);
     if (!((found_signature == 0x482bU && found_version == 4U) ||
           (found_signature == 0x4858U && found_version == 5U))) {
         hfsplus_set_error(error, "HFS+ target identity check found a different filesystem");
         return -1;
     }
-    uint32_t found_block_size = be32(header + 40U);
-    uint32_t found_total_blocks = be32(header + 44U);
+    uint32_t found_block_size = infiltratr_load_be32(header + 40U);
+    uint32_t found_total_blocks = infiltratr_load_be32(header + 44U);
     if (found_block_size < 512U ||
         (found_block_size & (found_block_size - 1U)) != 0U ||
         found_total_blocks == 0U) {

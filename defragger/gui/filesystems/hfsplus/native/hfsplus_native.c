@@ -62,26 +62,6 @@ typedef struct {
     size_t capacity;
 } OverflowVec;
 
-static uint16_t be16(const unsigned char *p) {
-    return infiltratr_load_be16(p);
-}
-
-static uint32_t be32(const unsigned char *p) {
-    return infiltratr_load_be32(p);
-}
-
-static uint64_t be64(const unsigned char *p) {
-    return infiltratr_load_be64(p);
-}
-
-static uint32_t le32(const unsigned char *p) {
-    return infiltratr_load_le32(p);
-}
-
-static uint64_t le64(const unsigned char *p) {
-    return infiltratr_load_le64(p);
-}
-
 static uint32_t journal_checksum(const unsigned char *data, size_t length) {
     uint32_t sum = 0;
     for (size_t i = 0; i < length; ++i)
@@ -89,10 +69,6 @@ static uint32_t journal_checksum(const unsigned char *data, size_t length) {
     return ~sum;
 }
 
-
-static void put32(unsigned char *p, uint32_t value) {
-    infiltratr_store_be32(p, value);
-}
 
 void hfsplus_set_error(char **error, const char *fmt, ...) {
     if (!error) return;
@@ -137,12 +113,12 @@ static void fork_free(HfsPlusFork *fork) {
 static int parse_fork(const unsigned char *data, size_t offset, HfsPlusFork *fork,
                       char **error) {
     memset(fork, 0, sizeof(*fork));
-    fork->logical_size = be64(data + offset);
-    fork->total_blocks = be32(data + offset + 12U);
+    fork->logical_size = infiltratr_load_be64(data + offset);
+    fork->total_blocks = infiltratr_load_be32(data + offset + 12U);
     for (size_t i = 0; i < 8U; ++i) {
         HfsPlusExtent extent = {
-            be32(data + offset + 16U + i * 8U),
-            be32(data + offset + 20U + i * 8U)
+            infiltratr_load_be32(data + offset + 16U + i * 8U),
+            infiltratr_load_be32(data + offset + 20U + i * 8U)
         };
         if (fork_push_extent(fork, extent)) {
             hfsplus_set_error(error, "out of memory reading HFS+ fork extents");
@@ -278,7 +254,7 @@ static int record_starts(const unsigned char *node, uint32_t node_size, uint16_t
         return -1;
     }
     for (uint16_t i = 0; i < count; ++i) {
-        uint16_t value = be16(node + node_size - 2U * (uint32_t)(i + 1U));
+        uint16_t value = infiltratr_load_be16(node + node_size - 2U * (uint32_t)(i + 1U));
         if (value < 14U || value >= node_size) {
             free(starts);
             hfsplus_set_error(error, "invalid HFS+ B-tree record offset");
@@ -307,13 +283,13 @@ static int btree_geometry(const HfsPlusVolume *volume, const HfsPlusFork *fork,
                           uint32_t *total_nodes, char **error) {
     unsigned char prefix[512];
     if (fork->logical_size < sizeof(prefix) || fork_read(volume, fork, 0, prefix, sizeof(prefix), error)) return -1;
-    uint32_t size = be16(prefix + 32U);
+    uint32_t size = infiltratr_load_be16(prefix + 32U);
     if (size < 512U || size > HFS_MAX_NODE || (size & (size - 1U))) {
         hfsplus_set_error(error, "invalid HFS+ B-tree node size %u", size);
         return -1;
     }
-    uint32_t first = be32(prefix + 24U);
-    uint32_t total = be32(prefix + 36U);
+    uint32_t first = infiltratr_load_be32(prefix + 24U);
+    uint32_t total = infiltratr_load_be32(prefix + 36U);
     if (!total || (uint64_t)total * size > fork->logical_size) {
         hfsplus_set_error(error, "invalid HFS+ B-tree total-node geometry");
         return -1;
@@ -350,26 +326,26 @@ static int scan_overflow(HfsPlusVolume *volume, OverflowVec *overflow, char **er
             hfsplus_set_error(error, "HFS+ extents leaf chain points to a non-leaf node");
             free(seen); free(node); return -1;
         }
-        uint16_t count = be16(node + 10U);
+        uint16_t count = infiltratr_load_be16(node + 10U);
         uint16_t *starts = NULL;
         if (record_starts(node, node_size, count, &starts, error)) { free(seen); free(node); return -1; }
         for (uint16_t r = 0; r < count; ++r) {
             uint32_t start = starts[r];
             uint32_t end = (r + 1U < count) ? starts[r + 1U] : node_size - 2U * (uint32_t)(count + 1U);
             if (end <= start + 12U || end > node_size) continue;
-            uint16_t key_len = be16(node + start);
+            uint16_t key_len = infiltratr_load_be16(node + start);
             uint32_t data_off = start + 2U + key_len;
             if (data_off & 1U) ++data_off;
             if (key_len < 10U || data_off + 64U > end) continue;
             OverflowRecord item;
             memset(&item, 0, sizeof(item));
             item.fork_type = node[start + 2U];
-            item.file_id = be32(node + start + 4U);
-            item.start_block = be32(node + start + 8U);
+            item.file_id = infiltratr_load_be32(node + start + 4U);
+            item.start_block = infiltratr_load_be32(node + start + 8U);
             item.data_logical_offset = (uint64_t)current * node_size + data_off;
             for (size_t i = 0; i < 8U; ++i) {
-                item.extents[i].start = be32(node + data_off + i * 8U);
-                item.extents[i].count = be32(node + data_off + i * 8U + 4U);
+                item.extents[i].start = infiltratr_load_be32(node + data_off + i * 8U);
+                item.extents[i].count = infiltratr_load_be32(node + data_off + i * 8U + 4U);
             }
             if (overflow_push(overflow, item)) {
                 free(starts); free(seen); free(node);
@@ -378,7 +354,7 @@ static int scan_overflow(HfsPlusVolume *volume, OverflowVec *overflow, char **er
             }
         }
         free(starts);
-        current = be32(node);
+        current = infiltratr_load_be32(node);
     }
     free(seen); free(node);
     return 0;
@@ -426,18 +402,18 @@ static int scan_catalog(HfsPlusVolume *volume, const OverflowVec *overflow, char
             hfsplus_set_error(error, "HFS+ catalog leaf chain points to a non-leaf node");
             free(seen); free(node); return -1;
         }
-        uint16_t count = be16(node + 10U);
+        uint16_t count = infiltratr_load_be16(node + 10U);
         uint16_t *starts = NULL;
         if (record_starts(node, node_size, count, &starts, error)) { free(seen); free(node); return -1; }
         for (uint16_t r = 0; r < count; ++r) {
             uint32_t start = starts[r];
             uint32_t end = (r + 1U < count) ? starts[r + 1U] : node_size - 2U * (uint32_t)(count + 1U);
             if (end <= start + 8U || end > node_size) continue;
-            uint16_t key_len = be16(node + start);
+            uint16_t key_len = infiltratr_load_be16(node + start);
             uint32_t data_off = start + 2U + key_len;
             if (data_off & 1U) ++data_off;
             if (data_off + 2U > end) continue;
-            uint16_t record_type = be16(node + data_off);
+            uint16_t record_type = infiltratr_load_be16(node + data_off);
             if (record_type == HFS_RECORD_FOLDER) {
                 ++volume->directories;
                 continue;
@@ -445,7 +421,7 @@ static int scan_catalog(HfsPlusVolume *volume, const OverflowVec *overflow, char
             if (record_type != HFS_RECORD_FILE || data_off + 248U > end) continue;
             HfsPlusFile file;
             memset(&file, 0, sizeof(file));
-            file.file_id = be32(node + data_off + 8U);
+            file.file_id = infiltratr_load_be32(node + data_off + 8U);
             if (parse_fork(node, data_off + 88U, &file.data_fork, error) ||
                 parse_fork(node, data_off + 168U, &file.resource_fork, error)) {
                 fork_free(&file.data_fork); fork_free(&file.resource_fork);
@@ -466,7 +442,7 @@ static int scan_catalog(HfsPlusVolume *volume, const OverflowVec *overflow, char
             }
         }
         free(starts);
-        current = be32(node);
+        current = infiltratr_load_be32(node);
     }
     free(seen); free(node);
     return 0;
@@ -542,7 +518,7 @@ static int validate_clean_journal(HfsPlusVolume *volume, char **error) {
     unsigned char jib[180];
     uint64_t jib_offset = (uint64_t)volume->journal_info_block * volume->block_size;
     if (read_exact(volume->fd, jib_offset, jib, sizeof(jib), error)) return -1;
-    uint32_t flags = be32(jib);
+    uint32_t flags = infiltratr_load_be32(jib);
     if (flags & ~(HFS_JI_IN_FS | HFS_JI_ON_OTHER_DEVICE | HFS_JI_NEED_INIT)) {
         hfsplus_set_error(error, "HFS+ journal info block contains unknown reserved flags 0x%08x", flags);
         return -1;
@@ -551,8 +527,8 @@ static int validate_clean_journal(HfsPlusVolume *volume, char **error) {
         hfsplus_set_error(error, "HFS+ external-device journals are not supported by the raw writer");
         return -1;
     }
-    volume->journal_offset = be64(jib + 36U);
-    volume->journal_size = be64(jib + 44U);
+    volume->journal_offset = infiltratr_load_be64(jib + 36U);
+    volume->journal_size = infiltratr_load_be64(jib + 44U);
     if (!volume->journal_size || volume->journal_offset >= volume->bytes ||
         volume->journal_size > volume->bytes - volume->journal_offset) {
         hfsplus_set_error(error, "HFS+ journal range is outside the volume");
@@ -578,13 +554,13 @@ static int validate_clean_journal(HfsPlusVolume *volume, char **error) {
     unsigned char raw[HFS_JOURNAL_HEADER_CKSUM_SIZE];
     if (read_exact(volume->fd, volume->journal_offset, raw, sizeof(raw), error)) return -1;
     bool little = false;
-    if (le32(raw + 4U) == HFS_JOURNAL_ENDIAN_MAGIC) little = true;
-    else if (be32(raw + 4U) != HFS_JOURNAL_ENDIAN_MAGIC) {
+    if (infiltratr_load_le32(raw + 4U) == HFS_JOURNAL_ENDIAN_MAGIC) little = true;
+    else if (infiltratr_load_be32(raw + 4U) != HFS_JOURNAL_ENDIAN_MAGIC) {
         hfsplus_set_error(error, "HFS+ journal header has invalid endian magic");
         return -1;
     }
-#define J32(off) (little ? le32(raw + (off)) : be32(raw + (off)))
-#define J64(off) (little ? le64(raw + (off)) : be64(raw + (off)))
+#define J32(off) (little ? infiltratr_load_le32(raw + (off)) : infiltratr_load_be32(raw + (off)))
+#define J64(off) (little ? infiltratr_load_le64(raw + (off)) : infiltratr_load_be64(raw + (off)))
     uint32_t magic = J32(0U);
     if (magic != HFS_JOURNAL_MAGIC && magic != HFS_OLD_JOURNAL_MAGIC) {
         hfsplus_set_error(error, "HFS+ journal header has invalid magic 0x%08x", magic);
@@ -653,8 +629,8 @@ int hfsplus_identify(const char *path, uint16_t *signature, uint16_t *version,
     int rc = read_exact(fd, 1024U, header, sizeof(header), error);
     close(fd);
     if (rc) return -1;
-    uint16_t sig = be16(header);
-    uint16_t ver = be16(header + 2U);
+    uint16_t sig = infiltratr_load_be16(header);
+    uint16_t ver = infiltratr_load_be16(header + 2U);
     if ((sig != HFSPLUS_SIG || ver != HFSPLUS_VERSION) &&
         (sig != HFSX_SIG || ver != HFSX_VERSION)) {
         hfsplus_set_error(error, "not an HFS+ or HFSX volume");
@@ -662,7 +638,7 @@ int hfsplus_identify(const char *path, uint16_t *signature, uint16_t *version,
     }
     if (signature) *signature = sig;
     if (version) *version = ver;
-    if (attributes) *attributes = be32(header + 4U);
+    if (attributes) *attributes = infiltratr_load_be32(header + 4U);
     return 0;
 }
 
@@ -685,17 +661,17 @@ int hfsplus_scan(const char *path, bool writable, HfsPlusVolume *volume, char **
     }
     unsigned char header[512];
     if (read_exact(volume->fd, 1024U, header, sizeof(header), error)) { hfsplus_close(volume); return -1; }
-    volume->signature = be16(header);
-    volume->version = be16(header + 2U);
+    volume->signature = infiltratr_load_be16(header);
+    volume->version = infiltratr_load_be16(header + 2U);
     if ((volume->signature != HFSPLUS_SIG || volume->version != HFSPLUS_VERSION) &&
         (volume->signature != HFSX_SIG || volume->version != HFSX_VERSION)) {
         hfsplus_set_error(error, "not an HFS+ or HFSX volume"); hfsplus_close(volume); return -1;
     }
-    volume->attributes = be32(header + 4U);
-    volume->journal_info_block = be32(header + 12U);
-    volume->block_size = be32(header + 40U);
-    volume->total_blocks = be32(header + 44U);
-    volume->free_blocks = be32(header + 48U);
+    volume->attributes = infiltratr_load_be32(header + 4U);
+    volume->journal_info_block = infiltratr_load_be32(header + 12U);
+    volume->block_size = infiltratr_load_be32(header + 40U);
+    volume->total_blocks = infiltratr_load_be32(header + 44U);
+    volume->free_blocks = infiltratr_load_be32(header + 48U);
     if (volume->block_size < 512U || (volume->block_size & (volume->block_size - 1U)) || !volume->total_blocks) {
         hfsplus_set_error(error, "invalid HFS+ allocation geometry"); hfsplus_close(volume); return -1;
     }
@@ -973,12 +949,12 @@ static int rewrite_inline_fork(HfsPlusVolume *stage, HfsPlusFork *fork,
     unsigned char raw[80];
     if (fork_read(stage, &stage->catalog_fork, fork->catalog_fork_offset, raw, sizeof(raw), error)) return -1;
     for (size_t i = 0; i < 8U; ++i) {
-        put32(raw + 16U + i * 8U, 0U);
-        put32(raw + 20U + i * 8U, 0U);
+        infiltratr_store_be32(raw + 16U + i * 8U, 0U);
+        infiltratr_store_be32(raw + 20U + i * 8U, 0U);
     }
     if (fork->total_blocks) {
-        put32(raw + 16U, start);
-        put32(raw + 20U, fork->total_blocks);
+        infiltratr_store_be32(raw + 16U, start);
+        infiltratr_store_be32(raw + 20U, fork->total_blocks);
     }
     if (fork_write(stage, &stage->catalog_fork, fork->catalog_fork_offset, raw, sizeof(raw), error)) return -1;
     return 0;
@@ -993,13 +969,13 @@ static int rewrite_overflow_fork(HfsPlusVolume *stage, uint32_t file_id,
     uint32_t logical_block = 0;
     uint32_t physical = destination;
     for (size_t i = 0; i < 8U && logical_block < fork->total_blocks; ++i) {
-        uint32_t count = be32(catalog_raw + 20U + i * 8U);
+        uint32_t count = infiltratr_load_be32(catalog_raw + 20U + i * 8U);
         if (!count) continue;
         if (count > fork->total_blocks - logical_block) {
             hfsplus_set_error(error, "HFS+ catalog extent descriptor exceeds fork length");
             return -1;
         }
-        put32(catalog_raw + 16U + i * 8U, physical);
+        infiltratr_store_be32(catalog_raw + 16U + i * 8U, physical);
         physical += count;
         logical_block += count;
     }
@@ -1033,14 +1009,14 @@ static int rewrite_overflow_fork(HfsPlusVolume *stage, uint32_t file_id,
         }
         uint32_t before = logical_block;
         for (size_t i = 0; i < 8U && logical_block < fork->total_blocks; ++i) {
-            uint32_t count = be32(extent_raw + i * 8U + 4U);
+            uint32_t count = infiltratr_load_be32(extent_raw + i * 8U + 4U);
             if (!count) continue;
             if (count > fork->total_blocks - logical_block) {
                 overflow_free(&overflow);
                 hfsplus_set_error(error, "HFS+ overflow extent descriptor exceeds fork length");
                 return -1;
             }
-            put32(extent_raw + i * 8U, physical);
+            infiltratr_store_be32(extent_raw + i * 8U, physical);
             physical += count;
             logical_block += count;
         }

@@ -91,16 +91,6 @@ typedef struct {
     size_t fragmented_extent_capacity;
 } hfs_scan_result;
 
-static uint16_t be16(const uint8_t *p)
-{
-    return infiltratr_load_be16(p);
-}
-
-static uint32_t be32(const uint8_t *p)
-{
-    return infiltratr_load_be32(p);
-}
-
 static int read_exact(int fd, uint64_t offset, void *buffer, size_t length)
 {
     return infiltratr_pread_full(fd, buffer, length, offset);
@@ -203,8 +193,8 @@ static int node_record_bounds(const uint8_t node[HFS_LOGICAL_BLOCK_SIZE],
         return -1;
     start_slot = HFS_LOGICAL_BLOCK_SIZE - 2U * ((size_t)record_index + 1U);
     end_slot = HFS_LOGICAL_BLOCK_SIZE - 2U * ((size_t)record_index + 2U);
-    a = be16(node + start_slot);
-    b = be16(node + end_slot);
+    a = infiltratr_load_be16(node + start_slot);
+    b = infiltratr_load_be16(node + end_slot);
     if (a < 14U || b <= a || b > end_slot)
         return -1;
     *start = a;
@@ -224,17 +214,17 @@ static int parse_btree_header(const hfs_volume *volume, const hfs_fork_map *fork
         return -1;
     if ((int8_t)node[8] != HFS_BTREE_HEADER_NODE)
         return -1;
-    record_count = be16(node + 10U);
+    record_count = infiltratr_load_be16(node + 10U);
     if (record_count < 1U || node_record_bounds(node, record_count, 0U, &start, &end) != 0)
         return -1;
     if ((size_t)(end - start) < 30U)
         return -1;
-    if (be16(node + start + 18U) != HFS_LOGICAL_BLOCK_SIZE)
+    if (infiltratr_load_be16(node + start + 18U) != HFS_LOGICAL_BLOCK_SIZE)
         return -1;
 
-    header->first_leaf = be32(node + start + 10U);
-    header->last_leaf = be32(node + start + 14U);
-    header->total_nodes = be32(node + start + 22U);
+    header->first_leaf = infiltratr_load_be32(node + start + 10U);
+    header->last_leaf = infiltratr_load_be32(node + start + 14U);
+    header->total_nodes = infiltratr_load_be32(node + start + 22U);
     if (!header->total_nodes ||
         header->first_leaf >= header->total_nodes ||
         header->last_leaf >= header->total_nodes)
@@ -289,8 +279,8 @@ static int scan_extents_overflow(hfs_volume *volume)
             return -1;
         if ((int8_t)node[8] != HFS_BTREE_LEAF_NODE)
             return -1;
-        next = be32(node + 0U);
-        record_count = be16(node + 10U);
+        next = infiltratr_load_be32(node + 0U);
+        record_count = infiltratr_load_be16(node + 10U);
         if (record_count > HFS_MAX_BTREE_RECORDS)
             return -1;
 
@@ -313,12 +303,12 @@ static int scan_extents_overflow(hfs_volume *volume)
                 return -1;
             memset(&item, 0, sizeof(item));
             item.fork_type = record[1];
-            item.file_id = be32(record + 2U);
-            item.first_file_block = be16(record + 6U);
+            item.file_id = infiltratr_load_be32(record + 2U);
+            item.first_file_block = infiltratr_load_be16(record + 6U);
             data = record + key_skip;
             for (j = 0U; j < 3U; ++j) {
-                item.extents[j].start = be16(data + j * 4U);
-                item.extents[j].count = be16(data + j * 4U + 2U);
+                item.extents[j].start = infiltratr_load_be16(data + j * 4U);
+                item.extents[j].count = infiltratr_load_be16(data + j * 4U + 2U);
             }
             if (overflow_append(volume, &item) != 0)
                 return -1;
@@ -409,8 +399,8 @@ static int collect_file_fork(const hfs_volume *volume, uint32_t file_id,
 
     for (i = 0U; i < 3U && collected < required_blocks; ++i) {
         hfs_extent extent;
-        extent.start = be16(inline_data + i * 4U);
-        extent.count = be16(inline_data + i * 4U + 2U);
+        extent.start = infiltratr_load_be16(inline_data + i * 4U);
+        extent.count = infiltratr_load_be16(inline_data + i * 4U + 2U);
         if (!extent.count)
             return -1;
         if (collected + extent.count > required_blocks || count >= HFS_MAX_EXTENTS)
@@ -472,8 +462,8 @@ static int scan_catalog(hfs_volume *volume, hfs_scan_result *result)
             return -1;
         if ((int8_t)node[8] != HFS_BTREE_LEAF_NODE)
             return -1;
-        next = be32(node + 0U);
-        record_count = be16(node + 10U);
+        next = infiltratr_load_be32(node + 0U);
+        record_count = infiltratr_load_be16(node + 10U);
         if (record_count > HFS_MAX_BTREE_RECORDS)
             return -1;
 
@@ -512,9 +502,9 @@ static int scan_catalog(hfs_volume *volume, hfs_scan_result *result)
                 if (key_skip + 102U > length)
                     return -1;
                 ++result->files;
-                file_id = be32(data + 20U);
-                data_physical = be32(data + 30U);
-                resource_physical = be32(data + 40U);
+                file_id = infiltratr_load_be32(data + 20U);
+                data_physical = infiltratr_load_be32(data + 30U);
+                resource_physical = infiltratr_load_be32(data + 40U);
                 if (collect_file_fork(volume, file_id, HFS_DATA_FORK,
                                       data_physical, data + 74U,
                                       data_extents, &data_count,
@@ -552,30 +542,30 @@ static int parse_mdb(hfs_volume *volume)
 
     if (read_exact(volume->fd, HFS_MDB_OFFSET, mdb, sizeof(mdb)) != 0)
         return -1;
-    if (be16(mdb) != HFS_SIGNATURE)
+    if (infiltratr_load_be16(mdb) != HFS_SIGNATURE)
         return -1;
 
-    volume->bitmap_start_block = be16(mdb + 14U);
-    volume->total_allocation_blocks = be16(mdb + 18U);
-    volume->allocation_block_size = be32(mdb + 20U);
-    volume->allocation_start_block = be16(mdb + 28U);
-    volume->header_free_blocks = be16(mdb + 34U);
-    volume->header_files = be32(mdb + 84U);
-    volume->header_directories = be32(mdb + 88U);
+    volume->bitmap_start_block = infiltratr_load_be16(mdb + 14U);
+    volume->total_allocation_blocks = infiltratr_load_be16(mdb + 18U);
+    volume->allocation_block_size = infiltratr_load_be32(mdb + 20U);
+    volume->allocation_start_block = infiltratr_load_be16(mdb + 28U);
+    volume->header_free_blocks = infiltratr_load_be16(mdb + 34U);
+    volume->header_files = infiltratr_load_be32(mdb + 84U);
+    volume->header_directories = infiltratr_load_be32(mdb + 88U);
     if (!volume->total_allocation_blocks ||
         volume->allocation_block_size < HFS_LOGICAL_BLOCK_SIZE ||
         volume->allocation_block_size % HFS_LOGICAL_BLOCK_SIZE != 0U)
         return -1;
 
-    volume->extents_file.size_bytes = be32(mdb + 130U);
-    volume->catalog_file.size_bytes = be32(mdb + 146U);
+    volume->extents_file.size_bytes = infiltratr_load_be32(mdb + 130U);
+    volume->catalog_file.size_bytes = infiltratr_load_be32(mdb + 146U);
     for (i = 0U; i < 3U; ++i) {
-        uint16_t start = be16(mdb + 134U + i * 4U);
-        uint16_t count = be16(mdb + 136U + i * 4U);
+        uint16_t start = infiltratr_load_be16(mdb + 134U + i * 4U);
+        uint16_t count = infiltratr_load_be16(mdb + 136U + i * 4U);
         if (count && fork_append_extent(&volume->extents_file, start, count) != 0)
             return -1;
-        start = be16(mdb + 150U + i * 4U);
-        count = be16(mdb + 152U + i * 4U);
+        start = infiltratr_load_be16(mdb + 150U + i * 4U);
+        count = infiltratr_load_be16(mdb + 152U + i * 4U);
         if (count && fork_append_extent(&volume->catalog_file, start, count) != 0)
             return -1;
     }

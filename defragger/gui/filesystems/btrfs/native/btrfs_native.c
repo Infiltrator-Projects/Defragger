@@ -163,21 +163,6 @@ static void set_error(char *error, size_t error_size, const char *format, ...)
     va_end(args);
 }
 
-static uint16_t le16(const uint8_t *data)
-{
-    return infiltratr_load_le16(data);
-}
-
-static uint32_t le32(const uint8_t *data)
-{
-    return infiltratr_load_le32(data);
-}
-
-static uint64_t le64(const uint8_t *data)
-{
-    return infiltratr_load_le64(data);
-}
-
 static int open_reader(const char *path, Reader *reader, char *error, size_t error_size)
 {
     struct stat status;
@@ -341,7 +326,7 @@ static void range_merge(RangeVec *vec)
 
 static Key parse_key(const uint8_t *data)
 {
-    return (Key){le64(data), data[8], le64(data + 9U)};
+    return (Key){infiltratr_load_le64(data), data[8], infiltratr_load_le64(data + 9U)};
 }
 
 static bool chunk_equal(const Chunk *a, const Chunk *b)
@@ -379,10 +364,10 @@ static int parse_chunk(const uint8_t *data, size_t size, uint64_t logical,
         set_error(error, error_size, "truncated Btrfs chunk item");
         return -1;
     }
-    const uint64_t length = le64(data);
-    const uint64_t stripe_len = le64(data + 16U);
-    const uint64_t chunk_type = le64(data + 24U);
-    const uint16_t stripe_count = le16(data + 44U);
+    const uint64_t length = infiltratr_load_le64(data);
+    const uint64_t stripe_len = infiltratr_load_le64(data + 16U);
+    const uint64_t chunk_type = infiltratr_load_le64(data + 24U);
+    const uint16_t stripe_count = infiltratr_load_le16(data + 44U);
     if (length == 0U || stripe_len == 0U || stripe_count == 0U) {
         set_error(error, error_size, "invalid Btrfs chunk geometry");
         return -1;
@@ -400,8 +385,8 @@ static int parse_chunk(const uint8_t *data, size_t size, uint64_t logical,
     }
     for (uint16_t i = 0U; i < stripe_count; ++i) {
         const size_t pos = BTRFS_CHUNK_FIXED_SIZE + (size_t)i * BTRFS_STRIPE_SIZE;
-        stripes[i].devid = le64(data + pos);
-        stripes[i].physical = le64(data + pos + 8U);
+        stripes[i].devid = infiltratr_load_le64(data + pos);
+        stripes[i].physical = infiltratr_load_le64(data + pos + 8U);
     }
     *chunk = (Chunk){logical, length, chunk_type, stripe_len, stripes, stripe_count};
     return 0;
@@ -657,7 +642,7 @@ static int tree_walk(const Reader *reader, const ChunkVec *chunks, uint64_t devi
                                  error, error_size) != 0 ||
             read_exact(reader, physical, raw, node_size, error, error_size) != 0)
             goto done;
-        if (le64(raw + 48U) != current.logical) {
+        if (infiltratr_load_le64(raw + 48U) != current.logical) {
             set_error(error, error_size, "Btrfs tree-block bytenr mismatch");
             goto done;
         }
@@ -666,7 +651,7 @@ static int tree_walk(const Reader *reader, const ChunkVec *chunks, uint64_t devi
             set_error(error, error_size, "invalid Btrfs tree level");
             goto done;
         }
-        const uint32_t nritems = le32(raw + 96U);
+        const uint32_t nritems = infiltratr_load_le32(raw + 96U);
         const size_t element_size = level == 0U ? BTRFS_ITEM_SIZE : BTRFS_KEY_PTR_SIZE;
         if ((size_t)nritems > (SIZE_MAX - BTRFS_HEADER_SIZE) / element_size ||
             BTRFS_HEADER_SIZE + (size_t)nritems * element_size > node_size) {
@@ -680,8 +665,8 @@ static int tree_walk(const Reader *reader, const ChunkVec *chunks, uint64_t devi
             for (uint32_t index = 0U; index < nritems; ++index) {
                 const size_t pos = BTRFS_HEADER_SIZE + (size_t)index * BTRFS_ITEM_SIZE;
                 const Key key = parse_key(raw + pos);
-                const uint32_t relative = le32(raw + pos + 17U);
-                const uint32_t data_size = le32(raw + pos + 21U);
+                const uint32_t relative = infiltratr_load_le32(raw + pos + 17U);
+                const uint32_t data_size = infiltratr_load_le32(raw + pos + 21U);
                 if ((uint64_t)BTRFS_HEADER_SIZE + relative > node_size) {
                     set_error(error, error_size, "Btrfs leaf item lies outside the tree block");
                     goto done;
@@ -700,7 +685,7 @@ static int tree_walk(const Reader *reader, const ChunkVec *chunks, uint64_t devi
             for (uint32_t reverse = nritems; reverse != 0U; --reverse) {
                 const uint32_t index = reverse - 1U;
                 const size_t pos = BTRFS_HEADER_SIZE + (size_t)index * BTRFS_KEY_PTR_SIZE;
-                const uint64_t child = le64(raw + pos + 17U);
+                const uint64_t child = infiltratr_load_le64(raw + pos + 17U);
                 if (child == 0U) {
                     set_error(error, error_size, "invalid Btrfs child pointer");
                     goto done;
@@ -721,7 +706,7 @@ done:
 static int parse_system_chunks(const uint8_t *superblock, ChunkVec *chunks,
                                char *error, size_t error_size)
 {
-    const uint32_t size = le32(superblock + 160U);
+    const uint32_t size = infiltratr_load_le32(superblock + 160U);
     if (size == 0U || size > BTRFS_MAX_SYSTEM_ARRAY || 811U + size > BTRFS_SUPER_SIZE) {
         set_error(error, error_size, "invalid Btrfs system chunk array size");
         return -1;
@@ -738,7 +723,7 @@ static int parse_system_chunks(const uint8_t *superblock, ChunkVec *chunks,
             set_error(error, error_size, "unexpected key in Btrfs system chunk array");
             return -1;
         }
-        const uint16_t stripes = le16(data + pos + BTRFS_DISK_KEY_SIZE + 44U);
+        const uint16_t stripes = infiltratr_load_le16(data + pos + BTRFS_DISK_KEY_SIZE + 44U);
         const size_t item_size = BTRFS_CHUNK_FIXED_SIZE + (size_t)stripes * BTRFS_STRIPE_SIZE;
         if (item_size > size - pos - BTRFS_DISK_KEY_SIZE) {
             set_error(error, error_size, "truncated Btrfs system chunk item");
@@ -782,8 +767,8 @@ static int collect_roots(const ItemVec *items, RootVec *roots,
         const TreeItem *item = &items->items[i];
         if (item->key.type != BTRFS_ROOT_ITEM || item->size < 239U)
             continue;
-        const uint64_t bytenr = le64(item->data + 176U);
-        const uint32_t refs = le32(item->data + 216U);
+        const uint64_t bytenr = infiltratr_load_le64(item->data + 176U);
+        const uint32_t refs = infiltratr_load_le32(item->data + 216U);
         const uint8_t level = item->data[238U];
         if (bytenr != 0U && level <= BTRFS_MAX_TREE_LEVEL &&
             root_push_or_update(roots, item->key.objectid, bytenr, refs, level,
@@ -884,7 +869,7 @@ static int scan_filesystem_tree(const ItemVec *items, const ChunkVec *chunks,
             have_inode = false;
         }
         if (item->key.type == BTRFS_INODE_ITEM && item->size >= 56U) {
-            inode_mode = le32(item->data + 52U);
+            inode_mode = infiltratr_load_le32(item->data + 52U);
             have_inode = true;
             continue;
         }
@@ -898,14 +883,14 @@ static int scan_filesystem_tree(const ItemVec *items, const ChunkVec *chunks,
             analysis->malformed_items++;
             continue;
         }
-        const uint64_t disk_bytenr = le64(item->data + 21U);
-        const uint64_t disk_num_bytes = le64(item->data + 29U);
-        const uint64_t extent_offset = le64(item->data + 37U);
-        const uint64_t num_bytes = le64(item->data + 45U);
+        const uint64_t disk_bytenr = infiltratr_load_le64(item->data + 21U);
+        const uint64_t disk_num_bytes = infiltratr_load_le64(item->data + 29U);
+        const uint64_t extent_offset = infiltratr_load_le64(item->data + 37U);
+        const uint64_t num_bytes = infiltratr_load_le64(item->data + 45U);
         if (disk_bytenr == 0U || num_bytes == 0U)
             continue;
         const bool encoded = item->data[16U] != 0U || item->data[17U] != 0U ||
-                             le16(item->data + 18U) != 0U;
+                             infiltratr_load_le16(item->data + 18U) != 0U;
         uint64_t logical = disk_bytenr;
         uint64_t length = encoded ? disk_num_bytes : num_bytes;
         if (!encoded) {
@@ -1046,16 +1031,16 @@ int btrfs_analyse(const char *path, BtrfsAnalysis *analysis,
         goto done;
     }
 
-    const uint64_t root = le64(superblock + 80U);
-    const uint64_t chunk_root = le64(superblock + 88U);
-    const uint64_t total_bytes = le64(superblock + 112U);
-    const uint64_t bytes_used = le64(superblock + 120U);
-    const uint64_t num_devices = le64(superblock + 136U);
-    const uint32_t sector_size = le32(superblock + 144U);
-    const uint32_t node_size = le32(superblock + 148U);
+    const uint64_t root = infiltratr_load_le64(superblock + 80U);
+    const uint64_t chunk_root = infiltratr_load_le64(superblock + 88U);
+    const uint64_t total_bytes = infiltratr_load_le64(superblock + 112U);
+    const uint64_t bytes_used = infiltratr_load_le64(superblock + 120U);
+    const uint64_t num_devices = infiltratr_load_le64(superblock + 136U);
+    const uint32_t sector_size = infiltratr_load_le32(superblock + 144U);
+    const uint32_t node_size = infiltratr_load_le32(superblock + 148U);
     const uint8_t root_level = superblock[198U];
     const uint8_t chunk_root_level = superblock[199U];
-    const uint64_t devid = le64(superblock + 201U);
+    const uint64_t devid = infiltratr_load_le64(superblock + 201U);
 
     if (num_devices != 1U) {
         set_error(error, error_size,

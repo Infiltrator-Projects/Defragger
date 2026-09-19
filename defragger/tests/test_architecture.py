@@ -279,6 +279,13 @@ def test_infiltratr_common_integration() -> None:
         assert "infiltratr_load_" in path.read_text(), (
             f"{path.relative_to(ROOT)} bypasses Common endian access"
         )
+        source = path.read_text()
+        for wrapper in ("static uint16_t be16", "static uint32_t be32",
+                        "static uint64_t be64", "static uint16_t le16",
+                        "static uint32_t le32", "static uint64_t le64"):
+            assert wrapper not in source, (
+                f"{path.relative_to(ROOT)} retains a pass-through endian wrapper"
+            )
     for filesystem, worker in (("ext4", "ext_worker.c"), ("ntfs", "ntfs_worker.c"),
                                ("exfat", "exfat_worker.c"), ("xfs", "xfs_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()

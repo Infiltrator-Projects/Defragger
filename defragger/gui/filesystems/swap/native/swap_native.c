@@ -42,19 +42,9 @@ static void ld_swap_errno_error(char *error, size_t error_size,
         (void)snprintf(error, error_size, "%s: %s", operation, strerror(errno));
 }
 
-static uint32_t ld_swap_u32le(const unsigned char *p)
-{
-    return infiltratr_load_le32(p);
-}
-
-static uint32_t ld_swap_u32be(const unsigned char *p)
-{
-    return infiltratr_load_be32(p);
-}
-
 static uint32_t ld_swap_u32(const unsigned char *p, bool little_endian)
 {
-    return little_endian ? ld_swap_u32le(p) : ld_swap_u32be(p);
+    return little_endian ? infiltratr_load_le32(p) : infiltratr_load_be32(p);
 }
 
 static int ld_swap_u32_compare(const void *left, const void *right)

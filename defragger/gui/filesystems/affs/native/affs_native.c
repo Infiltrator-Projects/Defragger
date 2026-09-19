@@ -31,22 +31,14 @@
 #define AFFS_IO_BATCH_BLOCKS 8192U
 #define AFFS_IO_BATCH_BYTES ((size_t)AFFS_IO_BATCH_BLOCKS * BS)
 
-static uint32_t be32(const unsigned char *p) {
-    return infiltratr_load_be32(p);
-}
-
-static void put32(unsigned char *p, uint32_t x) {
-    infiltratr_store_be32(p, x);
-}
-
 static uint32_t lng(const unsigned char *b, int i) {
     if (i < 0) i += (int)LONGS;
-    return be32(b + (size_t)i * 4U);
+    return infiltratr_load_be32(b + (size_t)i * 4U);
 }
 
 static void plng(unsigned char *b, int i, uint32_t x) {
     if (i < 0) i += (int)LONGS;
-    put32(b + (size_t)i * 4U, x);
+    infiltratr_store_be32(b + (size_t)i * 4U, x);
 }
 
 void affs_set_error(char **e, const char *fmt, ...) {
