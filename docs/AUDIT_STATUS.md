@@ -6,7 +6,7 @@ Completed: 2026-08-25
 Extended: 2026-09-19
 
 Applies to: release version 1.8.0-172
-Audited source commit: e31601822d264f0cd977b6763b3d89f01a6175b2
+Audited source commit: 7a3808111d3af3cef72bf4bc5b81245a78f974c5
 Audited release-governance commit: 265a3dc8d6ceddd83f6c0e0cb4f38aea61254f94
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -61,7 +61,7 @@ Architecture ownership is defined in [ARCHITECTURE.md](ARCHITECTURE.md); design 
 
 ## Dependency baseline
 
-The audited production tree consumes Infiltratr Common 1.19.2 at exact commit `44409af17c89b6ece6b4bcb2c0c133213c695c23`. CMake, the native installer and release regressions verify the same pin.
+The audited production tree consumes Infiltratr Common 1.19.3 at exact commit `de7251ce12ed176048df1bad05ef7e4d0db7e9ec`. CMake, the native installer and release regressions verify the same pin.
 
 Common owns reusable mechanisms such as checked arithmetic, strict parsing, endian access, bounded growth, path/string helpers, JSON escaping and exact I/O. Defragmenter retains filesystem structure, target-safety, placement, transaction, recovery and user-facing failure policy.
 
