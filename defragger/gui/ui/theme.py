@@ -18,10 +18,8 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
-from .theme_tokens import DAY, NIGHT
+from .theme_tokens import DAY, METRICS, NIGHT, TYPOGRAPHY
 
-_MB_BODY_FAMILY = "MB Corpo S Title WEB"
-_MB_TITLE_FAMILY = "MB Corpo A Title Cond WEB"
 _CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "linux-defragger"
 _CONFIG_FILE = _CONFIG_DIR / "theme"
 
@@ -106,21 +104,27 @@ def _base_css() -> str:
     package. Keep typography deterministic and do not add generic/system
     fallback families here.
     """
+    body = TYPOGRAPHY["ui_family"]
+    brand = TYPOGRAPHY["brand_family"]
+    regular = TYPOGRAPHY["ui_regular_weight"]
+    bold = TYPOGRAPHY["ui_bold_weight"]
+    brand_weight = TYPOGRAPHY["brand_weight"]
+    radius = METRICS["small_radius"]
     return f"""
-    * {{ font-family: "{_MB_BODY_FAMILY}"; }}
+    * {{ font-family: "{body}"; font-weight: {regular}; }}
     .app-title, .about-title {{
-        font-family: "{_MB_TITLE_FAMILY}";
-        font-weight: normal;
+        font-family: "{brand}";
+        font-weight: {brand_weight};
     }}
     .app-title {{ font-size: 23pt; }}
     .app-subtitle {{ font-size: 9.5pt; }}
     .summary-title {{ font-size: 8.75pt; }}
-    .summary-value {{ font-size: 15pt; font-weight: bold; }}
-    .section-title {{ font-size: 9.5pt; font-weight: bold; padding: 0 5px; }}
-    button {{ border-radius: 3px; padding: 7px 13px; min-height: 27px; }}
-    button.primary-action, button.operation-action {{ font-weight: bold; }}
+    .summary-value {{ font-size: 15pt; font-weight: {bold}; }}
+    .section-title {{ font-size: 9.5pt; font-weight: {bold}; padding: 0 5px; }}
+    button {{ border-radius: {radius}px; padding: 7px 13px; min-height: 27px; }}
+    button.primary-action, button.operation-action {{ font-weight: {bold}; }}
     progressbar trough {{ min-height: 8px; }}
-    .status-prefix {{ font-size: 8pt; font-weight: bold; }}
+    .status-prefix {{ font-size: 8pt; font-weight: {bold}; }}
     .status-text {{ font-size: 8.75pt; }}
     """
 
