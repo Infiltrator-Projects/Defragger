@@ -16,7 +16,7 @@ Defragmenter is a C-first offline filesystem allocation analyser and defragmente
 
 ## Engineering ethos
 
-What happens when filesystem analysis and defragmentation are built from the on-disk structures upward rather than delegated to whatever repair tool happens to be installed? Defragmenter is where allocation maps, placement policy, recovery and verified mutation become first-party code.
+What happens when filesystem analysis and defragmentation are built from first principles, from the on-disk structures upward, rather than delegated to whatever repair tool happens to be installed? Defragmenter is where allocation maps, placement policy, recovery and verified mutation become first-party code.
 
 Filesystem specifications, mature implementations and external tools are evidence to study, not runtime authorities for project behaviour. The operating system may provide raw I/O and Common may provide proven neutral primitives, but filesystem parsing, safety policy, placement planning, staging, recovery and final verification remain owned here. Unsupported or uncertain layouts fail closed instead of being guessed.
 
