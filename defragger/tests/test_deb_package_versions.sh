@@ -5,6 +5,12 @@ set -eu
 # This script doubles as a minimal CMake shim so the package metadata path can
 # be tested without compiling the application a second time.
 if [ "${LD_TEST_FAKE_CMAKE:-0}" = 1 ]; then
+    case " $* " in
+        *" -P "*)
+            : "${LD_TEST_REAL_CMAKE:?real cmake is required for script-mode package helpers}"
+            exec "$LD_TEST_REAL_CMAKE" "$@"
+            ;;
+    esac
     if [ "${1:-}" = --install ]; then
         : "${DESTDIR:?DESTDIR is required for the fake install}"
         : "${LD_TEST_SOURCE_ROOT:?LD_TEST_SOURCE_ROOT is required for the fake install}"
@@ -34,8 +40,10 @@ mkdir -p "$WORK/bin"
 ln -s "$ROOT/tests/test_deb_package_versions.sh" "$WORK/bin/cmake"
 
 PACKAGE="$WORK/infiltrator-defragmenter_${NATIVE_VERSION}_amd64.deb"
+LD_TEST_REAL_CMAKE=$(command -v cmake)
 PATH="$WORK/bin:$PATH" \
 LD_TEST_FAKE_CMAKE=1 \
+LD_TEST_REAL_CMAKE="$LD_TEST_REAL_CMAKE" \
 LD_TEST_SOURCE_ROOT="$ROOT" \
 LD_BUILD_FLAVOR=native \
 LD_BUILD_TESTING=OFF \
