@@ -4,10 +4,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from gi.repository import Gdk, Gtk
 
-from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
-
+from .icon_assets import load_app_icon_pixbuf
 from .window_view import (
     ABOUT_COMMENTS,
     ABOUT_LICENSE,
@@ -37,7 +36,6 @@ class AboutInfo:
 
 
 _about_provider: Gtk.CssProvider | None = None
-_ABOUT_ICON_PATH = Path("/usr/lib/linux-defragger/defragmenter-icon.png")
 
 
 def _apply_about_style() -> None:
@@ -79,29 +77,8 @@ def _apply_about_style() -> None:
 
 
 def _about_logo():
-    """Load the exact packaged Defragmenter icon at the shared About size."""
-    if _ABOUT_ICON_PATH.is_file():
-        try:
-            return GdkPixbuf.Pixbuf.new_from_file_at_scale(
-                str(_ABOUT_ICON_PATH),
-                96,
-                96,
-                True,
-            )
-        except GLib.Error:
-            pass
-
-    theme = Gtk.IconTheme.get_default()
-    if theme is None:
-        return None
-    try:
-        return theme.load_icon(
-            APP_ICON_NAME,
-            96,
-            Gtk.IconLookupFlags.FORCE_SIZE,
-        )
-    except GLib.Error:
-        return None
+    """Load the approved Defragmenter artwork at the shared About size."""
+    return load_app_icon_pixbuf(96)
 
 
 def show_common_about(parent: Gtk.Window, info: AboutInfo) -> None:
