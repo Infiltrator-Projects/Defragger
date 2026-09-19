@@ -111,8 +111,8 @@ static int ld_swap_parse_current(const unsigned char *page, uint32_t page_size,
                                  LdSwapSummary *summary,
                                  char *error, size_t error_size)
 {
-    const uint32_t version_le = ld_swap_u32le(page + LD_SWAP_BOOT_BYTES);
-    const uint32_t version_be = ld_swap_u32be(page + LD_SWAP_BOOT_BYTES);
+    const uint32_t version_le = infiltratr_load_le32(page + LD_SWAP_BOOT_BYTES);
+    const uint32_t version_be = infiltratr_load_be32(page + LD_SWAP_BOOT_BYTES);
     bool little_endian = true;
     if (version_le == 1U) {
         little_endian = true;
