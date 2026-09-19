@@ -7,7 +7,7 @@ Extended: 2026-09-19
 
 Applies to: release version 1.8.0-172
 Audited source commit: 5550f1fb629c9267fcfacd5588d43ab67b323615
-Audited release-governance commit: 0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2
+Audited release-governance commit: 265a3dc8d6ceddd83f6c0e0cb4f38aea61254f94
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -69,7 +69,7 @@ Common owns reusable mechanisms such as checked arithmetic, strict parsing, endi
 
 The repository uses a `direct-main` development model. The active main ruleset provides the permanent history protections checked by release automation; publication itself is guarded by the exact-head **Project quality gate**, exact audit baselines and immutable tag/release checks.
 
-The release workflow verifies the `protected-main` history rules, the current `main` SHA, the audited production baseline and the audited release-governance baseline before publication. A release still requires an **explicit release decision** represented by a `Release <version>` commit whose exact head passes the gate.
+The release workflow verifies the `protected-main` history rules, the current `main` SHA, the audited production baseline and the audited release-governance baseline before publication. The governance baseline includes the canonical repository-document paths used by release verification. A release still requires an **explicit release decision** represented by a `Release <version>` commit whose exact head passes the gate.
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
