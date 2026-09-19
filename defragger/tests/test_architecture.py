@@ -426,6 +426,20 @@ def test_infiltratr_common_integration() -> None:
     assert "ld_path_open_atomic_temp" not in path_source + path_header
     assert "ld_path_fsync_parent" not in path_source + path_header
 
+    # The old Python transaction/journal layer had no production consumer and
+    # duplicated Common's native durable-file contract. Keep it removed rather
+    # than maintaining a second persistence implementation beside the writers.
+    assert not (GUI / "core" / "journal.py").exists()
+    assert not (GUI / "core" / "transaction.py").exists()
+    assert not (ROOT / "tests" / "test_transactions.py").exists()
+
+    # Python remains a read-only compatibility-analysis boundary. Writable
+    # exact-I/O is owned by native C through Common.
+    rawio = (GUI / "engine" / "rawio.py").read_text()
+    assert "os.pwrite" not in rawio
+    assert "write_exact" not in rawio
+    assert "writable" not in rawio
+
     for filesystem, worker in (("affs", "affs_worker.c"), ("sfs", "sfs_worker.c"),
                                ("hfsplus", "hfsplus_worker.c")):
         source = (GUI / "filesystems" / filesystem / "native" / worker).read_text()

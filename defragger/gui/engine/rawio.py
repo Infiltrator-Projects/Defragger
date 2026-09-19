@@ -9,7 +9,6 @@ import stat
 import struct
 from pathlib import Path
 
-from core.devices import require_unmounted
 
 BLKGETSIZE64 = 0x80081272
 
@@ -45,34 +44,23 @@ def read_exact_fd(fd: int, length: int, offset: int) -> bytes:
     return bytes(output)
 
 
-def write_exact_fd(fd: int, data: bytes | bytearray | memoryview, offset: int) -> None:
-    """Write the complete buffer with positional I/O."""
-
-    if offset < 0:
-        raise ValueError("negative raw write")
-    view = memoryview(data)
-    written = 0
-    while written < len(view):
-        count = os.pwrite(fd, view[written:], offset + written)
-        if count <= 0:
-            raise OSError(f"short raw write at byte {offset + written}")
-        written += count
-
 
 class RawDevice:
-    """Exact-I/O wrapper around an unmounted block device or image."""
+    """Read-only exact-I/O wrapper for compatibility analysers.
 
-    def __init__(self, path: str | Path, *, writable: bool = False):
+    Authoritative mutation uses the native C engines and Common exact-I/O
+    primitives; the Python compatibility boundary deliberately cannot write.
+    """
+
+    def __init__(self, path: str | Path):
         self.path = os.path.realpath(str(path))
         info = os.stat(self.path)
         if not (stat.S_ISREG(info.st_mode) or stat.S_ISBLK(info.st_mode)):
             raise OSError("raw target must be a block device or regular image")
-        if writable:
-            require_unmounted(self.path)
-        flags = os.O_RDWR if writable else os.O_RDONLY
-        if writable and stat.S_ISBLK(info.st_mode):
-            flags |= getattr(os, "O_EXCL", 0)
-        self.fd = os.open(self.path, flags | getattr(os, "O_CLOEXEC", 0))
+        self.fd = os.open(
+            self.path,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0),
+        )
         self.size = device_size(self.fd)
 
     def close(self) -> None:
@@ -88,9 +76,3 @@ class RawDevice:
 
     def read_exact(self, length: int, offset: int) -> bytes:
         return read_exact_fd(self.fd, length, offset)
-
-    def write_exact(self, data: bytes | bytearray | memoryview, offset: int) -> None:
-        write_exact_fd(self.fd, data, offset)
-
-    def sync(self) -> None:
-        os.fsync(self.fd)

@@ -66,7 +66,6 @@ def main() -> None:
         "tests/test_architecture.py",
         "tests/test_gui_models.py",
         "tests/test_gui_services.py",
-        "tests/test_transactions.py",
         "tests/test_safety.py",
         "tests/test_native_top3.py",
         "tests/test_affs_native.py",

@@ -15,7 +15,7 @@ class Reader:
     """Read-only view over the shared exact raw-device implementation."""
 
     def __init__(self, path: str):
-        self._device = RawDevice(path, writable=False)
+        self._device = RawDevice(path)
         self.path = path
         self.fd = self._device.fd
         self.size = self._device.size
