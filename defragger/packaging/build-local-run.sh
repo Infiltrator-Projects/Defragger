@@ -13,7 +13,7 @@ COMMON_DIR="$ROOT/shared/infiltratr-common"
 COMMON_URL="https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git"
 COMMON_TAG="v1.19.6"
 COMMON_VERSION="1.19.6"
-COMMON_COMMIT="4964786ebf1e66dfdb9309c3813dcb17bce19eb5"
+COMMON_COMMIT="a0e26896cc2a5674a138b29f009a7b30f0d636c6"
 COMMON_TEMP=0
 cleanup() {
     rm -rf "$WORK"
