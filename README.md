@@ -24,7 +24,7 @@ The project prefers the strongest justified method, not automatically the newest
 
 ## Appearance
 
-The main GTK application supports **Follow system**, **Day** and **Night** appearance modes. Follow system leaves the host GTK/Mint palette authoritative while retaining the Infiltrator typography and layout hierarchy. Day and Night apply explicit Infiltrator light and graphite/silver palettes. The selected mode is persisted per user and synchronised across open windows.
+The main GTK application supports **Follow system**, **Day** and **Night** appearance modes. Follow system detects the host GTK/Mint light/dark preference and resolves it to the exact Common Day or Night palette; it does not inherit an unrelated toolkit palette. Day is the white Infiltrator palette and Night is the MB graphite/black palette with the canonical blue accent. The selected mode is persisted per user and synchronised across open windows.
 
 Typography is deliberately closed to the three packaged MB Corpo faces: MB Corpo A Condensed for primary titles, MB Corpo S Regular for normal interface text and MB Corpo S Bold for emphasis. Defragmenter and Test Media do not request generic system or monospace fallback families; the Debian and local installers ship and register the same verified font bundle used by MBLINK.
 
