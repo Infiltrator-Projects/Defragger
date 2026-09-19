@@ -26,6 +26,9 @@ _CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) /
 _CONFIG_FILE = _CONFIG_DIR / "theme"
 
 _provider: Gtk.CssProvider | None = None
+_gtk_settings: Gtk.Settings | None = None
+_theme_signal_ids: list[int] = []
+
 
 
 class ThemeMode(str, Enum):
@@ -57,6 +60,43 @@ def save_theme_mode(mode: ThemeMode) -> None:
     except OSError:
         # Appearance persistence must never stop a storage/safety tool starting.
         pass
+
+
+def _system_prefers_dark() -> bool:
+    settings = Gtk.Settings.get_default()
+    if settings is None:
+        return False
+    try:
+        if bool(settings.get_property("gtk-application-prefer-dark-theme")):
+            return True
+    except (TypeError, AttributeError):
+        pass
+    try:
+        return "dark" in str(settings.get_property("gtk-theme-name") or "").lower()
+    except (TypeError, AttributeError):
+        return False
+
+
+def _system_theme_changed(*_args: object) -> None:
+    if load_theme_mode() is ThemeMode.SYSTEM:
+        apply_theme(ThemeMode.SYSTEM)
+
+
+def _ensure_system_theme_watch() -> None:
+    global _gtk_settings
+    if _gtk_settings is not None:
+        return
+    settings = Gtk.Settings.get_default()
+    if settings is None:
+        return
+    _gtk_settings = settings
+    _theme_signal_ids.extend([
+        settings.connect(
+            "notify::gtk-application-prefer-dark-theme",
+            _system_theme_changed,
+        ),
+        settings.connect("notify::gtk-theme-name", _system_theme_changed),
+    ])
 
 
 def _base_css() -> str:
@@ -168,7 +208,7 @@ def _day_css() -> str:
 
 
 def apply_theme(mode: ThemeMode | str | None = None) -> ThemeMode:
-    """Apply one theme globally to GTK; system mode leaves OS colours intact."""
+    """Apply Common Day/Night; System resolves the host preference to one of them."""
     global _provider
 
     resolved = load_theme_mode() if mode is None else ThemeMode(mode)
@@ -176,11 +216,15 @@ def apply_theme(mode: ThemeMode | str | None = None) -> ThemeMode:
     if screen is None:
         return resolved
 
+    _ensure_system_theme_watch()
+    effective = (
+        ThemeMode.NIGHT if resolved is ThemeMode.SYSTEM and _system_prefers_dark()
+        else ThemeMode.DAY if resolved is ThemeMode.SYSTEM
+        else resolved
+    )
+
     css = _base_css()
-    if resolved is ThemeMode.DAY:
-        css += _day_css()
-    elif resolved is ThemeMode.NIGHT:
-        css += _night_css()
+    css += _night_css() if effective is ThemeMode.NIGHT else _day_css()
 
     if _provider is None:
         _provider = Gtk.CssProvider()
