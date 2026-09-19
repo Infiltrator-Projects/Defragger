@@ -1,45 +1,76 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Fetch and verify the exact MB Corpo font bundle supplied to MBLINK.
+# Fetch and verify the exact MB Corpo bundle described by pinned Common.
 set -eu
 
 DEST=${1:?usage: vendor-mb-fonts.sh DESTINATION_ARCHIVE}
-MBLINK_COMMIT=aa161e7342112beab8feb7669f072c870f742765
-URL="https://raw.githubusercontent.com/Infiltrator-Projects/MBLINK/${MBLINK_COMMIT}/assets/fonts/mb-corpo-fonts.tar.xz"
-ARCHIVE_SHA256=bdb6063f838a7fab22b4d6b412170640c69511df53aa3dfa9a4ea8431c9d8274
-A_SHA256=c8bcd7e1a7d71169b38491d9b7c1ffe7ba7b46e888f0c1219931343a47bc0e05
-S_BOLD_SHA256=d37ea986e2344d83390f94f170e6272b56efd00bfec808afe8314c4ca45d43b4
-S_REGULAR_SHA256=94ede6629443c03d4362dcef425fb3ff520be5d654370021a34e81286804465c
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+DESIGN="$ROOT/shared/infiltratr-common/design/infiltrator-design-v1.json"
 
-mkdir -p "$(dirname -- "$DEST")"
-if [ ! -f "$DEST" ]; then
-    TMP="${DEST}.tmp.$$"
-    trap 'rm -f "$TMP"' EXIT HUP INT TERM
-    python3 - "$URL" "$TMP" <<'PY'
-import sys
-import urllib.request
-urllib.request.urlretrieve(sys.argv[1], sys.argv[2])
-PY
-    mv "$TMP" "$DEST"
-    trap - EXIT HUP INT TERM
-fi
-
-actual=$(sha256sum "$DEST" | awk '{print $1}')
-[ "$actual" = "$ARCHIVE_SHA256" ] || {
-    printf 'MB Corpo archive hash mismatch: %s\n' "$actual" >&2
+[ -f "$DESIGN" ] || {
+    printf 'Pinned Common design contract is missing: %s\n' "$DESIGN" >&2
     exit 1
 }
 
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/linux-defragger-font-check.XXXXXX")
-trap 'rm -rf "$WORK"' EXIT HUP INT TERM
-tar -xJf "$DEST" -C "$WORK"
-for file in mb_corpo_a_cond_regular.ttf mb_corpo_s_bold.ttf mb_corpo_s_regular.ttf; do
-    [ -f "$WORK/$file" ] || {
-        printf 'MB Corpo archive is missing %s\n' "$file" >&2
-        exit 1
-    }
-done
-[ "$(sha256sum "$WORK/mb_corpo_a_cond_regular.ttf" | awk '{print $1}')" = "$A_SHA256" ] || exit 1
-[ "$(sha256sum "$WORK/mb_corpo_s_bold.ttf" | awk '{print $1}')" = "$S_BOLD_SHA256" ] || exit 1
-[ "$(sha256sum "$WORK/mb_corpo_s_regular.ttf" | awk '{print $1}')" = "$S_REGULAR_SHA256" ] || exit 1
-printf '%s\n' "$DEST"
+python3 - "$DESIGN" "$DEST" <<'PY'
+import hashlib
+import json
+from pathlib import Path
+import sys
+import tarfile
+import tempfile
+import urllib.request
+
+design_path = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+design = json.loads(design_path.read_text(encoding="utf-8"))
+typography = design["typography"]
+assets = typography["assets"]
+files = typography["font_files"]
+hashes = assets["file_sha256"]
+
+repository = assets["source_repository"]
+commit = assets["source_commit"]
+archive_path = assets["archive_path"]
+url = f"https://raw.githubusercontent.com/{repository}/{commit}/{archive_path}"
+expected_archive = assets["archive_sha256"].lower()
+
+destination.parent.mkdir(parents=True, exist_ok=True)
+if not destination.exists():
+    temporary = destination.with_name(destination.name + ".tmp")
+    try:
+        urllib.request.urlretrieve(url, temporary)
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+actual_archive = hashlib.sha256(destination.read_bytes()).hexdigest()
+if actual_archive != expected_archive:
+    raise SystemExit(
+        f"MB Corpo archive hash mismatch: {actual_archive} "
+        f"(Common requires {expected_archive})"
+    )
+
+roles = (
+    ("brand_regular", files["brand_regular"]),
+    ("ui_bold", files["ui_bold"]),
+    ("ui_regular", files["ui_regular"]),
+)
+with tempfile.TemporaryDirectory(prefix="linux-defragger-font-check.") as work:
+    with tarfile.open(destination, mode="r:xz") as archive:
+        archive.extractall(work)
+    root = Path(work)
+    for role, filename in roles:
+        candidate = root / filename
+        if not candidate.is_file():
+            raise SystemExit(f"MB Corpo archive is missing {filename}")
+        actual = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        expected = hashes[role].lower()
+        if actual != expected:
+            raise SystemExit(
+                f"MB Corpo hash mismatch for {filename}: {actual} "
+                f"(Common requires {expected})"
+            )
+
+print(destination)
+PY
