@@ -228,6 +228,8 @@ def test_infiltratr_common_integration() -> None:
     assert '${INFILTRATR_COMMON_DIR}/src/core.c' not in cmake
     assert '${INFILTRATR_COMMON_DIR}/src/posix.c' not in cmake
     local_installer = (ROOT / "packaging" / "build-local-run.sh").read_text()
+    typography_vendor = (ROOT / "packaging" / "vendor-mb-fonts.cmake").read_text()
+    assert "InfiltratrTypographyAssets.cmake" in typography_vendor
     assert 'COMMON_VERSION="1.19.8"' in local_installer
     assert 'COMMON_COMMIT="3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9"' in local_installer
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
@@ -320,6 +322,7 @@ def test_infiltratr_common_integration() -> None:
     test_media_theme = (ROOT / "test_media" / "test_media_theme.c").read_text()
     assert "infiltratr_typography()" in test_media_theme
     assert "infiltratr_design_metrics()" in test_media_theme
+    assert "infiltratr_theme_resolve" in test_media_theme
 
     protocol = (ROOT / "src" / "core" / "ld_protocol.c").read_text()
     assert "infiltratr_escape_json" in protocol

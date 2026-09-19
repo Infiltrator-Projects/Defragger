@@ -477,6 +477,7 @@ def test_mb_typography_has_no_system_font_escape_hatches() -> None:
     test_media_gui = (ROOT / "test_media" / "test_media_gui.c").read_text()
     packaging = (ROOT / "packaging" / "build-deb.sh").read_text()
     vendor = (ROOT / "packaging" / "vendor-mb-fonts.sh").read_text()
+    vendor_cmake = (ROOT / "packaging" / "vendor-mb-fonts.cmake").read_text()
 
     assert "TYPOGRAPHY" in theme_source
     assert 'TYPOGRAPHY["ui_family"]' in theme_source
@@ -484,6 +485,7 @@ def test_mb_typography_has_no_system_font_escape_hatches() -> None:
     assert 'TYPOGRAPHY["ui_family"]' in widgets_source
     assert "infiltratr_typography()" in test_media_theme
     assert "infiltratr_design_metrics()" in test_media_theme
+    assert "infiltratr_theme_resolve" in test_media_theme
 
     for font_file in (
         "mb_corpo_a_cond_regular.ttf",
@@ -493,9 +495,12 @@ def test_mb_typography_has_no_system_font_escape_hatches() -> None:
         assert font_file in packaging
         assert font_file in tokens_source
 
-    assert "shared/infiltratr-common/design/infiltrator-design-v1.json" in vendor
-    assert "MBLINK_COMMIT=" not in vendor
-    assert "ARCHIVE_SHA256=" not in vendor
+    assert "vendor-mb-fonts.cmake" in vendor
+    assert "python3" not in vendor
+    assert "InfiltratrTypographyAssets.cmake" in vendor_cmake
+    assert "INFILTRATR_MB_CORPO_ARCHIVE_URL" in vendor_cmake
+    assert "INFILTRATR_MB_CORPO_ARCHIVE_SHA256" in vendor_cmake
+    assert "raw.githubusercontent.com" not in vendor_cmake
     assert 'data["typography"]' in generator_source
 
     for source in (theme_source, test_media_theme):
