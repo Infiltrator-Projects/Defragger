@@ -185,6 +185,8 @@ int ntfs_write_bitmap(const NtfsVolume *volume, const NtfsLayout *layout, char *
 int ntfs_plan_layout(NtfsLayout *layout, NtfsCatalogue *catalogue, uint64_t total_clusters,
                      bool growth, NtfsPlacementVec *placements, char **error);
 void ntfs_placements_free(NtfsPlacementVec *placements);
+int ntfs_stream_digest(NtfsVolume *volume, const NtfsStream *stream,
+                       uint8_t *digest, char **error);
 int ntfs_create_plan_db(const char *path, NtfsVolume *volume, NtfsLayout *layout,
                         NtfsCatalogue *catalogue, const NtfsPlacementVec *placements,
                         bool growth, sqlite3 **db, char **error);

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Enforce the current C-first single-hierarchy, C-first filesystem architecture."""
+"""Enforce the current C-first native architecture with selective C++ RAII."""
 
 from __future__ import annotations
 
@@ -41,12 +41,12 @@ def _cmake_source() -> str:
     return "\n".join(path.read_text() for path in paths if path.is_file())
 
 
-def test_top_level_cmake_owns_c_only_project_declaration() -> None:
+def test_top_level_cmake_owns_native_language_declaration() -> None:
     root_cmake = (ROOT / "CMakeLists.txt").read_text()
     project_fragment = (ROOT / "cmake" / "project.cmake").read_text()
     assert root_cmake.count("cmake_minimum_required(VERSION 3.20)") == 1
-    assert root_cmake.count("project(linux_defragger VERSION 1.8.0 LANGUAGES C)") == 1
-    assert root_cmake.index("cmake_minimum_required(VERSION 3.20)") < root_cmake.index("project(linux_defragger VERSION 1.8.0 LANGUAGES C)")
+    assert root_cmake.count("project(linux_defragger VERSION 1.8.0 LANGUAGES C CXX)") == 1
+    assert root_cmake.index("cmake_minimum_required(VERSION 3.20)") < root_cmake.index("project(linux_defragger VERSION 1.8.0 LANGUAGES C CXX)")
     assert "cmake_minimum_required(" not in project_fragment
     assert "project(" not in project_fragment
 
@@ -111,7 +111,7 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
 
     required_native = {
         "ext4": {"ext_native.h", "ext_common.c", "ext_catalog.c", "ext_plan.c", "ext_worker.c"},
-        "ntfs": {"ntfs_native.h", "ntfs_common.c", "ntfs_catalog.c", "ntfs_plan.c", "ntfs_worker.c"},
+        "ntfs": {"ntfs_native.h", "ntfs_common.c", "ntfs_catalog.c", "ntfs_plan.c", "ntfs_plan_db.cpp", "ntfs_worker.c"},
         "exfat": {"exfat_native.h", "exfat_common.c", "exfat_plan.c", "exfat_worker.c"},
         "xfs": {"xfs_native.h", "xfs_common.c", "xfs_catalog.c", "xfs_plan.c", "xfs_metadata.c", "xfs_worker.c"},
         "affs": {"affs_native.h", "affs_native.c", "affs_worker.c"},
@@ -155,10 +155,19 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
         assert forbidden not in hfs_plugin
     assert 'resolve_program("hfs-native"' in hfs_plugin
 
-    ntfs_plan = (GUI / "filesystems" / "ntfs" / "native" / "ntfs_plan.c").read_text()
-    assert "fixed_primary" in ntfs_plan
-    assert "growth&&!catalogue.growth_10_satisfied" not in ntfs_plan.replace(" ", "")
-    assert "catalogue.growth_10_satisfied" not in ntfs_plan
+    ntfs_native = GUI / "filesystems" / "ntfs" / "native"
+    ntfs_plan = (ntfs_native / "ntfs_plan.c").read_text()
+    ntfs_plan_db = (ntfs_native / "ntfs_plan_db.cpp").read_text()
+    ntfs_planning = ntfs_plan + ntfs_plan_db
+    assert "fixed_primary" in ntfs_planning
+    assert "growth&&!catalogue.growth_10_satisfied" not in ntfs_planning.replace(" ", "")
+    assert "catalogue.growth_10_satisfied" not in ntfs_planning
+    assert "class SqliteStatement" in ntfs_plan_db
+    assert "class RollbackGuard" in ntfs_plan_db
+    assert \'extern "C" int ntfs_create_plan_db\' in ntfs_plan_db
+    assert "virtual " not in ntfs_plan_db
+    cpp_sources = sorted((GUI / "filesystems").rglob("*.cpp"))
+    assert cpp_sources == [ntfs_native / "ntfs_plan_db.cpp"]
 
     fat_native = GUI / "filesystems" / "fat" / "native"
     assert (fat_native / "writer.c").is_file()
@@ -711,7 +720,7 @@ def test_test_media_companion_is_all_c() -> None:
 
 
 def main() -> None:
-    test_top_level_cmake_owns_c_only_project_declaration()
+    test_top_level_cmake_owns_native_language_declaration()
     test_plugin_discovery_and_native_worker_contracts()
     test_dispatch_is_filesystem_neutral()
     test_single_filesystem_hierarchy_and_c_first_writers()

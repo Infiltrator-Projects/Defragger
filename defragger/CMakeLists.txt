@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.20)
-project(linux_defragger VERSION 1.8.0 LANGUAGES C)
+project(linux_defragger VERSION 1.8.0 LANGUAGES C CXX)
 
 # Keep the established project/build graph isolated from filesystem-specific
-# native modules so new C engines can be added without duplicating the registry.
+# native modules so new native engines can be added without duplicating the registry.
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/project.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/hfs_affs_safety.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/btrfs.cmake")

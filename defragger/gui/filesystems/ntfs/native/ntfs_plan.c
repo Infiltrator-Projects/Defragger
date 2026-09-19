@@ -178,180 +178,9 @@ fail_before_free:
     free(all);free(reserved.items);ntfs_placements_free(placements);return -1;
 }
 
-static NtfsPlacement *find_placement(const NtfsPlacementVec *placements,uint64_t record,uint32_t offset){for(size_t i=0;i<placements->count;++i)if(placements->items[i].record_number==record&&placements->items[i].attribute_offset==offset)return &placements->items[i];return NULL;}
-static int stream_digest(NtfsVolume *volume, const NtfsStream *stream,
-                         uint8_t digest[SHA256_DIGEST_LENGTH], char **error) {
-    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-    if (ctx == NULL || EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1) {
-        EVP_MD_CTX_free(ctx);
-        ntfs_set_error(error, "initializing NTFS payload digest failed");
-        return -1;
-    }
-    uint8_t *buffer = ld_xmalloc(volume->cluster_size);
-    for (size_t r = 0; r < stream->runs.count; ++r) {
-        NtfsRun run = stream->runs.items[r];
-        if (run.sparse) {
-            free(buffer);
-            EVP_MD_CTX_free(ctx);
-            ntfs_set_error(error, "sparse NTFS stream entered native writer");
-            return -1;
-        }
-        for (uint64_t c = 0; c < run.length; ++c) {
-            ssize_t got = ld_pread_full(volume->fd, buffer, volume->cluster_size,
-                                        (run.lcn + c) * volume->cluster_size);
-            if (got < 0 || (size_t)got != volume->cluster_size ||
-                EVP_DigestUpdate(ctx, buffer, volume->cluster_size) != 1) {
-                free(buffer);
-                EVP_MD_CTX_free(ctx);
-                ntfs_set_error(error, "reading NTFS payload for verification failed");
-                return -1;
-            }
-        }
-    }
-    free(buffer);
-    unsigned int digest_length = 0;
-    if (EVP_DigestFinal_ex(ctx, digest, &digest_length) != 1 ||
-        digest_length != SHA256_DIGEST_LENGTH) {
-        EVP_MD_CTX_free(ctx);
-        ntfs_set_error(error, "finalizing NTFS payload digest failed");
-        return -1;
-    }
-    EVP_MD_CTX_free(ctx);
-    return 0;
-}
-
-int ntfs_create_plan_db(const char *path, NtfsVolume *volume, NtfsLayout *layout,
-                        NtfsCatalogue *catalogue, const NtfsPlacementVec *placements,
-                        bool growth, sqlite3 **db, char **error) {
-    (void)unlink(path);
-    int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
-#ifdef SQLITE_OPEN_NOFOLLOW
-    flags |= SQLITE_OPEN_NOFOLLOW;
-#endif
-    if (sqlite3_open_v2(path, db, flags, NULL) != SQLITE_OK)
-        return sql_error(*db, error, "opening NTFS plan database");
-    if (sql_exec(*db,
-                 "PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;"
-                 "CREATE TABLE streams(record INTEGER,attr INTEGER,type INTEGER,clusters INTEGER,target INTEGER,reserve INTEGER,sha BLOB,PRIMARY KEY(record,attr));"
-                 "CREATE TABLE fixed_primary(record INTEGER,attr INTEGER,clusters INTEGER,start INTEGER,reserve INTEGER,sha BLOB,PRIMARY KEY(record,attr));"
-                 "CREATE TABLE blocks(old INTEGER PRIMARY KEY,target INTEGER UNIQUE,placed INTEGER DEFAULT 0);"
-                 "CREATE TABLE metadata(key TEXT PRIMARY KEY,value BLOB);BEGIN IMMEDIATE",
-                 error) != 0) return -1;
-
-    sqlite3_stmt *ins_stream = NULL, *ins_fixed = NULL, *ins_block = NULL, *ins_meta = NULL;
-    if (sqlite3_prepare_v2(*db, "INSERT INTO streams VALUES (?,?,?,?,?,?,?)", -1, &ins_stream, NULL) != SQLITE_OK ||
-        sqlite3_prepare_v2(*db, "INSERT INTO fixed_primary VALUES (?,?,?,?,?,?)", -1, &ins_fixed, NULL) != SQLITE_OK ||
-        sqlite3_prepare_v2(*db, "INSERT INTO blocks(old,target) VALUES (?,?)", -1, &ins_block, NULL) != SQLITE_OK ||
-        sqlite3_prepare_v2(*db, "INSERT INTO metadata VALUES (?,?)", -1, &ins_meta, NULL) != SQLITE_OK) {
-        sql_error(*db, error, "preparing NTFS plan database");
-        goto fail;
-    }
-
-    for (size_t i = 0; i < catalogue->count; ++i) {
-        NtfsStream *stream = &catalogue->items[i];
-        if (!stream->movable || !stream->clusters) continue;
-        NtfsPlacement *placement = find_placement(placements, stream->record_number,
-                                                  stream->attribute_offset);
-        if (placement == NULL) {
-            ntfs_set_error(error, "NTFS planner omitted a movable stream");
-            goto fail;
-        }
-        uint8_t digest[SHA256_DIGEST_LENGTH];
-        if (stream_digest(volume, stream, digest, error) != 0) goto fail;
-        sqlite3_reset(ins_stream);
-        sqlite3_bind_int64(ins_stream, 1, (sqlite3_int64)stream->record_number);
-        sqlite3_bind_int(ins_stream, 2, (int)stream->attribute_offset);
-        sqlite3_bind_int(ins_stream, 3, (int)stream->attribute_type);
-        sqlite3_bind_int64(ins_stream, 4, (sqlite3_int64)stream->clusters);
-        sqlite3_bind_int64(ins_stream, 5, (sqlite3_int64)placement->start);
-        sqlite3_bind_int64(ins_stream, 6, (sqlite3_int64)placement->reserve);
-        sqlite3_bind_blob(ins_stream, 7, digest, SHA256_DIGEST_LENGTH, SQLITE_TRANSIENT);
-        if (sqlite3_step(ins_stream) != SQLITE_DONE) {
-            sql_error(*db, error, "recording NTFS stream plan");
-            goto fail;
-        }
-        uint64_t target = placement->start;
-        for (size_t r = 0; r < stream->runs.count; ++r) {
-            NtfsRun run = stream->runs.items[r];
-            for (uint64_t c = 0; c < run.length; ++c) {
-                sqlite3_reset(ins_block);
-                sqlite3_bind_int64(ins_block, 1, (sqlite3_int64)(run.lcn + c));
-                sqlite3_bind_int64(ins_block, 2, (sqlite3_int64)target++);
-                if (sqlite3_step(ins_block) != SQLITE_DONE) {
-                    sql_error(*db, error, "recording NTFS cluster permutation");
-                    goto fail;
-                }
-            }
-        }
-        if (target != placement->start + placement->clusters) {
-            ntfs_set_error(error, "NTFS stream cluster count changed during planning");
-            goto fail;
-        }
-    }
-
-    /* Preserve the exact contract for every unsupported-but-safe primary user
-       file stream.  These rows are never rewritten; they exist so verification
-       proves that their mapping and payload stayed byte-for-byte fixed and, for
-       Growth Defrag, that the planner's exact 10% post-file reserve is free. */
-    for (size_t i = 0; i < catalogue->count; ++i) {
-        NtfsStream *stream = &catalogue->items[i];
-        if (stream->movable || stream->record_number < NTFS_FIRST_USER_RECORD ||
-            stream->clusters == 0 || stream->directory || !primary_object_stream(stream)) continue;
-        if (stream->runs.count != 1U || stream->runs.items[0].sparse) {
-            ntfs_set_error(error,
-                           "NTFS fixed primary stream in MFT record %llu changed shape before plan persistence",
-                           (unsigned long long)stream->record_number);
-            goto fail;
-        }
-        uint64_t reserve = growth ? (stream->clusters * 10U + 99U) / 100U : 0U;
-        uint64_t start_cluster = stream->runs.items[0].lcn;
-        uint8_t digest[SHA256_DIGEST_LENGTH];
-        if (stream_digest(volume, stream, digest, error) != 0) goto fail;
-        sqlite3_reset(ins_fixed);
-        sqlite3_bind_int64(ins_fixed, 1, (sqlite3_int64)stream->record_number);
-        sqlite3_bind_int(ins_fixed, 2, (int)stream->attribute_offset);
-        sqlite3_bind_int64(ins_fixed, 3, (sqlite3_int64)stream->clusters);
-        sqlite3_bind_int64(ins_fixed, 4, (sqlite3_int64)start_cluster);
-        sqlite3_bind_int64(ins_fixed, 5, (sqlite3_int64)reserve);
-        sqlite3_bind_blob(ins_fixed, 6, digest, SHA256_DIGEST_LENGTH, SQLITE_TRANSIENT);
-        if (sqlite3_step(ins_fixed) != SQLITE_DONE) {
-            sql_error(*db, error, "recording NTFS fixed primary stream");
-            goto fail;
-        }
-    }
-
-    sqlite3_reset(ins_meta);
-    sqlite3_bind_text(ins_meta, 1, "bitmap", -1, SQLITE_STATIC);
-    sqlite3_bind_blob(ins_meta, 2, layout->bitmap, (int)layout->bitmap_bytes, SQLITE_TRANSIENT);
-    if (sqlite3_step(ins_meta) != SQLITE_DONE) {
-        sql_error(*db, error, "recording NTFS final bitmap");
-        goto fail;
-    }
-    if (sql_exec(*db, "COMMIT", error) != 0) goto fail;
-    sqlite3_finalize(ins_stream);
-    sqlite3_finalize(ins_fixed);
-    sqlite3_finalize(ins_block);
-    sqlite3_finalize(ins_meta);
-    return 0;
-
-fail:
-    (void)sqlite3_exec(*db, "ROLLBACK", NULL, NULL, NULL);
-    sqlite3_finalize(ins_stream);
-    sqlite3_finalize(ins_fixed);
-    sqlite3_finalize(ins_block);
-    sqlite3_finalize(ins_meta);
-    return -1;
-}
-int ntfs_open_plan_db(const char *path, sqlite3 **db, char **error) {
-    int flags = SQLITE_OPEN_READWRITE;
-#ifdef SQLITE_OPEN_NOFOLLOW
-    flags |= SQLITE_OPEN_NOFOLLOW;
-#endif
-    if (sqlite3_open_v2(path, db, flags, NULL) != SQLITE_OK)
-        return sql_error(*db, error, "opening NTFS plan database");
-    return 0;
-}
-uint64_t ntfs_plan_move_count(sqlite3 *db,char **error){sqlite3_stmt *s=NULL;if(sqlite3_prepare_v2(db,"SELECT COUNT(*) FROM blocks WHERE old<>target",-1,&s,NULL)!=SQLITE_OK){sql_error(db,error,"reading NTFS move count");return UINT64_MAX;}uint64_t n=sqlite3_step(s)==SQLITE_ROW?(uint64_t)sqlite3_column_int64(s,0):UINT64_MAX;sqlite3_finalize(s);return n;}
+/* Plan-database persistence and payload-digest lifetime management live in
+ * ntfs_plan_db.cpp. The exported functions retain a C ABI so the raw planner
+ * and worker remain C while C++ RAII owns SQLite/OpenSSL resources. */
 
 static int copy_cluster(int fd,uint32_t size,uint64_t source,uint64_t target,char **error){uint8_t *buffer=ld_xmalloc(size);ssize_t got=ld_pread_full(fd,buffer,size,source*size);if(got<0||(size_t)got!=size){free(buffer);ntfs_set_error(error,"short NTFS source-cluster read");return -1;}ssize_t wrote=ld_pwrite_full(fd,buffer,size,target*size);free(buffer);if(wrote<0||(size_t)wrote!=size){ntfs_set_error(error,"short NTFS target-cluster write");return -1;}return 0;}
 int ntfs_permute_stage(const char *stage,sqlite3 *db,uint32_t cluster_size,uint64_t move_count,char **error){int fd=open(stage,O_RDWR|O_CLOEXEC);if(fd<0){ntfs_set_error(error,"cannot open NTFS stage for relocation: %s",strerror(errno));return -1;}sqlite3_stmt *term=NULL,*pred=NULL,*mark=NULL,*unplaced=NULL;if(sqlite3_prepare_v2(db,"SELECT b.target FROM blocks b LEFT JOIN blocks s ON s.old=b.target WHERE b.old<>b.target AND s.old IS NULL ORDER BY b.target",-1,&term,NULL)!=SQLITE_OK||sqlite3_prepare_v2(db,"SELECT old FROM blocks WHERE target=? AND old<>target AND placed=0",-1,&pred,NULL)!=SQLITE_OK||sqlite3_prepare_v2(db,"UPDATE blocks SET placed=1 WHERE old=?",-1,&mark,NULL)!=SQLITE_OK||sqlite3_prepare_v2(db,"SELECT old FROM blocks WHERE old<>target AND placed=0 LIMIT 1",-1,&unplaced,NULL)!=SQLITE_OK){close(fd);return sql_error(db,error,"preparing NTFS cluster permutation");}uint64_t placed=0;int state;while((state=sqlite3_step(term))==SQLITE_ROW){uint64_t free_cluster=(uint64_t)sqlite3_column_int64(term,0);while(1){sqlite3_reset(pred);sqlite3_clear_bindings(pred);sqlite3_bind_int64(pred,1,(sqlite3_int64)free_cluster);int ps=sqlite3_step(pred);if(ps==SQLITE_DONE)break;if(ps!=SQLITE_ROW){sql_error(db,error,"reading NTFS cluster predecessor");goto fail;}uint64_t old=(uint64_t)sqlite3_column_int64(pred,0);if(copy_cluster(fd,cluster_size,old,free_cluster,error)!=0)goto fail;sqlite3_reset(mark);sqlite3_clear_bindings(mark);sqlite3_bind_int64(mark,1,(sqlite3_int64)old);if(sqlite3_step(mark)!=SQLITE_DONE){sql_error(db,error,"marking NTFS cluster placement");goto fail;}placed++;free_cluster=old;if((placed%8192U)==0U&&ld_stop_requested()){ntfs_set_error(error,"stop requested before NTFS source commit");goto fail;}}}if(state!=SQLITE_DONE){sql_error(db,error,"reading NTFS terminal clusters");goto fail;}while(1){sqlite3_reset(unplaced);int us=sqlite3_step(unplaced);if(us==SQLITE_DONE)break;if(us!=SQLITE_ROW){sql_error(db,error,"reading NTFS relocation cycle");goto fail;}uint64_t start=(uint64_t)sqlite3_column_int64(unplaced,0),free_cluster=start;uint8_t *saved=ld_xmalloc(cluster_size);ssize_t got=ld_pread_full(fd,saved,cluster_size,start*cluster_size);if(got<0||(size_t)got!=cluster_size){free(saved);ntfs_set_error(error,"short NTFS cycle read");goto fail;}while(1){sqlite3_reset(pred);sqlite3_clear_bindings(pred);sqlite3_bind_int64(pred,1,(sqlite3_int64)free_cluster);int ps=sqlite3_step(pred);if(ps!=SQLITE_ROW){free(saved);ntfs_set_error(error,"broken NTFS relocation cycle");goto fail;}uint64_t old=(uint64_t)sqlite3_column_int64(pred,0);if(old==start){ssize_t wrote=ld_pwrite_full(fd,saved,cluster_size,free_cluster*cluster_size);free(saved);if(wrote<0||(size_t)wrote!=cluster_size){ntfs_set_error(error,"short NTFS cycle close write");goto fail;}sqlite3_reset(mark);sqlite3_clear_bindings(mark);sqlite3_bind_int64(mark,1,(sqlite3_int64)start);if(sqlite3_step(mark)!=SQLITE_DONE){sql_error(db,error,"marking NTFS cycle completion");goto fail;}placed++;break;}if(copy_cluster(fd,cluster_size,old,free_cluster,error)!=0){free(saved);goto fail;}sqlite3_reset(mark);sqlite3_clear_bindings(mark);sqlite3_bind_int64(mark,1,(sqlite3_int64)old);if(sqlite3_step(mark)!=SQLITE_DONE){free(saved);sql_error(db,error,"marking NTFS cycle placement");goto fail;}placed++;free_cluster=old;}}
@@ -649,7 +478,7 @@ int ntfs_verify_stage(const char *stage, sqlite3 *db, bool growth,
             goto final;
         }
         uint8_t digest[SHA256_DIGEST_LENGTH];
-        if (stream_digest(&volume, stream, digest, error) != 0) goto final;
+        if (ntfs_stream_digest(&volume, stream, digest, error) != 0) goto final;
         const void *stored = sqlite3_column_blob(streams, 5);
         if (stored == NULL || sqlite3_column_bytes(streams, 5) != SHA256_DIGEST_LENGTH ||
             memcmp(stored, digest, SHA256_DIGEST_LENGTH) != 0) {
@@ -703,7 +532,7 @@ int ntfs_verify_stage(const char *stage, sqlite3 *db, bool growth,
             goto final;
         }
         uint8_t digest[SHA256_DIGEST_LENGTH];
-        if (stream_digest(&volume, stream, digest, error) != 0) goto final;
+        if (ntfs_stream_digest(&volume, stream, digest, error) != 0) goto final;
         const void *stored = sqlite3_column_blob(fixed, 5);
         if (stored == NULL || sqlite3_column_bytes(fixed, 5) != SHA256_DIGEST_LENGTH ||
             memcmp(stored, digest, SHA256_DIGEST_LENGTH) != 0) {

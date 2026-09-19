@@ -9,6 +9,9 @@ endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Threads REQUIRED)
 
 set(INFILTRATR_COMMON_DIR
@@ -306,7 +309,8 @@ target_link_libraries(linux-defragger-ext-worker PRIVATE
 add_library(linux-defragger-ntfs-native STATIC
     gui/filesystems/ntfs/native/ntfs_common.c
     gui/filesystems/ntfs/native/ntfs_catalog.c
-    gui/filesystems/ntfs/native/ntfs_plan.c)
+    gui/filesystems/ntfs/native/ntfs_plan.c
+    gui/filesystems/ntfs/native/ntfs_plan_db.cpp)
 target_include_directories(linux-defragger-ntfs-native PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/filesystems/ntfs/native"
@@ -328,6 +332,7 @@ target_compile_definitions(linux-defragger-ntfs-worker PRIVATE
     _FILE_OFFSET_BITS=64 _GNU_SOURCE)
 target_link_libraries(linux-defragger-ntfs-worker PRIVATE
     linux-defragger-ntfs-native linux-defragger-core SQLite::SQLite3 OpenSSL::Crypto)
+set_property(TARGET linux-defragger-ntfs-worker PROPERTY LINKER_LANGUAGE CXX)
 
 add_library(linux-defragger-exfat-native STATIC
     gui/filesystems/exfat/native/exfat_common.c

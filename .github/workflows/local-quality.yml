@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          commands=(cmake cc make dpkg-deb pkg-config zip unzip python3 makefs udisksctl pkexec)
+          commands=(cmake cc c++ make dpkg-deb pkg-config zip unzip python3 makefs udisksctl pkexec)
           missing=()
           for command_name in "${commands[@]}"; do
             command -v "$command_name" >/dev/null 2>&1 || missing+=("$command_name")
@@ -50,7 +50,7 @@ jobs:
           fi
           python3 -c 'import gi, cairo'
 
-      - name: Build all first-party C with warnings as errors
+      - name: Build first-party C/C++ with warnings as errors
         run: |
           cmake -S . -B build-local \
             -DCMAKE_BUILD_TYPE=Release \

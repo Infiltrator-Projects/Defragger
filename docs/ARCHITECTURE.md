@@ -55,6 +55,12 @@ defragger/
 
 GTK objects stay in the presentation layer. Runner, policy and storage models exchange plain values and typed events rather than making presentation code responsible for raw-device or filesystem policy.
 
+## Native language boundary
+
+C remains the primary implementation language for filesystem structures, codecs, planners and raw storage algorithms. Selective C++ is permitted behind a C ABI where deterministic ownership is itself part of the correctness argument.
+
+The NTFS plan-database component is the first such boundary: `ntfs_plan_db.cpp` uses small non-inheriting RAII owners for SQLite statements, transaction rollback and the OpenSSL digest context, while `ntfs_plan.c`, `ntfs_worker.c` and the public NTFS native contract remain C-oriented. This is an ownership tool, not a second object model.
+
 ## Target safety and privilege boundary
 
 Write-capable operations target only an unmounted block device or regular filesystem image. Selection is not treated as authority: the project revalidates target identity, capacity and mounted overlap across open/privilege boundaries before authoritative mutation.

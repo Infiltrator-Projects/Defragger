@@ -16,7 +16,7 @@ Defragmenter combines GTK orchestration, filesystem-neutral safety/runtime code 
 
 ## Language and dependency policy
 
-C is preferred for low-level parsing, native filesystem engines and direct storage work. Python is used for GTK/backend orchestration where it does not duplicate filesystem policy.
+C is the default for on-disk codecs, fixed-layout structures and direct storage work. Use C++ when RAII, scoped ownership or stronger local types make a resource-heavy native component safer or clearer; keep C-facing subsystem contracts stable where practical and do not introduce class hierarchies merely because C++ is available. Python is used for GTK/backend orchestration where it does not duplicate filesystem policy.
 
 Platform/system libraries are acceptable when their documented contract is the stronger engineering choice. Convenience alone is not a reason to move Defragmenter-owned semantics into a dependency.
 

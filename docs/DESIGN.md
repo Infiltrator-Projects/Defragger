@@ -21,7 +21,9 @@ Read-only analysis may cover formats for which mutation is intentionally unavail
 
 ## Language and dependency policy
 
-C is preferred for low-level parsing, native filesystem engines and direct storage work. Python remains appropriate for GTK/backend orchestration where it does not duplicate filesystem policy.
+C remains the default for on-disk codecs, fixed-layout structures, raw filesystem transforms and direct storage work. C++ is used selectively where deterministic lifetime management, stronger local types or RAII materially reduce cleanup risk without obscuring the disk algorithm. C++ additions should normally preserve a plain C ABI at subsystem boundaries and should not introduce inheritance or virtual dispatch without a genuine polymorphic requirement. Python remains appropriate for GTK/backend orchestration where it does not duplicate filesystem policy.
+
+The first C++ use is deliberately narrow: NTFS plan-database persistence owns SQLite statements, transaction rollback and OpenSSL digest context through RAII while the planner, raw relocation path and worker remain C.
 
 Platform libraries and in-process filesystem libraries are used when their documented contract is the stronger engineering choice. External command-line repair or defragmentation programs are not part of production mutation paths.
 
