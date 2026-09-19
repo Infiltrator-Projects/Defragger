@@ -7,9 +7,19 @@ set -eu
 if [ "${LD_TEST_FAKE_CMAKE:-0}" = 1 ]; then
     if [ "${1:-}" = --install ]; then
         : "${DESTDIR:?DESTDIR is required for the fake install}"
-        mkdir -p "$DESTDIR/usr/lib/linux-defragger/filesystems/fat"
+        : "${LD_TEST_SOURCE_ROOT:?LD_TEST_SOURCE_ROOT is required for the fake install}"
+        mkdir -p \
+            "$DESTDIR/usr/lib/linux-defragger/filesystems/fat" \
+            "$DESTDIR/usr/share/icons/hicolor/256x256/apps" \
+            "$DESTDIR/usr/share/app-install/icons"
         : >"$DESTDIR/usr/lib/linux-defragger/filesystems/fat/linux-defragger-fat-worker"
         chmod 0755 "$DESTDIR/usr/lib/linux-defragger/filesystems/fat/linux-defragger-fat-worker"
+        cp "$LD_TEST_SOURCE_ROOT/packaging/io.github.linuxdefragger.png" \
+            "$DESTDIR/usr/lib/linux-defragger/defragmenter-icon.png"
+        cp "$LD_TEST_SOURCE_ROOT/packaging/io.github.linuxdefragger.png" \
+            "$DESTDIR/usr/share/icons/hicolor/256x256/apps/io.github.linuxdefragger.png"
+        cp "$LD_TEST_SOURCE_ROOT/packaging/io.github.linuxdefragger.png" \
+            "$DESTDIR/usr/share/app-install/icons/infiltrator-defragmenter.png"
     fi
     exit 0
 fi
@@ -26,6 +36,7 @@ ln -s "$ROOT/tests/test_deb_package_versions.sh" "$WORK/bin/cmake"
 PACKAGE="$WORK/infiltrator-defragmenter_${NATIVE_VERSION}_amd64.deb"
 PATH="$WORK/bin:$PATH" \
 LD_TEST_FAKE_CMAKE=1 \
+LD_TEST_SOURCE_ROOT="$ROOT" \
 LD_BUILD_FLAVOR=native \
 LD_BUILD_TESTING=OFF \
 DEB_PACKAGE_VERSION="$NATIVE_VERSION" \
