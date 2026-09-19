@@ -2,6 +2,9 @@
 #include "test_media.h"
 #include "sfs_native.h"
 
+#include <infiltratr/endian.h>
+#include <infiltratr/posix_io.h>
+
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -27,34 +30,18 @@
 #define SFS_TM_DATA_BLOCKS (SFS_TM_FRAGMENTS * SFS_TM_CHUNK_BLOCKS)
 #define SFS_TM_FILE_BYTES (SFS_TM_DATA_BLOCKS * SFS_TM_BLOCK_SIZE)
 
-static void put16(uint8_t *p, uint16_t value) {
-    p[0] = (uint8_t)(value >> 8);
-    p[1] = (uint8_t)value;
-}
-
-static void put32(uint8_t *p, uint32_t value) {
-    p[0] = (uint8_t)(value >> 24);
-    p[1] = (uint8_t)(value >> 16);
-    p[2] = (uint8_t)(value >> 8);
-    p[3] = (uint8_t)value;
-}
-
-static uint32_t get32(const uint8_t *p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
 
 static void stamp_checksum(uint8_t *block) {
     uint32_t sum = 1U;
-    put32(block + 4U, 0U);
+    infiltratr_store_be32(block + 4U, 0U);
     for (uint32_t offset = 0U; offset < SFS_TM_BLOCK_SIZE; offset += 4U)
-        sum += get32(block + offset);
-    put32(block + 4U, 0U - sum);
+        sum += infiltratr_load_be32(block + offset);
+    infiltratr_store_be32(block + 4U, 0U - sum);
 }
 
 static void set_header(uint8_t *block, const char id[4], uint32_t own_block) {
     memcpy(block, id, 4U);
-    put32(block + 8U, own_block);
+    infiltratr_store_be32(block + 8U, own_block);
 }
 
 static uint32_t fragment_start(uint32_t index) {
@@ -66,15 +53,15 @@ static uint32_t fragment_start(uint32_t index) {
 static void make_root(uint8_t *block, uint32_t own_block, uint16_t sequence) {
     memset(block, 0, SFS_TM_BLOCK_SIZE);
     set_header(block, "SFS\0", own_block);
-    put16(block + 12U, 3U);
-    put16(block + 14U, sequence);
-    put32(block + 48U, SFS_TM_BLOCKS);
-    put32(block + 52U, SFS_TM_BLOCK_SIZE);
-    put32(block + 96U, SFS_TM_BITMAP);
-    put32(block + 100U, SFS_TM_ADMIN);
-    put32(block + 104U, SFS_TM_OBJECTS);
-    put32(block + 108U, SFS_TM_EXTENTS);
-    put32(block + 112U, SFS_TM_OBJECT_NODES);
+    infiltratr_store_be16(block + 12U, 3U);
+    infiltratr_store_be16(block + 14U, sequence);
+    infiltratr_store_be32(block + 48U, SFS_TM_BLOCKS);
+    infiltratr_store_be32(block + 52U, SFS_TM_BLOCK_SIZE);
+    infiltratr_store_be32(block + 96U, SFS_TM_BITMAP);
+    infiltratr_store_be32(block + 100U, SFS_TM_ADMIN);
+    infiltratr_store_be32(block + 104U, SFS_TM_OBJECTS);
+    infiltratr_store_be32(block + 108U, SFS_TM_EXTENTS);
+    infiltratr_store_be32(block + 112U, SFS_TM_OBJECT_NODES);
     stamp_checksum(block);
 }
 
@@ -104,16 +91,16 @@ static void make_bitmap(uint8_t *block) {
 static void make_extent_tree(uint8_t *block) {
     memset(block, 0, SFS_TM_BLOCK_SIZE);
     set_header(block, "BNDC", SFS_TM_EXTENTS);
-    put16(block + 12U, SFS_TM_FRAGMENTS);
+    infiltratr_store_be16(block + 12U, SFS_TM_FRAGMENTS);
     block[14U] = 1U;
     block[15U] = 14U;
     for (uint32_t index = 0U; index < SFS_TM_FRAGMENTS; ++index) {
         uint8_t *node = block + 16U + (size_t)index * 14U;
         const uint32_t start = fragment_start(index);
-        put32(node, start);
-        put32(node + 4U, index + 1U < SFS_TM_FRAGMENTS ? fragment_start(index + 1U) : 0U);
-        put32(node + 8U, index > 0U ? fragment_start(index - 1U) : 0U);
-        put16(node + 12U, SFS_TM_CHUNK_BLOCKS);
+        infiltratr_store_be32(node, start);
+        infiltratr_store_be32(node + 4U, index + 1U < SFS_TM_FRAGMENTS ? fragment_start(index + 1U) : 0U);
+        infiltratr_store_be32(node + 8U, index > 0U ? fragment_start(index - 1U) : 0U);
+        infiltratr_store_be16(node + 12U, SFS_TM_CHUNK_BLOCKS);
     }
     stamp_checksum(block);
 }
@@ -123,10 +110,10 @@ static void make_object_container(uint8_t *block) {
     memset(block, 0, SFS_TM_BLOCK_SIZE);
     set_header(block, "OBJC", SFS_TM_OBJECTS);
     object = block + 24U;
-    put32(object + 4U, SFS_TM_FILE_ID);
-    put32(object + 8U, 0x0fU);
-    put32(object + 12U, fragment_start(0U));
-    put32(object + 16U, SFS_TM_FILE_BYTES);
+    infiltratr_store_be32(object + 4U, SFS_TM_FILE_ID);
+    infiltratr_store_be32(object + 8U, 0x0fU);
+    infiltratr_store_be32(object + 12U, fragment_start(0U));
+    infiltratr_store_be32(object + 16U, SFS_TM_FILE_BYTES);
     object[24U] = 0U;
     memcpy(object + 25U, "fragmented-00.bin", 18U);
     object[43U] = 0U;
@@ -147,8 +134,9 @@ static void make_payload(uint8_t *block, uint32_t fragment, uint32_t within) {
 }
 
 static int write_block(int fd, uint32_t block_number, const uint8_t *block) {
-    return pwrite(fd, block, SFS_TM_BLOCK_SIZE,
-                  (off_t)block_number * SFS_TM_BLOCK_SIZE) == (ssize_t)SFS_TM_BLOCK_SIZE ? 0 : -1;
+    return infiltratr_pwrite_full(
+        fd, block, SFS_TM_BLOCK_SIZE,
+        (uint64_t)block_number * SFS_TM_BLOCK_SIZE);
 }
 
 int ldtm_format_sfs_volume(const char *path) {
@@ -232,8 +220,9 @@ int ldtm_verify_sfs_payload(const char *path, const LdtmFragmentProfile *profile
     for (uint32_t fragment = 0U; fragment < SFS_TM_FRAGMENTS; ++fragment) {
         const uint32_t start = fragment_start(fragment);
         for (uint32_t within = 0U; within < SFS_TM_CHUNK_BLOCKS; ++within) {
-            if (pread(fd, actual, SFS_TM_BLOCK_SIZE,
-                      (off_t)(start + within) * SFS_TM_BLOCK_SIZE) != (ssize_t)SFS_TM_BLOCK_SIZE)
+            if (infiltratr_pread_full(
+                    fd, actual, SFS_TM_BLOCK_SIZE,
+                    (uint64_t)(start + within) * SFS_TM_BLOCK_SIZE) != 0)
                 goto cleanup;
             make_payload(expected, fragment, within);
             if (memcmp(actual, expected, SFS_TM_BLOCK_SIZE) != 0) goto cleanup;

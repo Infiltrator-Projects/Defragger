@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "test_media.h"
 
+#include <infiltratr/posix_io.h>
+
 #include <fcntl.h>
 #include <stdint.h>
 #include <string.h>
@@ -23,9 +25,9 @@ static int path_is_sfs(const char *path) {
     if (path == NULL) return 0;
     fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return 0;
-    const ssize_t got = pread(fd, magic, sizeof(magic), 0);
+    const int read_result = infiltratr_pread_full(fd, magic, sizeof(magic), 0U);
     (void)close(fd);
-    return got == (ssize_t)sizeof(magic) && memcmp(magic, "SFS\0", 4U) == 0;
+    return read_result == 0 && memcmp(magic, "SFS\0", 4U) == 0;
 }
 
 int ldtm_format_amiga_volume(const char *path, uint8_t dostype, const char *label) {

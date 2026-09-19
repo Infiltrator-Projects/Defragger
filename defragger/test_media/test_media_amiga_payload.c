@@ -5,6 +5,7 @@
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 #include "infiltratr/endian.h"
+#include "infiltratr/posix_io.h"
 
 #include <ctype.h>
 #include <stdint.h>
@@ -81,13 +82,13 @@ static void fix_checksum(unsigned char block[AMIGA_BLOCK_SIZE], uint32_t checksu
 }
 
 static int write_block(int fd, uint32_t block_number, const unsigned char block[AMIGA_BLOCK_SIZE]) {
-    const off_t offset = (off_t)block_number * (off_t)AMIGA_BLOCK_SIZE;
-    return pwrite(fd, block, AMIGA_BLOCK_SIZE, offset) == (ssize_t)AMIGA_BLOCK_SIZE ? 0 : -1;
+    const uint64_t offset = (uint64_t)block_number * AMIGA_BLOCK_SIZE;
+    return infiltratr_pwrite_full(fd, block, AMIGA_BLOCK_SIZE, offset);
 }
 
 static int read_block(int fd, uint32_t block_number, unsigned char block[AMIGA_BLOCK_SIZE]) {
-    const off_t offset = (off_t)block_number * (off_t)AMIGA_BLOCK_SIZE;
-    return pread(fd, block, AMIGA_BLOCK_SIZE, offset) == (ssize_t)AMIGA_BLOCK_SIZE ? 0 : -1;
+    const uint64_t offset = (uint64_t)block_number * AMIGA_BLOCK_SIZE;
+    return infiltratr_pread_full(fd, block, AMIGA_BLOCK_SIZE, offset);
 }
 
 static void set_bstr_name(unsigned char block[AMIGA_BLOCK_SIZE], const char *name) {

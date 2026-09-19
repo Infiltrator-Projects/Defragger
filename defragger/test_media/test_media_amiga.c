@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "test_media.h"
 
+#include <infiltratr/endian.h>
+#include <infiltratr/posix_io.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -18,24 +21,13 @@
 #define AMIGA_BITMAP_WORDS 127U
 #define AMIGA_BITMAP_BITS (AMIGA_BITMAP_WORDS * 32U)
 
-static uint32_t get_be32(const unsigned char *p) {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
-}
-
-static void put_be32(unsigned char *p, uint32_t value) {
-    p[0] = (unsigned char)(value >> 24);
-    p[1] = (unsigned char)(value >> 16);
-    p[2] = (unsigned char)(value >> 8);
-    p[3] = (unsigned char)value;
-}
 
 static uint32_t block_word(const unsigned char block[AMIGA_BLOCK_SIZE], uint32_t index) {
-    return get_be32(block + (size_t)index * 4U);
+    return infiltratr_load_be32(block + (size_t)index * 4U);
 }
 
 static void set_block_word(unsigned char block[AMIGA_BLOCK_SIZE], uint32_t index, uint32_t value) {
-    put_be32(block + (size_t)index * 4U, value);
+    infiltratr_store_be32(block + (size_t)index * 4U, value);
 }
 
 static uint32_t checksum_value(const unsigned char block[AMIGA_BLOCK_SIZE], uint32_t checksum_index) {
@@ -48,13 +40,13 @@ static uint32_t checksum_value(const unsigned char block[AMIGA_BLOCK_SIZE], uint
 }
 
 static int write_block(int fd, uint32_t block_number, const unsigned char block[AMIGA_BLOCK_SIZE]) {
-    const off_t offset = (off_t)block_number * (off_t)AMIGA_BLOCK_SIZE;
-    return pwrite(fd, block, AMIGA_BLOCK_SIZE, offset) == (ssize_t)AMIGA_BLOCK_SIZE ? 0 : -1;
+    const uint64_t offset = (uint64_t)block_number * AMIGA_BLOCK_SIZE;
+    return infiltratr_pwrite_full(fd, block, AMIGA_BLOCK_SIZE, offset);
 }
 
 static int read_block(int fd, uint32_t block_number, unsigned char block[AMIGA_BLOCK_SIZE]) {
-    const off_t offset = (off_t)block_number * (off_t)AMIGA_BLOCK_SIZE;
-    return pread(fd, block, AMIGA_BLOCK_SIZE, offset) == (ssize_t)AMIGA_BLOCK_SIZE ? 0 : -1;
+    const uint64_t offset = (uint64_t)block_number * AMIGA_BLOCK_SIZE;
+    return infiltratr_pread_full(fd, block, AMIGA_BLOCK_SIZE, offset);
 }
 
 static uint32_t next_metadata_block(uint32_t *cursor, uint32_t root) {
