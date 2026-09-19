@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ABOUT = (ROOT / "gui" / "ui" / "about.py").read_text()
+ICON_ASSETS = (ROOT / "gui" / "ui" / "icon_assets.py").read_text()
 APPLICATION = (ROOT / "gui" / "ui" / "application.py").read_text()
 WINDOW = (ROOT / "gui" / "ui" / "window.py").read_text()
 
@@ -21,20 +22,27 @@ for required in (
     "dialog.set_wrap_license(True)",
     'website_label="Project website"',
     "APP_ICON_NAME",
-    "GdkPixbuf.Pixbuf.new_from_file_at_scale",
-    '"/usr/lib/linux-defragger/defragmenter-icon.png"',
+    "load_app_icon_pixbuf(96)",
     'subtitle="DEFRAGMENTER · NATIVE FILESYSTEM OPTIMISATION"',
     '"Shannon Smith — Author and project maintainer"',
 ):
     assert required in ABOUT, required
 
-assert 'APP_ICON_FILE = "/usr/lib/linux-defragger/defragmenter-icon.png"' in APPLICATION
-assert "Gtk.Window.set_default_icon_from_file(APP_ICON_FILE)" in APPLICATION
+for required in (
+    '"/usr/lib/linux-defragger/defragmenter-icon.png"',
+    '"/usr/share/icons/hicolor/256x256/apps/io.github.linuxdefragger.png"',
+    '"packaging" / "io.github.linuxdefragger.png"',
+    "GdkPixbuf.Pixbuf.new_from_file_at_scale",
+    "Gtk.Window.set_default_icon_from_file",
+    "window.set_icon_from_file",
+    "Gtk.Window.set_default_icon_name(APP_ICON_NAME)",
+    "window.set_icon_name(APP_ICON_NAME)",
+):
+    assert required in ICON_ASSETS, required
+
+assert "apply_default_window_icon()" in APPLICATION
 assert "from .about import LinkStandardWindowView" in WINDOW
-assert "APP_ICON_NAME" in WINDOW
-assert 'APP_ICON_FILE = "/usr/lib/linux-defragger/defragmenter-icon.png"' in WINDOW
-assert "self.set_icon_from_file(APP_ICON_FILE)" in WINDOW
-assert "self.set_icon_name(APP_ICON_NAME)" in WINDOW
+assert "apply_window_icon(self)" in WINDOW
 assert "self.view = LinkStandardWindowView(" in WINDOW
 assert "self.view = WindowView(" not in WINDOW
 
