@@ -561,6 +561,24 @@ if(BUILD_TESTING)
         linux-defragger-runtime-cpp linux-defragger-core)
     add_test(NAME linux-defragger-cpp-runtime
         COMMAND linux-defragger-cpp-runtime-test)
+
+    add_executable(linux-defragger-privileged-helper-test
+        native/privileged_helper.cpp)
+    target_include_directories(linux-defragger-privileged-helper-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/native"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+        "${LD_GENERATED_DIR}")
+    target_compile_options(linux-defragger-privileged-helper-test PRIVATE
+        ${LD_WARNING_FLAGS})
+    target_compile_definitions(linux-defragger-privileged-helper-test PRIVATE
+        _FILE_OFFSET_BITS=64 _GNU_SOURCE LD_PRIVILEGED_HELPER_TEST_MODE=1)
+    target_link_libraries(linux-defragger-privileged-helper-test PRIVATE
+        linux-defragger-runtime-cpp linux-defragger-core Threads::Threads)
+    add_test(NAME linux-defragger-privileged-helper-protocol
+        COMMAND /bin/bash
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_privileged_helper_protocol.sh"
+            "$<TARGET_FILE:linux-defragger-privileged-helper-test>")
+
     add_test(NAME linux-defragger-operation-engine-cpp-manifest
         COMMAND linux-defragger-operation-engine-cpp --list-plugins)
     add_test(NAME linux-defragger-mapper-cpp-manifest

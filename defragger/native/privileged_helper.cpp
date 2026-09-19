@@ -585,11 +585,13 @@ bool ignore_sigpipe() {
 } // namespace defragger
 
 int main() {
+#ifndef LD_PRIVILEGED_HELPER_TEST_MODE
     if (geteuid() != 0) {
         std::fputs(
             "Defragmenter privileged helper must run as root\n", stderr);
         return 1;
     }
+#endif
     if (!defragger::ignore_sigpipe()) {
         std::fprintf(
             stderr, "Defragmenter privileged helper: cannot ignore SIGPIPE: %s\n",
@@ -597,8 +599,13 @@ int main() {
         return 1;
     }
     try {
-        defragger::Helper helper(
-            defragger::invoking_uid_from_environment());
+#ifdef LD_PRIVILEGED_HELPER_TEST_MODE
+        constexpr std::uint32_t invoking_uid = 1000U;
+#else
+        const std::uint32_t invoking_uid =
+            defragger::invoking_uid_from_environment();
+#endif
+        defragger::Helper helper(invoking_uid);
         return helper.run();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "Defragmenter privileged helper: %s\n",
