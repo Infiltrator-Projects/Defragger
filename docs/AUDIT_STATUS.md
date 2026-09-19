@@ -3,10 +3,10 @@
 Status: **complete**
 
 Completed: 2026-08-25  
-Extended: 2026-09-19
+Extended: 2026-09-20
 
-Applies to: release version 1.8.0-180
-Audited source commit: 295f00146ecb6b6c1c71c8b39f6cfd04338d0856
+Applies to: release version 1.8.0-181
+Audited source commit: ab1a8bc1624baf8432ba54db976894228f844425
 Audited release-governance commit: b5f891f623f37df16d0d902029a22ca715301581
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -75,7 +75,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-180 is the current audited release line. It retains the XFS allocation-tree, MB-only typography and approved-icon corrections from 1.8.0-177 through 1.8.0-179 while advancing the reusable foundation to Common 1.19.8. Generic JSON real conversion, checked allocation sizing, shared typography/metrics and font asset provenance now come from Common where the contracts match; filesystem semantics, destructive-operation safety and recovery policy remain Defragmenter-owned. Architecture, GUI and release regressions verify these ownership boundaries and the exact Common revision. The C++17 application-service and first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
+Version 1.8.0-181 is the current audited release line. It retains the XFS allocation-tree and MB-only typography corrections while closing the remaining application-icon delivery gap: About, process-wide GTK defaults and individual windows now share one deterministic resolver for the approved artwork, and Debian packaging fails closed if the private, hicolor or Mint app-install copies are missing or differ from that artwork. The reusable foundation remains Common 1.19.8 at the exact audited pin. Filesystem semantics, destructive-operation safety and recovery policy remain Defragmenter-owned, and the C++17 application-service plus first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 
