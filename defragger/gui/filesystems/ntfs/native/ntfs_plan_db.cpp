@@ -6,7 +6,7 @@
  * exists because SQLite statements, rollback state and OpenSSL digest contexts
  * have deterministic lifetime semantics that are clearer and safer under RAII
  * than through repeated goto/finalize/free paths. All exported functions keep
- * the existing C ABI and no inheritance or virtual dispatch is used.
+ * the existing C ABI and no inheritance or runtime polymorphism is used.
  */
 extern "C" {
 #include "ntfs_native.h"
