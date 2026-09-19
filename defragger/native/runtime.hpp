@@ -35,6 +35,7 @@ enum class MapAdapter {
     Apfs,
     Exfat,
     Ext,
+    Fat,
     HfsPlus,
     Ntfs,
     Xfs,

@@ -195,7 +195,7 @@ const std::vector<BackendInfo>& backend_registry() {
             result.push_back({
                 id, "FAT" + std::to_string(bits),
                 {id, bits == 32 ? "vfat" : "msdos" + std::to_string(bits)},
-                write, "exact", "fat-native", MapAdapter::NativeMap,
+                write, "exact", "fat-native", MapAdapter::Fat,
                 standard_write_ops("fat-native")});
         }
         result.push_back({

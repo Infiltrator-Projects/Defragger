@@ -70,6 +70,33 @@ int main() {
     if (apfs != nullptr)
         ok = check(apfs->operations.empty(), "APFS remains read-only") && ok;
 
+    const BackendInfo* fat12 = backend_by_fstype("fat12");
+    ok = check(fat12 != nullptr, "FAT12 lookup") && ok;
+    if (fat12 != nullptr) {
+        const std::string fat_worker = fake_map_worker(
+            "{\"filesystem\":\"FAT12\",\"cluster_size\":512,"
+            "\"data_clusters\":4,\"free_clusters\":2,\"used_clusters\":2,"
+            "\"regular_files\":1,\"fragmented_files\":1,\"directories\":1,"
+            "\"fragmented_directories\":0,\"free_gaps_below_highest\":1,"
+            "\"cell_count\":2,\"cells\":["
+            "{\"start\":2,\"end\":3,\"free\":0,\"used\":2,"
+            "\"fragmented\":1,\"directory\":1,\"bad\":0},"
+            "{\"start\":4,\"end\":5,\"free\":2,\"used\":0,"
+            "\"fragmented\":0,\"directory\":0,\"bad\":0}]}");
+        (void)setenv("LINUX_DEFRAGGER_FAT_WORKER", fat_worker.c_str(), 1);
+        try {
+            const Json mapped = map_backend(*fat12, "/dev/null", 2U);
+            ok = check(mapped.at("filesystem").string() == "FAT12",
+                       "FAT-specific map contract accepted") && ok;
+            ok = check(mapped.at("data_clusters").unsigned_value() == 4U,
+                       "FAT map geometry preserved") && ok;
+        } catch (...) {
+            ok = check(false, "FAT-specific map contract accepted") && ok;
+        }
+        (void)unlink(fat_worker.c_str());
+        (void)unsetenv("LINUX_DEFRAGGER_FAT_WORKER");
+    }
+
     const std::vector<std::string> input{
         "--keep", "a", "--drop", "value", "--drop=other", "--tail"};
     const std::vector<std::string> blocked{"--drop"};

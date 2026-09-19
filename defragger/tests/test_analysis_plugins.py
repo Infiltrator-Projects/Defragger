@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,6 +80,39 @@ if native_mapper.is_file():
         stderr=subprocess.PIPE,
     )
     assert rejected_equals.returncode == 2
+
+    with tempfile.TemporaryDirectory(prefix="defragger-fat-map-") as temp_dir:
+        fat_image = Path(temp_dir) / "fat12.img"
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "tests" / "make_fat12_16_image.py"),
+                "fat12",
+                str(fat_image),
+                "fragmented",
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        fat_result = subprocess.run(
+            [
+                str(native_mapper),
+                str(fat_image),
+                "--fstype",
+                "fat12",
+                "--cells",
+                "128",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        fat_map = json.loads(fat_result.stdout)
+        assert fat_map["filesystem"] == "FAT12"
+        assert fat_map["backend_id"] == "fat12"
+        assert fat_map["data_clusters"] > 0
+        assert fat_map["cell_count"] == len(fat_map["cells"])
 
 invalid = subprocess.run(
     [sys.executable, str(mapper), "/dev/null", "--fstype", "ntfs", "--cells", "128"],

@@ -4,6 +4,7 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+- Fixed a 1.8.0-173 regression where the C++ allocation mapper incorrectly required the generic schema from the FAT12/FAT16/FAT32 worker even though FAT intentionally retains its established cluster-map contract; FAT analysis now has an explicit validated adapter and a real FAT12 end-to-end regression fixture.
 - Moved the production allocation mapper, operation dispatcher and privileged helper session into the selective C++17 application-service layer while retaining the established native C filesystem engines.
 - Hardened privileged shutdown: the helper now uses `posix_spawn` with a dedicated process group, survives a closed protocol pipe long enough to request cooperative Stop, and waits for the privileged writer to exit.
 - Strengthened the C++ mapper's fail-closed schema, identity, geometry and accuracy validation and qualified translated maps against real EXT, NTFS, exFAT, XFS, Amiga OFS/FFS and HFS+ fixtures.

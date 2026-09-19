@@ -301,6 +301,77 @@ Json map_ext(const BackendInfo& backend, const std::string& path,
     return result;
 }
 
+Json map_fat(const BackendInfo& backend, const std::string& path,
+             std::size_t cells) {
+    Json payload = parse_worker_json(
+        worker(backend, "map", path,
+               {"--cells", std::to_string(std::max<std::size_t>(1U, cells))}),
+        "native FAT mapper");
+
+    const Json* filesystem = payload.find("filesystem");
+    if (filesystem == nullptr || !filesystem->is_string()) {
+        throw std::runtime_error(
+            "native FAT mapper omitted filesystem identity");
+    }
+    const BackendInfo* resolved = backend_by_fstype(filesystem->string());
+    if (resolved == nullptr || resolved->id != backend.id) {
+        throw std::runtime_error(
+            "native FAT mapper returned wrong filesystem identity");
+    }
+
+    const std::uint64_t cluster_size = required_u64(payload, "cluster_size");
+    const std::uint64_t total = required_u64(payload, "data_clusters");
+    const std::uint64_t declared_free = required_u64(payload, "free_clusters");
+    const std::uint64_t cell_count = required_u64(payload, "cell_count");
+    const Json* raw_cells = payload.find("cells");
+    if (cluster_size == 0U || total == 0U || declared_free > total ||
+        cell_count == 0U || raw_cells == nullptr || !raw_cells->is_array() ||
+        cell_count != raw_cells->array().size() ||
+        total > std::numeric_limits<std::uint64_t>::max() - 2U) {
+        throw std::runtime_error(
+            "native FAT mapper returned invalid map geometry");
+    }
+
+    std::uint64_t expected_start = 2U;
+    std::uint64_t free_total = 0U;
+    std::uint64_t used_total = 0U;
+    for (const auto& cell : raw_cells->array()) {
+        if (!cell.is_object()) {
+            throw std::runtime_error(
+                "native FAT mapper returned malformed allocation cell");
+        }
+        const std::uint64_t start = required_u64(cell, "start");
+        const std::uint64_t end = required_u64(cell, "end");
+        const std::uint64_t free = required_u64(cell, "free");
+        const std::uint64_t used = required_u64(cell, "used");
+        const std::uint64_t fragmented = required_u64(cell, "fragmented");
+        const std::uint64_t directory = required_u64(cell, "directory");
+        const std::uint64_t bad = required_u64(cell, "bad");
+        if (start != expected_start || end < start ||
+            end >= total + 2U) {
+            throw std::runtime_error(
+                "native FAT mapper returned discontinuous allocation cells");
+        }
+        const std::uint64_t span = end - start + 1U;
+        if (free > span || used > span || free + used != span ||
+            fragmented > used || directory > used || bad > used) {
+            throw std::runtime_error(
+                "native FAT mapper returned inconsistent allocation counts");
+        }
+        free_total += free;
+        used_total += used;
+        expected_start = end + 1U;
+    }
+    if (expected_start != total + 2U ||
+        free_total != declared_free ||
+        used_total != total - declared_free) {
+        throw std::runtime_error(
+            "native FAT mapper totals do not match filesystem geometry");
+    }
+
+    return payload;
+}
+
 Json map_hfsplus(const BackendInfo& backend, const std::string& path,
                   std::size_t cells) {
     Json payload = parse_worker_json(
@@ -679,6 +750,8 @@ Json map_backend(const BackendInfo& backend, const std::string& path,
         return map_exfat(backend, path, cells);
     case MapAdapter::Ext:
         return map_ext(backend, path, cells);
+    case MapAdapter::Fat:
+        return map_fat(backend, path, cells);
     case MapAdapter::HfsPlus:
         return map_hfsplus(backend, path, cells);
     case MapAdapter::Ntfs:
