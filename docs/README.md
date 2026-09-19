@@ -1,33 +1,27 @@
 # Documentation
 
-This directory is the canonical documentation entry point for Defragmenter. The Infiltrator project family uses the same baseline document roles in every repository so readers can move between projects without relearning the structure.
+This directory is the canonical documentation entry point for Defragmenter.
 
 ## Canonical baseline
 
 - [Architecture](ARCHITECTURE.md) — ownership, layers, dependencies and system boundaries.
-- [Design](DESIGN.md) — first-principles goals, non-goals, trade-offs and failure philosophy.
+- [Design](DESIGN.md) — safety model, trust boundaries, invariants, trade-offs and implementation architecture.
+- [Decisions](DECISIONS.md) — durable architectural decisions, alternatives and consequences.
 - [Roadmap](ROADMAP.md) — current foundation, near-term priorities and longer-term direction.
-- [Validation](VALIDATION.md) — automated, manual and environment-specific evidence boundaries.
+- [Validation](VALIDATION.md) — qualification methodology, traceability and evidence boundaries.
 - [Project README](../README.md) — product overview, capabilities, build/use entry point and engineering ethos.
 - [Changelog](../CHANGELOG.md) — user-visible and contract-relevant change history.
 - [Contributing](../CONTRIBUTING.md) — development, ownership and verification rules.
-- [Security](../SECURITY.md) — vulnerability scope, reporting and response policy.
-
-## Documentation authority
-
-The baseline files have distinct responsibilities and should not compete as alternate sources of truth. Architecture describes where behaviour belongs; Design explains why; Roadmap describes direction; Validation records what evidence is required. Code and tests remain authoritative for executable behaviour, while immutable tags/releases identify historical source.
-
-Specialist documents may go deeper into one subsystem, protocol, platform, research area or historical investigation. They should link back to the canonical baseline when a reader needs the wider project context.
+- [Security](../SECURITY.md) — vulnerability reporting and supported-source policy.
 
 ## Specialist documentation
 
-- defragger/README.md — specialist or historical detail retained alongside the canonical baseline.
-- defragger/docs/AUDIT_STATUS.md — specialist or historical detail retained alongside the canonical baseline.
-- defragger/docs/DECISIONS.md — specialist or historical detail retained alongside the canonical baseline.
-- defragger/docs/DESIGN.md — specialist or historical detail retained alongside the canonical baseline.
-- defragger/docs/REFERENCES.md — specialist or historical detail retained alongside the canonical baseline.
-- defragger/docs/VALIDATION.md — specialist or historical detail retained alongside the canonical baseline.
+- [Audit status](AUDIT_STATUS.md) — release-specific safety audit evidence and exact audited source.
+- [References](REFERENCES.md) — external specifications, format references and engineering sources.
+- [Implementation README](../defragger/README.md) — canonical source-tree/build entry point for the application directory.
 
-## Maintenance rule
+## Authority
 
-When a change moves an ownership boundary, support boundary, validation claim or major design decision, update the corresponding canonical document in the same change. Avoid copying the same status statement into several files; link to the authoritative document instead.
+Architecture defines ownership. Design defines safety and present rationale. Decisions preserve long-lived choices and rejected alternatives. Roadmap states direction. Validation defines the evidence methodology. Audit Status records release-specific audit evidence.
+
+Do not duplicate those roles in new Markdown files. Filesystem-specific implementation detail belongs with the owning source/package unless it requires a maintained cross-format contract.
