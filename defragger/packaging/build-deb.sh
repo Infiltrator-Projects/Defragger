@@ -37,6 +37,22 @@ cmake "$@"
 cmake --build "$BUILD" -j"${BUILD_JOBS:-2}"
 DESTDIR="$STAGE/root" cmake --install "$BUILD"
 
+SOURCE_ICON="$ROOT/packaging/io.github.linuxdefragger.png"
+for INSTALLED_ICON in \
+    "$STAGE/root/usr/lib/linux-defragger/defragmenter-icon.png" \
+    "$STAGE/root/usr/share/icons/hicolor/256x256/apps/io.github.linuxdefragger.png" \
+    "$STAGE/root/usr/share/app-install/icons/infiltrator-defragmenter.png"
+do
+    [ -f "$INSTALLED_ICON" ] || {
+        printf 'Required Defragmenter icon missing from package stage: %s\n' "$INSTALLED_ICON" >&2
+        exit 1
+    }
+    cmp -s "$SOURCE_ICON" "$INSTALLED_ICON" || {
+        printf 'Packaged Defragmenter icon differs from approved artwork: %s\n' "$INSTALLED_ICON" >&2
+        exit 1
+    }
+done
+
 FONT_ARCHIVE="$STAGE/mb-corpo-fonts.tar.xz"
 if [ -f "$ROOT/assets/fonts/mb-corpo-fonts.tar.xz" ]; then
     cp "$ROOT/assets/fonts/mb-corpo-fonts.tar.xz" "$FONT_ARCHIVE"
