@@ -30,8 +30,8 @@ Cross-layer shortcuts require a documented reason. Platform handles and toolkit 
 
 ## Specialist documents
 
-- defragger/docs/AUDIT_STATUS.md
-- defragger/docs/DECISIONS.md
-- defragger/docs/DESIGN.md
-- defragger/docs/REFERENCES.md
-- defragger/docs/VALIDATION.md
+- docs/AUDIT_STATUS.md
+- docs/DECISIONS.md
+- docs/DESIGN.md
+- docs/REFERENCES.md
+- docs/VALIDATION.md
