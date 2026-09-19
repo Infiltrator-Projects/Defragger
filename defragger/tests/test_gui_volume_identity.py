@@ -203,7 +203,7 @@ def test_unknown_generic_fat_is_not_labeled_fat32() -> None:
     volume = _volume(fs_version="")
     # The common FAT32 backend remains the compatibility routing fallback, but
     # the GUI must not turn incomplete Linux metadata into a false FAT32 claim.
-    assert volume.normalized_fstype == "fat32"
+    assert volume.normalized_fstype == "vfat"
     assert volume.display_fstype == "fat"
     assert "— FAT —" in volume.display_name
 

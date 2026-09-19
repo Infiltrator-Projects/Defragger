@@ -13,13 +13,15 @@ The project quality gate combines:
 - warnings-as-errors native builds;
 - parser, geometry, checksum and allocation-model tests;
 - disposable filesystem-image mutation tests;
-- target-safety, privilege, Stop and transaction regressions, including a native privileged-helper closed-pipe test that verifies fail-safe supervisor shutdown;
+- target-safety, privilege, Stop and transaction regressions, including mounted-image hard-link identity and native privileged-helper tests that launch controlled children and verify SIGINT, delayed safe completion and reaping on Stop, control EOF and broken output;
 - GUI/service and typed worker-protocol tests, plus C++ mapper contract checks and real-fixture parity against native filesystem analysis;
 - architecture/Common/release-contract tests;
 - AddressSanitizer and UndefinedBehaviorSanitizer qualification;
 - package/native-installer construction from the exact tested source.
 
 Automated checks cover ordinary behaviour, important boundaries, malformed/error cases and release/package contracts appropriate to the affected subsystem.
+
+The native supervisor fixtures exercise the production supervision code through a test-only child resolver; they do not themselves write a filesystem. Real disposable-image worker tests separately verify payload, layout and recovery. Mapper regressions include generic FAT identification for FAT12/FAT16 and an 800,000-cell FAT32 map exceeding 64 MiB, plus rejection beyond the GUI's 1,048,576-cell maximum. GUI lifecycle tests verify that image mutation and Recover use the protected privileged journal path.
 
 ## Destructive-path evidence
 

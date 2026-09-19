@@ -274,13 +274,14 @@ def test_complete_gui_operation_lifecycle() -> None:
         view.confirm_result = True
         coordinator.start_mutation("defrag")
         mutation = runner.requests[-1]
-        assert mutation.purpose == "defrag" and not mutation.privileged
+        assert mutation.purpose == "defrag" and mutation.privileged
         assert volumes.invalidated == [str(image)]
         runner.complete(0, "")
         assert runner.requests[-1].purpose == "analysis"
         runner.complete(0, _map_payload())
 
         coordinator.start_mutation("growth-defrag")
+        assert runner.requests[-1].privileged
         runner.complete(130, "")
         assert runner.requests[-1].purpose == "analysis"
         runner.complete(0, _map_payload())
@@ -306,6 +307,7 @@ def test_recovery_journal_controls_and_privilege_selection() -> None:
 
         coordinator.start_mutation("recover")
         assert runner.requests[-1].purpose == "recover"
+        assert runner.requests[-1].privileged
         assert "--journal" in runner.requests[-1].arguments
 
         physical, _view, physical_runner, _volumes = _composed(

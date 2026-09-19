@@ -226,7 +226,9 @@ class OperationCoordinator:
         )
         self.run_command(
             list(plan.arguments),
-            privileged=self._requires_privilege(volume.path, volume.image),
+            # Every mutation uses the protected, root-owned journal namespace,
+            # including writes and recovery for user-owned image files.
+            privileged=True,
             purpose=operation,
             on_success=lambda _output: self.analyze(clear_log=False),
         )

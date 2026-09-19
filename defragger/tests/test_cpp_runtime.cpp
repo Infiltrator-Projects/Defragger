@@ -47,6 +47,15 @@ int main() {
     using namespace defragger;
     bool ok = true;
 
+    for (const std::size_t invalid_cells : {std::size_t{0U}, kMaxMapCells + 1U}) {
+        bool rejected = false;
+        try { (void)map_capture_limit(invalid_cells); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        ok = check(rejected, "map capture rejects invalid cell count") && ok;
+    }
+    ok = check(map_capture_limit(800000U) > 64U * 1024U * 1024U,
+               "large GUI maps have bounded capture space") && ok;
+
     const auto& registry = backend_registry();
     ok = check(registry.size() == 17U, "registry size") && ok;
 

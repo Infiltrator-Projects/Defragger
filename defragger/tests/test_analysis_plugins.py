@@ -16,6 +16,9 @@ GUI = ROOT / "gui"
 sys.path.insert(0, str(GUI))
 
 from backends.registry import Registry
+from ui.backend_catalog import BackendCatalog
+from ui.operation_planner import build_analysis_arguments
+from ui.volume_coordinator import VolumeCoordinator
 
 registry = Registry()
 manifest = registry.manifest()
@@ -36,7 +39,7 @@ result = subprocess.run(
 listed = json.loads(result.stdout)["backends"]
 assert [item["id"] for item in listed] == [item["id"] for item in manifest]
 
-native_mapper = ROOT / "build" / "linux-defragger-mapper"
+native_mapper = Path(os.environ.get("LINUX_DEFRAGGER_BUILD_DIR", str(ROOT / "build"))) / "linux-defragger-mapper"
 if native_mapper.is_file():
     native_result = subprocess.run(
         [str(native_mapper), "--list-backends"],
@@ -62,7 +65,7 @@ if native_mapper.is_file():
     )
     assert json.loads(equals_form.stdout)["backends"] == manifest
 
-    for bad_cells in ("-1", "0", "128junk", "+128"):
+    for bad_cells in ("-1", "0", "128junk", "+128", "1048577"):
         rejected = subprocess.run(
             [str(native_mapper), "--list-backends", "--cells", bad_cells],
             text=True,
@@ -113,6 +116,52 @@ if native_mapper.is_file():
         assert fat_map["backend_id"] == "fat12"
         assert fat_map["data_clusters"] > 0
         assert fat_map["cell_count"] == len(fat_map["cells"])
+
+        for variant in ("fat12", "fat16"):
+            subprocess.run(
+                [sys.executable, str(ROOT / "tests" / "make_fat12_16_image.py"),
+                 variant, str(fat_image), "fragmented"], check=True,
+                stdout=subprocess.DEVNULL,
+            )
+            # Use the actual image-open and argument-construction path too:
+            # blkid reports "vfat", without a FAT12/FAT16 FSVER field.
+            volumes = VolumeCoordinator(BackendCatalog.from_manifest({"backends": manifest}))
+            volume = volumes.open_image(str(fat_image))
+            gui_arguments = build_analysis_arguments(
+                str(native_mapper), volume, 128, minimum_cells=1,
+                maximum_cells=1048576,
+            )
+            opened = subprocess.run(gui_arguments, check=True, capture_output=True, text=True)
+            assert json.loads(opened.stdout)["backend_id"] == variant
+            for generic in ("vfat", "fat", "msdos"):
+                detected = subprocess.run(
+                    [str(native_mapper), str(fat_image), "--fstype", generic,
+                     "--cells", "128"], check=True, capture_output=True, text=True,
+                )
+                assert json.loads(detected.stdout)["backend_id"] == variant
+            mismatch = subprocess.run(
+                [str(native_mapper), str(fat_image), "--fstype", "fat32"],
+                capture_output=True,
+            )
+            assert mismatch.returncode != 0, "explicit wrong FAT identity must fail"
+
+        # Above the old 64 MiB capture ceiling, but within the GUI's limit.
+        large_image = Path(temp_dir) / "large-fat32.img"
+        subprocess.run(
+            [sys.executable, str(ROOT / "tests" / "make_fragmented_image.py"),
+             str(large_image), "2097152"], check=True, stdout=subprocess.DEVNULL,
+        )
+        with (Path(temp_dir) / "large-map.json").open("w+") as output:
+            subprocess.run(
+                [str(native_mapper), str(large_image), "--fstype", "vfat",
+                 "--cells", "800000"], stdout=output, stderr=subprocess.PIPE,
+                text=True, check=True, timeout=120,
+            )
+            assert output.tell() > 64 * 1024 * 1024
+            output.seek(0)
+            large_map = json.load(output)
+        assert large_map["backend_id"] == "fat32"
+        assert large_map["cell_count"] == len(large_map["cells"]) == 800000
 
 invalid = subprocess.run(
     [sys.executable, str(mapper), "/dev/null", "--fstype", "ntfs", "--cells", "128"],

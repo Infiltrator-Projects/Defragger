@@ -6,13 +6,13 @@
 
 Defragmenter is a C-first offline filesystem allocation analyser and defragmenter for Linux. Native C owns the raw filesystem engines and storage-safety core; C++17 owns selected filesystem-neutral application services where RAII, stronger value types and explicit process/protocol ownership improve the implementation. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-175
+**Current version:** 1.8.0-176
 
 **Platform:** Linux
 
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** The version 1.8.0-175 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
+> **Safety status:** The version 1.8.0-176 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
 
 ## Engineering ethos
 
@@ -60,7 +60,7 @@ cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
 ```
 
-The permanent GitHub quality gate performs warnings-as-errors C/C++ builds and runs the complete native, filesystem, GUI, architecture, safety and release regression suite, including native-helper closed-pipe shutdown and C++ mapper fixture-parity checks.
+The permanent GitHub quality gate performs warnings-as-errors C/C++ builds and runs the complete native, filesystem, GUI, architecture, safety and release regression suite, including native-helper shutdown with live child processes, mounted-image hard-link identity, large-map capture and C++ mapper fixture-parity checks.
 
 ## Release assets
 
@@ -82,7 +82,7 @@ This repository uses `main` as its working branch. Development changes are made 
 
 Every push to `main` runs the project quality gate. Ordinary commits do not publish. A commit becomes release-eligible only when its subject begins `Release <version>` and the complete quality gate succeeds.
 
-The release workflow checks the exact tested `main` commit, confirms that `main` is permanently protected by the `quality-gate` status check, and creates a new immutable version tag and release only from that exact current tested commit.
+The release workflow requires a successful Project quality gate for the exact current `main` commit, verifies permanent history protection against deletion, force pushes and nonlinear history, and creates a new immutable version tag and release only from that tested commit.
 
 Existing version tags and published releases are immutable and are never moved, replaced or edited in place. Manually runnable quality-gate helpers are diagnostic tools only and are not release-approval mechanisms.
 

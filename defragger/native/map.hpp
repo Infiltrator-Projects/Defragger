@@ -11,6 +11,11 @@
 
 namespace defragger {
 
+inline constexpr std::size_t kMaxMapCells = 1048576U;
+
+// Keep the transport bounded while allowing every GUI-supported map size.
+std::size_t map_capture_limit(std::size_t cells);
+
 struct UnitRange {
     std::uint64_t start = 0U;
     std::uint64_t end = 0U;

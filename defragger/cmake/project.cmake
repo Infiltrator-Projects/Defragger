@@ -581,6 +581,13 @@ if(BUILD_TESTING)
         COMMAND /bin/bash
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_privileged_helper_protocol.sh"
             "$<TARGET_FILE:linux-defragger-privileged-helper-test>")
+    find_program(LD_HELPER_TEST_PYTHON NAMES python3 REQUIRED)
+    add_test(NAME linux-defragger-privileged-helper-lifecycle
+        COMMAND "${LD_HELPER_TEST_PYTHON}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_privileged_helper_lifecycle.py"
+            "$<TARGET_FILE:linux-defragger-privileged-helper-test>")
+    set_tests_properties(linux-defragger-privileged-helper-lifecycle
+        PROPERTIES TIMEOUT 90)
 
     add_test(NAME linux-defragger-operation-engine-cpp-manifest
         COMMAND linux-defragger-operation-engine-cpp --list-plugins)
@@ -659,6 +666,16 @@ if(BUILD_TESTING)
     target_compile_options(linux-defragger-native-core-test PRIVATE ${LD_WARNING_FLAGS})
     target_link_libraries(linux-defragger-native-core-test PRIVATE linux-defragger-core)
     add_test(NAME linux-defragger-native-core COMMAND linux-defragger-native-core-test)
+    add_executable(linux-defragger-mounted-image-identity-test
+        tests/test_mounted_image_identity.c)
+    target_include_directories(linux-defragger-mounted-image-identity-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core" "${LD_GENERATED_DIR}")
+    target_compile_options(linux-defragger-mounted-image-identity-test PRIVATE ${LD_WARNING_FLAGS})
+    target_compile_definitions(linux-defragger-mounted-image-identity-test PRIVATE
+        _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+    target_link_libraries(linux-defragger-mounted-image-identity-test PRIVATE linux-defragger-core)
+    add_test(NAME linux-defragger-mounted-image-identity
+        COMMAND linux-defragger-mounted-image-identity-test)
     add_executable(linux-defragger-fat-volume-test
         tests/test_fat_volume.c
         gui/filesystems/fat/native/fat_io.c

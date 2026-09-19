@@ -176,6 +176,10 @@ class Volume:
     @property
     def normalized_fstype(self) -> str:
         variant = fat_variant(self.fstype, self.fs_version)
+        if not variant and self.fstype.strip().lower() in _GENERIC_FAT_TYPES:
+            # Preserve uncertainty until the native FAT geometry probe can
+            # identify the width; vfat is not evidence of FAT32.
+            return self.fstype.strip().lower()
         return variant or self.catalog.normalize(self.fstype)
 
     @property

@@ -16,7 +16,8 @@ bps = 512
 spc = 1
 reserved = 32
 fats = 2
-total_sectors = 131072  # 64 MB, using 1024-based binary units
+total_sectors = int(sys.argv[2]) if len(sys.argv) > 2 else 131072
+# The optional sector count permits sparse large-map regression fixtures.
 root_cluster = 2
 volume_id = 0x1234ABCD
 

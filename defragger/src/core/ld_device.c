@@ -250,11 +250,12 @@ static bool ld_mount_source_matches_regular_file(const char *real_path) {
         *source_end = '\0';
         ld_decode_mount_field(cursor);
 
-        char *resolved = realpath(cursor, NULL);
-        if (resolved != NULL) {
-            mounted = strcmp(resolved, real_path) == 0;
-            free(resolved);
-        }
+        struct stat source, target;
+        mounted = stat(cursor, &source) == 0 &&
+                  stat(real_path, &target) == 0 &&
+                  S_ISREG(source.st_mode) &&
+                  source.st_dev == target.st_dev &&
+                  source.st_ino == target.st_ino;
         *source_end = ' ';
         if (mounted) break;
     }
@@ -287,11 +288,12 @@ static bool ld_loop_backing_file_matches(const char *sysfs_path,
     }
     if (length < 0 || (size_t)length >= sizeof(candidate)) return false;
 
-    char *resolved = realpath(candidate, NULL);
-    if (resolved == NULL) return false;
-    const bool match = strcmp(resolved, real_path) == 0;
-    free(resolved);
-    return match;
+    /* Canonical path strings do not identify hard links. Bind the loop's
+     * backing object to the selected inode, just as the verified open does. */
+    struct stat backing, target;
+    return stat(candidate, &backing) == 0 &&
+           stat(real_path, &target) == 0 && S_ISREG(backing.st_mode) &&
+           backing.st_dev == target.st_dev && backing.st_ino == target.st_ino;
 }
 
 static bool ld_regular_file_loop_is_mounted(const char *real_path) {

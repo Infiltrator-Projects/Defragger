@@ -4,6 +4,17 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-176
+
+- Closed the mounted-image hard-link bypass in direct mount-source and loop-backing identity checks.
+- Preserved generic Linux FAT identification until native geometry probing selects FAT12, FAT16 or FAT32, restoring image analysis without guessing FAT32.
+- Routed all GUI image mutations and Recover through the privileged helper so they can use the protected root-owned recovery namespace.
+- Sized bounded native map capture for the GUI's full cell range, including maps larger than 64 MiB; rejected requests beyond 1,048,576 cells.
+- Made Stop interrupt silent analysis, retained writer stops queued during startup, isolated child stdin and made follow-on requests safe as soon as completion arrives.
+- Added native live-child supervision tests for Stop, queued Stop, GUI control loss, broken output and child reaping, plus mounted-alias, generic-FAT, large-map and GUI privilege regressions. Corrected the documented release-protection contract.
+
+## 1.8.0-175 and preceding C++ migration
+
 - Fixed a 1.8.0-173 regression where the C++ allocation mapper incorrectly required the generic schema from the FAT12/FAT16/FAT32 worker even though FAT intentionally retains its established cluster-map contract; FAT analysis now has an explicit validated adapter and a real FAT12 end-to-end regression fixture.
 - Moved the production allocation mapper, operation dispatcher and privileged helper session into the selective C++17 application-service layer while retaining the established native C filesystem engines.
 - Hardened privileged shutdown: the helper now uses `posix_spawn` with a dedicated process group, survives a closed protocol pipe long enough to request cooperative Stop, and waits for the privileged writer to exit.

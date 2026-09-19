@@ -34,8 +34,7 @@ bool parse_cell_count(std::string_view text, std::size_t& cells) {
     const char* end = begin + text.size();
     const auto parsed = std::from_chars(begin, end, value, 10);
     if (parsed.ec != std::errc{} || parsed.ptr != end || value == 0U ||
-        value > static_cast<unsigned long long>(
-                    std::numeric_limits<std::size_t>::max())) {
+        value > static_cast<unsigned long long>(defragger::kMaxMapCells)) {
         return false;
     }
     cells = static_cast<std::size_t>(value);
@@ -125,7 +124,17 @@ int main(int argc, char** argv) {
 
     try {
         const defragger::BackendInfo* backend = nullptr;
-        if (!filesystem.empty()) {
+        if (filesystem == "vfat" || filesystem == "fat" || filesystem == "msdos") {
+            // Linux's generic FAT type does not encode the allocation width.
+            // Probe authoritative geometry rather than guessing FAT32.
+            for (const auto* id : {"fat12", "fat16", "fat32"}) {
+                const auto* candidate = defragger::backend_by_fstype(id);
+                if (candidate != nullptr && defragger::backend_probe(*candidate, path)) {
+                    backend = candidate;
+                    break;
+                }
+            }
+        } else if (!filesystem.empty()) {
             backend = defragger::backend_by_fstype(filesystem);
         } else {
             for (const auto& candidate : defragger::backend_registry()) {

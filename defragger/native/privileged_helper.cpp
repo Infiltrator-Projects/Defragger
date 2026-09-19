@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fcntl.h>
 #include <memory>
 #include <mutex>
 #include <regex>
@@ -156,6 +157,10 @@ pid_t spawn_command(const HelperCommand& allowed, int read_fd, int write_fd) {
 
     SpawnActions actions;
     require_spawn_success(
+        posix_spawn_file_actions_addopen(
+            actions.get(), STDIN_FILENO, "/dev/null", O_RDONLY, 0),
+        "posix_spawn stdin isolation failed");
+    require_spawn_success(
         posix_spawn_file_actions_adddup2(
             actions.get(), write_fd, STDOUT_FILENO),
         "posix_spawn stdout redirection failed");
@@ -281,6 +286,7 @@ private:
     pid_t active_pid_ = -1;
     std::int64_t active_id_ = 0;
     bool active_has_output_ = false;
+    bool active_waits_for_output_ = false;
     bool pending_stop_ = false;
     bool worker_running_ = false;
 
@@ -320,6 +326,8 @@ private:
         const Json* raw_arguments = message.find("argv");
         if (raw_arguments == nullptr) {
             (void)fail(Json::integer(id), "argv must be a list of strings");
+            (void)emit(Json::Object{{"type", Json("finished")},
+                {"id", Json::integer(id)}, {"returncode", Json::integer(127)}});
             return;
         }
 
@@ -328,6 +336,8 @@ private:
             arguments = string_array(*raw_arguments);
         } catch (const std::exception& error) {
             (void)fail(Json::integer(id), error.what());
+            (void)emit(Json::Object{{"type", Json("finished")},
+                {"id", Json::integer(id)}, {"returncode", Json::integer(127)}});
             return;
         }
 
@@ -336,6 +346,8 @@ private:
             if (worker_running_ || active_pid_ > 0) {
                 (void)fail(Json::integer(id),
                            "another privileged operation is already active");
+                (void)emit(Json::Object{{"type", Json("finished")},
+                    {"id", Json::integer(id)}, {"returncode", Json::integer(127)}});
                 return;
             }
         }
@@ -343,6 +355,9 @@ private:
         {
             std::lock_guard<std::mutex> lock(active_mutex_);
             worker_running_ = true;
+            active_id_ = id;
+            active_waits_for_output_ = program == "operation-engine";
+            pending_stop_ = false;
         }
 
         try {
@@ -361,9 +376,17 @@ private:
                      const std::vector<std::string>& arguments) noexcept {
         pid_t child = -1;
         bool reaped = false;
+        int return_code = 127;
         try {
-            const HelperCommand allowed =
+            HelperCommand allowed =
                 helper_command(program, arguments, invoking_uid_);
+#ifdef LD_PRIVILEGED_HELPER_TEST_MODE
+            // Test binaries alone can substitute a controlled child after the
+            // production request policy has validated the complete command.
+            if (const char* test_child = std::getenv("LD_HELPER_TEST_CHILD");
+                test_child != nullptr && *test_child != '\0')
+                allowed.executable = test_child;
+#endif
             if (access(allowed.executable.c_str(), X_OK) != 0) {
                 throw std::runtime_error(
                     "helper command is unavailable: " + allowed.executable);
@@ -379,12 +402,14 @@ private:
 
             child = spawn_command(allowed, read_end.get(), write_end.get());
             (void)close(write_end.release());
+            bool stop_on_start = false;
             {
                 std::lock_guard<std::mutex> lock(active_mutex_);
                 active_pid_ = child;
                 active_id_ = id;
                 active_has_output_ = false;
-                pending_stop_ = false;
+                stop_on_start = pending_stop_ && !active_waits_for_output_;
+                if (stop_on_start) pending_stop_ = false;
             }
             if (!emit(Json::Object{
                     {"type", Json("started")},
@@ -395,6 +420,8 @@ private:
                         static_cast<std::uint64_t>(child))}})) {
                 throw std::runtime_error("GUI protocol output closed");
             }
+            if (stop_on_start)
+                deliver_stop(child, Json(nullptr), id);
 
             FILE* stream = fdopen(read_end.release(), "r");
             if (stream == nullptr)
@@ -469,31 +496,31 @@ private:
 
             const int status = wait_for_child(child);
             reaped = true;
-            const int return_code = WIFEXITED(status)
+            return_code = WIFEXITED(status)
                 ? WEXITSTATUS(status)
                 : WIFSIGNALED(status)
                     ? 128 + WTERMSIG(status) : 127;
-            (void)emit(Json::Object{
-                {"type", Json("finished")},
-                {"id", Json::integer(id)},
-                {"returncode", Json::integer(return_code)}});
         } catch (const std::exception& error) {
             if (child > 0 && !reaped) stop_and_reap(child);
             if (!transport_failed_.load(std::memory_order_acquire)) {
                 (void)fail(Json::integer(id), error.what());
-                (void)emit(Json::Object{
-                    {"type", Json("finished")},
-                    {"id", Json::integer(id)},
-                    {"returncode", Json::integer(127)}});
             }
         }
 
-        std::lock_guard<std::mutex> lock(active_mutex_);
-        active_pid_ = -1;
-        active_id_ = 0;
-        active_has_output_ = false;
-        pending_stop_ = false;
-        worker_running_ = false;
+        {
+            // Publish idle state before completion: the GUI may immediately
+            // submit the verification scan when it receives "finished".
+            std::lock_guard<std::mutex> lock(active_mutex_);
+            active_pid_ = -1;
+            active_id_ = 0;
+            active_has_output_ = false;
+            active_waits_for_output_ = false;
+            pending_stop_ = false;
+            worker_running_ = false;
+        }
+        (void)emit(Json::Object{
+            {"type", Json("finished")}, {"id", Json::integer(id)},
+            {"returncode", Json::integer(return_code)}});
     }
 
     void deliver_stop(pid_t pid, Json id, std::int64_t active_id,
@@ -521,17 +548,22 @@ private:
     void handle_stop(const Json& message) {
         pid_t pid = -1;
         std::int64_t active_id = 0;
-        bool has_output = false;
+        bool defer = false;
+        bool running = false;
         {
             std::lock_guard<std::mutex> lock(active_mutex_);
             pid = active_pid_;
             active_id = active_id_;
-            has_output = active_has_output_;
-            if (pid > 0 && !has_output) pending_stop_ = true;
+            running = worker_running_;
+            // Writers need their cooperative handler installed. Read-only
+            // analysis may be stopped before producing any map output.
+            defer = running && (pid <= 0 ||
+                (active_waits_for_output_ && !active_has_output_));
+            if (defer) pending_stop_ = true;
         }
 
         const Json id = id_value(message);
-        if (pid <= 0) {
+        if (!running && pid <= 0) {
             (void)emit(Json::Object{
                 {"type", Json("stop-result")},
                 {"id", id},
@@ -540,7 +572,7 @@ private:
                 {"message", Json("no active operation")}});
             return;
         }
-        if (!has_output) {
+        if (defer) {
             (void)emit(Json::Object{
                 {"type", Json("stop-result")},
                 {"id", id},

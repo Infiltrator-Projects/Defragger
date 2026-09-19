@@ -73,6 +73,10 @@ Write-capable operations target only an unmounted block device or regular filesy
 
 The privileged helper accepts a constrained command contract and a user-specific recovery namespace. It launches fixed commands with `posix_spawn` into a dedicated process group, ignores SIGPIPE in the supervisor, treats a closed GUI protocol pipe as a transport failure, requests the writer's cooperative SIGINT path and waits for the child to exit before the helper can terminate. Filesystem workers still perform their own target and format validation; privilege does not bypass safety policy.
 
+Every GUI mutation, including a user-owned image and Recover, uses that privileged journal namespace. Child stdin is isolated from the GUI protocol. Stop waits for writer initialisation but can interrupt silent read-only analysis immediately. Completion is emitted only after the child is reaped and the session can accept the next request.
+
+The mapper probes FAT geometry when discovery supplies only a generic FAT name. Its map-output allowance scales with the requested cell count and remains bounded by the GUI maximum; ordinary child-command capture retains its separate default limit. Mounted-image checks compare device and inode identity so hard-link aliases do not bypass refusal.
+
 Paths and device-provided metadata are external input. A previously valid path may refer to a different object later, so persistent transactions bind to stable target and filesystem identity where the format exposes it.
 
 ## Filesystem engine contract

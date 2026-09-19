@@ -55,11 +55,12 @@ Json parse_worker_json(const CommandResult& result, const char* action) {
 CommandResult worker(const BackendInfo& backend,
                      const std::string& mode,
                      const std::string& path,
-                     const std::vector<std::string>& options = {}) {
+                     const std::vector<std::string>& options = {},
+                     std::size_t output_limit = 64U * 1024U * 1024U) {
     std::vector<std::string> command{
         resolve_program(backend.worker), mode, path};
     command.insert(command.end(), options.begin(), options.end());
-    return run_capture(command);
+    return run_capture(command, output_limit);
 }
 
 std::vector<UnitRange> pair_ranges(
@@ -305,7 +306,8 @@ Json map_fat(const BackendInfo& backend, const std::string& path,
              std::size_t cells) {
     Json payload = parse_worker_json(
         worker(backend, "map", path,
-               {"--cells", std::to_string(std::max<std::size_t>(1U, cells))}),
+               {"--cells", std::to_string(std::max<std::size_t>(1U, cells))},
+               map_capture_limit(cells)),
         "native FAT mapper");
 
     const Json* filesystem = payload.find("filesystem");
@@ -532,13 +534,22 @@ Json map_native(const BackendInfo& backend, const std::string& path,
                 std::size_t cells) {
     Json payload = parse_worker_json(
         worker(backend, "map", path,
-               {"--cells", std::to_string(std::max<std::size_t>(1U, cells))}),
+               {"--cells", std::to_string(std::max<std::size_t>(1U, cells))},
+               map_capture_limit(cells)),
         "native filesystem mapper");
     validate_native_map(backend, payload);
     return payload;
 }
 
 } // namespace
+
+std::size_t map_capture_limit(std::size_t cells) {
+    if (cells == 0U || cells > kMaxMapCells)
+        throw std::invalid_argument("map-cell count is outside the supported range");
+    // Native cell records contain bounded numeric fields. Reserve 256 bytes
+    // per cell plus the established 64 MiB allowance for metadata and details.
+    return 64U * 1024U * 1024U + cells * 256U;
+}
 
 std::vector<UnitRange> merge_ranges(std::vector<UnitRange> ranges) {
     std::sort(ranges.begin(), ranges.end(),
@@ -739,6 +750,7 @@ bool backend_probe(const BackendInfo& backend, const std::string& path) {
 
 Json map_backend(const BackendInfo& backend, const std::string& path,
                  std::size_t cells) {
+    (void)map_capture_limit(cells);
     switch (backend.map_adapter) {
     case MapAdapter::NativeMap:
         return map_native(backend, path, cells);
