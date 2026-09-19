@@ -5,8 +5,8 @@ Status: **complete**
 Completed: 2026-08-25  
 Extended: 2026-09-19
 
-Applies to: release version 1.8.0-179
-Audited source commit: 660eddea5395b2236976d3cdf44dee2536c6d7ac
+Applies to: release version 1.8.0-180
+Audited source commit: 295f00146ecb6b6c1c71c8b39f6cfd04338d0856
 Audited release-governance commit: b5f891f623f37df16d0d902029a22ca715301581
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -63,9 +63,9 @@ Architecture ownership is defined in [ARCHITECTURE.md](ARCHITECTURE.md); design 
 
 ## Dependency baseline
 
-The audited production tree consumes Infiltratr Common 1.19.6 at exact commit `a0e26896cc2a5674a138b29f009a7b30f0d636c6`. CMake, the native installer and release regressions verify the same pin.
+The audited production tree consumes Infiltratr Common 1.19.8 at exact commit `3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9`. CMake, the native installer, submodule identity and release regressions verify the same released pin.
 
-Common owns reusable mechanisms such as checked arithmetic, strict parsing, endian access, bounded growth, path/string helpers, JSON escaping and exact I/O. Defragmenter retains filesystem structure, target-safety, placement, transaction, recovery and user-facing failure policy.
+Common owns reusable mechanisms such as checked arithmetic, strict and locale-independent numeric parsing, endian access, bounded growth, path/string helpers, JSON escaping, exact I/O, neutral design metrics/typography identity and canonical MB Corpo asset provenance. Defragmenter retains filesystem structure, target-safety, placement, transaction, recovery, domain-specific allocation-map meaning and user-facing failure policy.
 
 ## Release controls and decision
 
@@ -75,7 +75,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-179 is the current audited release line. It retains the 1.8.0-177 XFS allocation-tree correction and the 1.8.0-178 MB-only typography contract, and restores the approved 256×256 Defragmenter artwork as the single desktop, window and About icon source. Packaging places that same asset in the matching hicolor size directory, Mint app-install path and private application path. A permanent architecture regression pins the approved Git blob and PNG dimensions so unrelated or substitute artwork cannot silently replace it. The C++17 application-service and first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
+Version 1.8.0-180 is the current audited release line. It retains the XFS allocation-tree, MB-only typography and approved-icon corrections from 1.8.0-177 through 1.8.0-179 while advancing the reusable foundation to Common 1.19.8. Generic JSON real conversion, checked allocation sizing, shared typography/metrics and font asset provenance now come from Common where the contracts match; filesystem semantics, destructive-operation safety and recovery policy remain Defragmenter-owned. Architecture, GUI and release regressions verify these ownership boundaries and the exact Common revision. The C++17 application-service and first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 
