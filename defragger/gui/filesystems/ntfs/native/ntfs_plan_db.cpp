@@ -11,7 +11,6 @@
 extern "C" {
 #include "ntfs_native.h"
 #include "ld_io.h"
-#include "ld_runtime.h"
 }
 #include <openssl/evp.h>
 #include <openssl/sha.h>
@@ -20,7 +19,9 @@ extern "C" {
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <new>
 #include <unistd.h>
+#include <vector>
 
 namespace {
 class SqliteStatement {
@@ -46,9 +47,7 @@ private:
     bool active_ = true;
 };
 struct EvpContextDeleter { void operator()(EVP_MD_CTX *p) const noexcept { EVP_MD_CTX_free(p); } };
-struct FreeDeleter { void operator()(std::uint8_t *p) const noexcept { std::free(p); } };
 using EvpContext = std::unique_ptr<EVP_MD_CTX, EvpContextDeleter>;
-using ByteBuffer = std::unique_ptr<std::uint8_t, FreeDeleter>;
 int sql_error(sqlite3 *db,char **error,const char *action){ntfs_set_error(error,"%s: %s",action,sqlite3_errmsg(db));return -1;}
 int sql_exec(sqlite3 *db,const char *sql,char **error){char *message=nullptr;int code=sqlite3_exec(db,sql,nullptr,nullptr,&message);if(code==SQLITE_OK)return 0;ntfs_set_error(error,"NTFS plan database: %s",message!=nullptr?message:sqlite3_errmsg(db));sqlite3_free(message);return -1;}
 int prepare(sqlite3 *db,SqliteStatement &statement,const char *sql,char **error,const char *action){if(sqlite3_prepare_v2(db,sql,-1,statement.out(),nullptr)==SQLITE_OK)return 0;return sql_error(db,error,action);}
@@ -60,8 +59,14 @@ extern "C" int ntfs_stream_digest(NtfsVolume *volume,const NtfsStream *stream,st
     EvpContext context(EVP_MD_CTX_new());
     if(!context||EVP_DigestInit_ex(context.get(),EVP_sha256(),nullptr)!=1){ntfs_set_error(error,"initializing NTFS payload digest failed");return -1;}
     const std::size_t cluster_size=static_cast<std::size_t>(volume->cluster_size);
-    ByteBuffer buffer(static_cast<std::uint8_t *>(ld_xmalloc(cluster_size)));
-    for(std::size_t r=0;r<stream->runs.count;++r){NtfsRun run=stream->runs.items[r];if(run.sparse){ntfs_set_error(error,"sparse NTFS stream entered native writer");return -1;}for(std::uint64_t c=0;c<run.length;++c){std::uint64_t offset=(run.lcn+c)*static_cast<std::uint64_t>(volume->cluster_size);ssize_t got=ld_pread_full(volume->fd,buffer.get(),cluster_size,offset);if(got<0||static_cast<std::size_t>(got)!=cluster_size||EVP_DigestUpdate(context.get(),buffer.get(),cluster_size)!=1){ntfs_set_error(error,"reading NTFS payload for verification failed");return -1;}}}
+    std::vector<std::uint8_t> buffer;
+    try {
+        buffer.resize(cluster_size);
+    } catch (const std::bad_alloc &) {
+        ntfs_set_error(error,"allocating NTFS payload digest buffer failed");
+        return -1;
+    }
+    for(std::size_t r=0;r<stream->runs.count;++r){NtfsRun run=stream->runs.items[r];if(run.sparse){ntfs_set_error(error,"sparse NTFS stream entered native writer");return -1;}for(std::uint64_t c=0;c<run.length;++c){std::uint64_t offset=(run.lcn+c)*static_cast<std::uint64_t>(volume->cluster_size);ssize_t got=ld_pread_full(volume->fd,buffer.data(),cluster_size,offset);if(got<0||static_cast<std::size_t>(got)!=cluster_size||EVP_DigestUpdate(context.get(),buffer.data(),cluster_size)!=1){ntfs_set_error(error,"reading NTFS payload for verification failed");return -1;}}}
     unsigned int digest_length=0U;if(EVP_DigestFinal_ex(context.get(),digest,&digest_length)!=1||digest_length!=SHA256_DIGEST_LENGTH){ntfs_set_error(error,"finalizing NTFS payload digest failed");return -1;}return 0;
 }
 
@@ -83,6 +88,9 @@ extern "C" int ntfs_open_plan_db(const char *path,sqlite3 **db,char **error){int
 #ifdef SQLITE_OPEN_NOFOLLOW
     flags|=SQLITE_OPEN_NOFOLLOW;
 #endif
-    if(sqlite3_open_v2(path,db,flags,nullptr)!=SQLITE_OK)return sql_error(*db,error,"opening NTFS plan database");return 0;
+    if(sqlite3_open_v2(path,db,flags,nullptr)!=SQLITE_OK) {
+        return sql_error(*db,error,"opening NTFS plan database");
+    }
+    return 0;
 }
 extern "C" std::uint64_t ntfs_plan_move_count(sqlite3 *db,char **error){SqliteStatement statement;if(prepare(db,statement,"SELECT COUNT(*) FROM blocks WHERE old<>target",error,"reading NTFS move count")!=0)return UINT64_MAX;if(sqlite3_step(statement.get())!=SQLITE_ROW){ntfs_set_error(error,"reading NTFS move count returned no row");return UINT64_MAX;}return static_cast<std::uint64_t>(sqlite3_column_int64(statement.get(),0));}
