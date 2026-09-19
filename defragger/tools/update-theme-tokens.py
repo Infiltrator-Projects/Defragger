@@ -20,7 +20,11 @@ KEYS = (
     "title", "muted", "subtle", "button_background", "button_foreground",
     "selection_background", "selection_foreground", "neutral_accent",
     "success", "warning", "fault", "info", "operation", "card_hover",
-    "surface_hover", "operation_hover", "equals_hover",
+    "surface_hover", "operation_hover", "equals_hover", "titlebar",
+    "connection", "connection_border", "heading", "summary", "kicker",
+    "detail_label", "note", "status_border", "accent_foreground",
+    "accent_hover", "selected_summary", "warning_muted", "warning_border",
+    "success_border",
 )
 
 

@@ -3,9 +3,9 @@
 
 THEME_CONTRACT_VERSION = 1
 
-TYPOGRAPHY = {'ui_family': 'MB Corpo S Title WEB', 'brand_family': 'MB Corpo A Title Cond WEB', 'ui_regular_weight': 400, 'ui_bold_weight': 700, 'brand_weight': 400, 'font_files': {'brand_regular': 'mb_corpo_a_cond_regular.ttf', 'ui_bold': 'mb_corpo_s_bold.ttf', 'ui_regular': 'mb_corpo_s_regular.ttf'}}
+TYPOGRAPHY = {"ui_family": "MB Corpo S Title WEB", "brand_family": "MB Corpo A Title Cond WEB", "ui_regular_weight": 400, "ui_bold_weight": 700, "brand_weight": 400, "font_files": {"brand_regular": "mb_corpo_a_cond_regular.ttf", "ui_bold": "mb_corpo_s_bold.ttf", "ui_regular": "mb_corpo_s_regular.ttf"}}
 
-METRICS = {'small_radius': 6, 'control_radius': 10, 'card_radius': 12, 'panel_radius': 18, 'compact_spacing': 6, 'control_spacing': 10, 'section_spacing': 18, 'content_padding': 16, 'screen_padding': 20}
+METRICS = {"small_radius": 6, "control_radius": 10, "card_radius": 12, "panel_radius": 18, "compact_spacing": 6, "control_spacing": 10, "section_spacing": 18, "content_padding": 16, "screen_padding": 20}
 
 DAY = {
     "background": "#FFFFFF",
@@ -32,6 +32,21 @@ DAY = {
     "surface_hover": "#F1F3F5",
     "operation_hover": "#DDE2E7",
     "equals_hover": "#343B42",
+    "titlebar": "#ECEFF2",
+    "connection": "#F8F9FA",
+    "connection_border": "#C7CDD3",
+    "heading": "#111418",
+    "summary": "#59636C",
+    "kicker": "#737D86",
+    "detail_label": "#737D86",
+    "note": "#59636C",
+    "status_border": "#C7CDD3",
+    "accent_foreground": "#031018",
+    "accent_hover": "#25B8F0",
+    "selected_summary": "#467AA3",
+    "warning_muted": "#9A6500",
+    "warning_border": "#9A6500",
+    "success_border": "#3A8A58",
 }
 
 NIGHT = {
@@ -59,4 +74,20 @@ NIGHT = {
     "surface_hover": "#171B20",
     "operation_hover": "#2B3137",
     "equals_hover": "#EEF1F3",
+    "titlebar": "#202125",
+    "connection": "#0E1115",
+    "connection_border": "#31363B",
+    "heading": "#E7EBEE",
+    "summary": "#98A1A9",
+    "kicker": "#8C949B",
+    "detail_label": "#7E858C",
+    "note": "#9CA4AB",
+    "status_border": "#3B4147",
+    "accent_foreground": "#031018",
+    "accent_hover": "#25B8F0",
+    "selected_summary": "#79CAE8",
+    "warning_muted": "#C69A4C",
+    "warning_border": "#72572F",
+    "success_border": "#365F45",
 }
+

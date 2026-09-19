@@ -46,13 +46,6 @@ def _apply_about_style() -> None:
     if screen is None:
         return
     css = b"""
-    .link-about-dialog {
-        background-color: #050608;
-        color: #eef1f3;
-    }
-    .link-about-dialog label {
-        color: #eef1f3;
-    }
     .link-about-dialog image {
         margin-top: 12px;
         margin-bottom: 8px;

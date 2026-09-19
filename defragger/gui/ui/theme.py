@@ -133,13 +133,16 @@ def _night_css() -> str:
     p = NIGHT
     return f"""
     window, dialog, .background, .app-shell {{ background-color: {p["background"]}; color: {p["text"]}; }}
-    headerbar, .titlebar {{ background-image: none; background-color: {p["panel"]}; color: {p["title"]}; border-bottom: 1px solid {p["border"]}; }}
-    menubar, .app-menubar {{ background-color: {p["surface"]}; border-bottom: 1px solid {p["border"]}; }}
+    headerbar, .titlebar {{ background-image: none; background-color: {p["titlebar"]}; color: {p["heading"]}; border-bottom: 1px solid {p["status_border"]}; }}
+    menubar, .app-menubar {{ background-color: {p["connection"]}; border-bottom: 1px solid {p["connection_border"]}; }}
     menu {{ background-color: {p["panel"]}; border: 1px solid {p["border"]}; }}
     menuitem:hover {{ background-color: {p["operation_hover"]}; }}
-    .app-title, .about-title, .summary-value {{ color: {p["title"]}; }}
-    .app-subtitle, .summary-title, .map-caption, .status-text {{ color: {p["subtle"]}; }}
-    .section-title, .legend-item label, .log-expander {{ color: {p["muted"]}; }}
+    .app-title, .about-title, .summary-value {{ color: {p["heading"]}; }}
+    .app-subtitle {{ color: {p["summary"]}; }}
+    .summary-title, .map-caption {{ color: {p["detail_label"]}; }}
+    .status-text {{ color: {p["note"]}; }}
+    .section-title {{ color: {p["kicker"]}; }}
+    .legend-item label, .log-expander {{ color: {p["detail_label"]}; }}
     .version-badge, frame.section-panel > border, frame.map-panel > border,
     frame.action-panel > border, frame.summary-card > border {{
         background-color: {p["surface"]}; border: 1px solid {p["border"]};
@@ -148,7 +151,7 @@ def _night_css() -> str:
         background-image: none; background-color: {p["card"]}; color: {p["text"]};
         border: 1px solid {p["neutral_accent"]}; box-shadow: none;
     }}
-    button:hover {{ background-color: {p["card_hover"]}; border-color: {p["neutral_accent"]}; }}
+    button:hover {{ background-color: {p["card_hover"]}; border-color: {p["accent_hover"]}; }}
     button:active, button:checked {{ background-color: {p["selection_background"]}; border-color: {p["neutral_accent"]}; }}
     button:disabled {{ color: {p["subtle"]}; border-color: {p["border"]}; background-color: {p["input"]}; }}
     button.primary-action {{ background-color: {p["button_background"]}; color: {p["button_foreground"]}; border-color: {p["button_background"]}; }}
@@ -164,9 +167,12 @@ def _night_css() -> str:
     entry selection, textview text selection, treeview.view:selected {{
         background-color: {p["selection_background"]}; color: {p["selection_foreground"]};
     }}
-    .status-strip {{ background-color: {p["surface"]}; border-top: 1px solid {p["border"]}; }}
+    .status-strip {{ background-color: {p["connection"]}; border-top: 1px solid {p["status_border"]}; }}
     scrollbar slider {{ background-color: {p["neutral_accent"]}; }}
-    tooltip {{ background-color: {p["card"]}; color: {p["title"]}; border: 1px solid {p["border"]}; }}
+    scrollbar slider:hover {{ background-color: {p["accent_hover"]}; }}
+    tooltip {{ background-color: {p["card"]}; color: {p["note"]}; border: 1px solid {p["status_border"]}; }}
+    .link-about-dialog {{ background-color: {p["background"]}; color: {p["text"]}; }}
+    .link-about-dialog label {{ color: {p["text"]}; }}
     """
 
 
@@ -174,13 +180,16 @@ def _day_css() -> str:
     p = DAY
     return f"""
     window, dialog, .background, .app-shell {{ background-color: {p["background"]}; color: {p["text"]}; }}
-    headerbar, .titlebar {{ background-image: none; background-color: {p["panel"]}; color: {p["title"]}; border-bottom: 1px solid {p["border"]}; }}
-    menubar, .app-menubar {{ background-color: {p["panel"]}; border-bottom: 1px solid {p["border"]}; }}
+    headerbar, .titlebar {{ background-image: none; background-color: {p["titlebar"]}; color: {p["heading"]}; border-bottom: 1px solid {p["status_border"]}; }}
+    menubar, .app-menubar {{ background-color: {p["connection"]}; border-bottom: 1px solid {p["connection_border"]}; }}
     menu {{ background-color: {p["panel"]}; border: 1px solid {p["border"]}; }}
     menuitem:hover {{ background-color: {p["surface"]}; }}
-    .app-title, .about-title, .summary-value {{ color: {p["title"]}; }}
-    .app-subtitle, .summary-title, .map-caption, .status-text {{ color: {p["subtle"]}; }}
-    .section-title, .legend-item label, .log-expander {{ color: {p["muted"]}; }}
+    .app-title, .about-title, .summary-value {{ color: {p["heading"]}; }}
+    .app-subtitle {{ color: {p["summary"]}; }}
+    .summary-title, .map-caption {{ color: {p["detail_label"]}; }}
+    .status-text {{ color: {p["note"]}; }}
+    .section-title {{ color: {p["kicker"]}; }}
+    .legend-item label, .log-expander {{ color: {p["detail_label"]}; }}
     .version-badge, frame.section-panel > border, frame.map-panel > border,
     frame.action-panel > border, frame.summary-card > border {{
         background-color: {p["panel"]}; border: 1px solid {p["border"]};
@@ -189,7 +198,7 @@ def _day_css() -> str:
         background-image: none; background-color: {p["card"]}; color: {p["text"]};
         border: 1px solid {p["neutral_accent"]}; box-shadow: none;
     }}
-    button:hover {{ background-color: {p["card_hover"]}; border-color: {p["neutral_accent"]}; }}
+    button:hover {{ background-color: {p["card_hover"]}; border-color: {p["accent_hover"]}; }}
     button:active, button:checked {{ background-color: {p["selection_background"]}; border-color: {p["neutral_accent"]}; }}
     button:disabled {{ color: {p["subtle"]}; border-color: {p["border"]}; background-color: {p["background"]}; }}
     button.primary-action {{ background-color: {p["button_background"]}; color: {p["button_foreground"]}; border-color: {p["button_background"]}; }}
@@ -205,9 +214,12 @@ def _day_css() -> str:
     entry selection, textview text selection, treeview.view:selected {{
         background-color: {p["selection_background"]}; color: {p["selection_foreground"]};
     }}
-    .status-strip {{ background-color: {p["panel"]}; border-top: 1px solid {p["border"]}; }}
+    .status-strip {{ background-color: {p["connection"]}; border-top: 1px solid {p["status_border"]}; }}
     scrollbar slider {{ background-color: {p["neutral_accent"]}; }}
-    tooltip {{ background-color: {p["panel"]}; color: {p["text"]}; border: 1px solid {p["border"]}; }}
+    scrollbar slider:hover {{ background-color: {p["accent_hover"]}; }}
+    tooltip {{ background-color: {p["card"]}; color: {p["note"]}; border: 1px solid {p["status_border"]}; }}
+    .link-about-dialog {{ background-color: {p["background"]}; color: {p["text"]}; }}
+    .link-about-dialog label {{ color: {p["text"]}; }}
     """
 
 

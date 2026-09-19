@@ -51,18 +51,18 @@ void ldtm_apply_mb_theme(void) {
         "separator { background-color: #%06x; }"
         "tooltip { background-color: #%06x; color: #%06x; border: 1px solid #%06x; }",
         typography->ui_family, (unsigned)palette->text_rgb,
-        typography->brand_family, (unsigned)palette->title_rgb,
+        typography->brand_family, (unsigned)palette->heading_rgb,
         (unsigned)palette->background_rgb,
-        (unsigned)palette->panel_rgb, (unsigned)palette->border_rgb, (unsigned)palette->text_rgb,
-        (unsigned)palette->muted_rgb,
-        (unsigned)palette->surface_rgb, (unsigned)palette->border_rgb,
+        (unsigned)palette->titlebar_rgb, (unsigned)palette->status_border_rgb, (unsigned)palette->heading_rgb,
+        (unsigned)palette->summary_rgb,
+        (unsigned)palette->connection_rgb, (unsigned)palette->connection_border_rgb,
         (unsigned)palette->card_rgb, (unsigned)palette->border_rgb,
         (unsigned)palette->card_hover_rgb,
         (unsigned)palette->background_rgb, (unsigned)palette->border_rgb, metrics->small_radius,
         (unsigned)palette->button_background_rgb, (unsigned)palette->button_foreground_rgb,
         (unsigned)palette->border_rgb, metrics->control_radius,
-        (unsigned)palette->surface_hover_rgb, (unsigned)palette->subtle_rgb,
-        (unsigned)palette->operation_hover_rgb, (unsigned)palette->subtle_rgb,
+        (unsigned)palette->surface_hover_rgb, (unsigned)palette->accent_hover_rgb,
+        (unsigned)palette->operation_hover_rgb, (unsigned)palette->accent_hover_rgb,
         (unsigned)palette->subtle_rgb, (unsigned)palette->border_rgb, (unsigned)palette->background_rgb,
         (unsigned)palette->input_rgb, (unsigned)palette->text_rgb, (unsigned)palette->border_rgb,
         metrics->small_radius,
@@ -74,11 +74,11 @@ void ldtm_apply_mb_theme(void) {
         (unsigned)palette->surface_rgb, (unsigned)palette->operation_hover_rgb,
         (unsigned)palette->background_rgb, (unsigned)palette->border_rgb, metrics->small_radius,
         (unsigned)palette->neutral_accent_rgb, metrics->small_radius,
-        (unsigned)palette->subtle_rgb,
-        (unsigned)palette->muted_rgb, metrics->small_radius,
+        (unsigned)palette->detail_label_rgb,
+        (unsigned)palette->note_rgb, metrics->small_radius,
         (unsigned)palette->text_rgb,
-        (unsigned)palette->border_rgb,
-        (unsigned)palette->card_rgb, (unsigned)palette->text_rgb, (unsigned)palette->border_rgb);
+        (unsigned)palette->status_border_rgb,
+        (unsigned)palette->card_rgb, (unsigned)palette->note_rgb, (unsigned)palette->status_border_rgb);
 
     provider = gtk_css_provider_new();
     if (gtk_css_provider_load_from_data(provider, css, -1, &error)) {
