@@ -14,6 +14,14 @@ Defragmenter is a C-first offline filesystem allocation analyser and defragmente
 
 > **Safety status:** The version 1.8.0-171 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
 
+## Engineering ethos
+
+What happens when filesystem analysis and defragmentation are built from the on-disk structures upward rather than delegated to whatever repair tool happens to be installed? Defragmenter is where allocation maps, placement policy, recovery and verified mutation become first-party code.
+
+Filesystem specifications, mature implementations and external tools are evidence to study, not runtime authorities for project behaviour. The operating system may provide raw I/O and Common may provide proven neutral primitives, but filesystem parsing, safety policy, placement planning, staging, recovery and final verification remain owned here. Unsupported or uncertain layouts fail closed instead of being guessed.
+
+The project prefers the strongest justified method, not automatically the newest one. A replacement earns its place by improving safety, correctness, recoverability, performance or clarity, and write support is not considered complete until interruption and recovery paths are testable.
+
 ## Appearance
 
 The main GTK application supports **Follow system**, **Day** and **Night** appearance modes. Follow system leaves the host GTK/Mint palette authoritative while retaining the Infiltrator typography and layout hierarchy. Day and Night apply explicit Infiltrator light and graphite/silver palettes. The selected mode is persisted per user and synchronised across open windows.
