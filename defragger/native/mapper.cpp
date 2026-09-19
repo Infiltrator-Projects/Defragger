@@ -10,6 +10,8 @@ extern "C" {
 #include <algorithm>
 #include <cstdio>
 #include <exception>
+#include <limits>
+#include <stdexcept>
 #include <string>
 
 namespace {
