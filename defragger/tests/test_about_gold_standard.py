@@ -21,7 +21,6 @@ for required in (
     "dialog.set_license(info.license_text)",
     "dialog.set_wrap_license(True)",
     'website_label="Project website"',
-    "APP_ICON_NAME",
     "load_app_icon_pixbuf(96)",
     'subtitle="DEFRAGMENTER · NATIVE FILESYSTEM OPTIMISATION"',
     '"Shannon Smith — Author and project maintainer"',
