@@ -19,6 +19,7 @@
 #include "ld_stop.h"
 #include "version.h"
 #include "infiltratr/core.h"
+#include "infiltratr/config.h"
 #include "infiltratr/posix.h"
 #include "infiltratr/token.h"
 
@@ -219,51 +220,49 @@ static int load_manifest(const char *journal_path,
 
     size_t records_seen = 0;
     while (getline(&line, &capacity, file) >= 0) {
-        while (*line != '\0' && (line[strlen(line) - 1U] == '\n' ||
-                                 line[strlen(line) - 1U] == '\r')) {
-            line[strlen(line) - 1U] = '\0';
-        }
-        char *equals = strchr(line, '=');
-        if (equals == NULL) goto malformed;
-        *equals++ = '\0';
-        if (strcmp(line, "serial") == 0) {
+        char *key = NULL;
+        char *equals = NULL;
+        if (infiltratr_config_parse_line(line, &key, &equals) !=
+            INFILTRATR_CONFIG_LINE_ENTRY)
+            goto malformed;
+        if (strcmp(key, "serial") == 0) {
             if (!parse_u32_text(equals, &manifest->serial)) goto malformed;
-        } else if (strcmp(line, "target_identity") == 0) {
+        } else if (strcmp(key, "target_identity") == 0) {
             if (*equals == '\0' || strlen(equals) >= sizeof(manifest->target_identity) ||
                 strchr(equals, '\n') != NULL || strchr(equals, '\r') != NULL)
                 goto malformed;
             infiltratr_copy_string(manifest->target_identity,
                                    sizeof(manifest->target_identity), equals);
-        } else if (strcmp(line, "device_size") == 0) {
+        } else if (strcmp(key, "device_size") == 0) {
             if (!parse_u64_text(equals, &manifest->device_size) ||
                 manifest->device_size == 0U) goto malformed;
-        } else if (strcmp(line, "volume_bytes") == 0) {
+        } else if (strcmp(key, "volume_bytes") == 0) {
             if (!parse_u64_text(equals, &manifest->volume_bytes)) goto malformed;
-        } else if (strcmp(line, "bytes_per_sector") == 0) {
+        } else if (strcmp(key, "bytes_per_sector") == 0) {
             if (!parse_u32_text(equals, &manifest->bytes_per_sector)) goto malformed;
-        } else if (strcmp(line, "cluster_size") == 0) {
+        } else if (strcmp(key, "cluster_size") == 0) {
             if (!parse_u32_text(equals, &manifest->cluster_size)) goto malformed;
-        } else if (strcmp(line, "cluster_count") == 0) {
+        } else if (strcmp(key, "cluster_count") == 0) {
             if (!parse_u32_text(equals, &manifest->cluster_count)) goto malformed;
-        } else if (strcmp(line, "fat_offset") == 0) {
+        } else if (strcmp(key, "fat_offset") == 0) {
             if (!parse_u64_text(equals, &manifest->fat_offset)) goto malformed;
-        } else if (strcmp(line, "fat_length") == 0) {
+        } else if (strcmp(key, "fat_length") == 0) {
             if (!parse_u64_text(equals, &manifest->fat_length)) goto malformed;
-        } else if (strcmp(line, "heap_offset") == 0) {
+        } else if (strcmp(key, "heap_offset") == 0) {
             if (!parse_u64_text(equals, &manifest->heap_offset)) goto malformed;
-        } else if (strcmp(line, "workspace_start") == 0) {
+        } else if (strcmp(key, "workspace_start") == 0) {
             if (!parse_u32_text(equals, &manifest->workspace_start)) goto malformed;
-        } else if (strcmp(line, "reserve_percent") == 0) {
+        } else if (strcmp(key, "reserve_percent") == 0) {
             uint32_t percent = 0;
             if (!parse_u32_text(equals, &percent) || percent > 25U) goto malformed;
             manifest->reserve_percent = percent;
-        } else if (strcmp(line, "object_count") == 0) {
+        } else if (strcmp(key, "object_count") == 0) {
             uint64_t count = 0;
             if (!parse_u64_text(equals, &count) || count > SIZE_MAX) goto malformed;
             manifest->record_count = (size_t)count;
             manifest->records = ld_xcalloc(manifest->record_count == 0 ? 1U : manifest->record_count,
                                            sizeof(*manifest->records));
-        } else if (strcmp(line, "record") == 0) {
+        } else if (strcmp(key, "record") == 0) {
             if (manifest->records == NULL || records_seen >= manifest->record_count) goto malformed;
             uint64_t fields[13] = {0};
             if (!parse_record_tuple(equals, fields) ||

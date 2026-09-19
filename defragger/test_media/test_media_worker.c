@@ -5,6 +5,7 @@
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 #include "infiltratr/posix_path.h"
+#include "infiltratr/posix.h"
 #include "infiltratr/posix_io.h"
 
 #include <dirent.h>
@@ -406,14 +407,6 @@ static int ensure_directory(const char *path, mode_t mode) {
     return -1;
 }
 
-static int join_path(char *output, size_t capacity, const char *left, const char *right) {
-    int count;
-    if (output == NULL || left == NULL || right == NULL) return -1;
-    count = snprintf(output, capacity, "%s/%s", left, right);
-    if (count < 0 || (size_t)count >= capacity) return -1;
-    return 0;
-}
-
 static int remove_flat_directory(const char *path) {
     DIR *directory;
     struct dirent *entry;
@@ -422,7 +415,7 @@ static int remove_flat_directory(const char *path) {
     if (directory == NULL) return -1;
     while ((entry = readdir(directory)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-        if (join_path(child, sizeof(child), path, entry->d_name) != 0 || unlink(child) != 0) {
+        if (!infiltratr_path_join(child, sizeof(child), path, entry->d_name) != 0 || unlink(child)) {
             (void)closedir(directory);
             return -1;
         }
@@ -494,10 +487,10 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
     if (record_count == NULL || directory_entries == NULL || spec == NULL) return -1;
     *record_count = 0U;
     *directory_entries = 0U;
-    if (join_path(root, sizeof(root), mountpoint, "Defragmenter-TestData") != 0 ||
-        join_path(anchors, sizeof(anchors), root, "anchors") != 0 ||
-        join_path(targets, sizeof(targets), root, "fragmented-files") != 0 ||
-        join_path(directory_test, sizeof(directory_test), root, "fragmented-directory") != 0) return -1;
+    if (!infiltratr_path_join(root, sizeof(root), mountpoint, "Defragmenter-TestData") ||
+        !infiltratr_path_join(anchors, sizeof(anchors), root, "anchors") ||
+        !infiltratr_path_join(targets, sizeof(targets), root, "fragmented-files") ||
+        !infiltratr_path_join(directory_test, sizeof(directory_test), root, "fragmented-directory")) return -1;
     if (ensure_directory(root, 0755) != 0 || ensure_directory(anchors, 0755) != 0 ||
         ensure_directory(targets, 0755) != 0 || ensure_directory(directory_test, 0755) != 0) return -1;
 
@@ -507,14 +500,14 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         char path[PATH_MAX];
         char name[64];
         (void)snprintf(name, sizeof(name), "anchor-%04u.bin", index);
-        if (join_path(path, sizeof(path), anchors, name) != 0 ||
+        if (!infiltratr_path_join(path, sizeof(path), anchors, name) ||
             write_pattern_file(path, (uint64_t)profile.anchor_kib * UINT64_C(1024), index) != 0) goto cleanup;
     }
     for (index = 1U; index < profile.anchors; index += 2U) {
         char path[PATH_MAX];
         char name[64];
         (void)snprintf(name, sizeof(name), "anchor-%04u.bin", index);
-        if (join_path(path, sizeof(path), anchors, name) != 0 || unlink(path) != 0) goto cleanup;
+        if (!infiltratr_path_join(path, sizeof(path), anchors, name) != 0 || unlink(path)) goto cleanup;
     }
     sync();
 
@@ -524,7 +517,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         char path[PATH_MAX];
         char name[64];
         (void)snprintf(name, sizeof(name), "fragmented-%02zu.bin", file_index);
-        if (join_path(path, sizeof(path), targets, name) != 0) goto cleanup;
+        if (!infiltratr_path_join(path, sizeof(path), targets, name)) goto cleanup;
         fds[file_index] = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
         if (fds[file_index] < 0) goto cleanup;
         contexts[file_index] = EVP_MD_CTX_new();
@@ -546,7 +539,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
             char path[PATH_MAX];
             char name[64];
             (void)snprintf(name, sizeof(name), "interleave-%04u.bin", index);
-            if (join_path(path, sizeof(path), anchors, name) != 0 ||
+            if (!infiltratr_path_join(path, sizeof(path), anchors, name) ||
                 write_pattern_file(path, ((uint64_t)profile.anchor_kib * UINT64_C(1024)) / 2U,
                                    UINT64_C(0x8000) + index) != 0) goto cleanup;
         }
@@ -576,7 +569,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         char contents[64];
         int length;
         (void)snprintf(name, sizeof(name), "entry-%05u.txt", index);
-        if (join_path(path, sizeof(path), directory_test, name) != 0) goto cleanup;
+        if (!infiltratr_path_join(path, sizeof(path), directory_test, name)) goto cleanup;
         fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
         if (fd < 0) goto cleanup;
         length = snprintf(contents, sizeof(contents), "first %u\n", index);
@@ -590,7 +583,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         char path[PATH_MAX];
         char name[64];
         (void)snprintf(name, sizeof(name), "entry-%05u.txt", index);
-        if (join_path(path, sizeof(path), directory_test, name) != 0 || unlink(path) != 0) goto cleanup;
+        if (!infiltratr_path_join(path, sizeof(path), directory_test, name) != 0 || unlink(path)) goto cleanup;
     }
     for (index = 0U; index < profile.directory_second; ++index) {
         char path[PATH_MAX];
@@ -600,7 +593,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         int length;
         const uint32_t entry_index = profile.directory_initial + index;
         (void)snprintf(name, sizeof(name), "entry-%05u.txt", entry_index);
-        if (join_path(path, sizeof(path), directory_test, name) != 0) goto cleanup;
+        if (!infiltratr_path_join(path, sizeof(path), directory_test, name)) goto cleanup;
         fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
         if (fd < 0) goto cleanup;
         length = snprintf(contents, sizeof(contents), "second %u\n", entry_index);
@@ -1004,7 +997,7 @@ static int recursive_remove(const char *path) {
         char child[PATH_MAX];
         struct stat st;
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-        if (join_path(child, sizeof(child), path, entry->d_name) != 0) {
+        if (!infiltratr_path_join(child, sizeof(child), path, entry->d_name)) {
             (void)closedir(directory);
             return -1;
         }
@@ -1217,10 +1210,10 @@ static int verify_mounted_payload(const LdtmFilesystemSpec *spec, const char *mo
     size_t index;
     char root[PATH_MAX];
     char directory_path[PATH_MAX];
-    if (join_path(root, sizeof(root), mountpoint, "Defragmenter-TestData") != 0) return -1;
+    if (!infiltratr_path_join(root, sizeof(root), mountpoint, "Defragmenter-TestData")) return -1;
     for (index = 0U; index < expected->target_count; ++index) {
         char path[PATH_MAX];
-        if (join_path(path, sizeof(path), root, expected->targets[index].relative_path) != 0 ||
+        if (!infiltratr_path_join(path, sizeof(path), root, expected->targets[index].relative_path) ||
             hash_file(path, expected->targets[index].size, expected->targets[index].sha256) != 0) {
             char detail[256];
             (void)snprintf(detail, sizeof(detail), "checksum/size mismatch: %s",
@@ -1229,7 +1222,7 @@ static int verify_mounted_payload(const LdtmFilesystemSpec *spec, const char *mo
             return -1;
         }
     }
-    if (join_path(directory_path, sizeof(directory_path), root, "fragmented-directory") != 0 ||
+    if (!infiltratr_path_join(directory_path, sizeof(directory_path), root, "fragmented-directory") ||
         directory_entry_count(directory_path) != expected->directory_entries) {
         emit_status(spec->key, "verify-failed", "directory-entry count changed");
         return -1;

@@ -4,6 +4,7 @@
 #include "ld_runtime.h"
 
 #include "infiltratr/arithmetic.h"
+#include "infiltratr/posix.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -24,8 +25,8 @@ char *ld_path_append_suffix(const char *base, const char *suffix)
         !infiltratr_size_add_checked(combined_length, 1U, &allocation_size))
         ld_die("path suffix length overflow");
     char *result = ld_xmalloc(allocation_size);
-    memcpy(result, base, base_length);
-    memcpy(result + base_length, suffix, suffix_length + 1U);
+    if (!infiltratr_path_concat(result, allocation_size, base, suffix))
+        ld_die("cannot append path suffix");
     return result;
 }
 

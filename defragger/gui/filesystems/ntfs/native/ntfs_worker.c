@@ -8,6 +8,7 @@
 #include "ld_path.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/config.h"
 #include "infiltratr/posix.h"
 #include "ld_stop.h"
 #include "version.h"
@@ -145,21 +146,24 @@ static int journal_load(const char *path, NtfsJournal *state, char **error) {
     infiltratr_trim_line_end(line);
     if (strcmp(line, JOURNAL_MAGIC) != 0) goto invalid;
     while (getline(&line, &capacity, file) >= 0) {
-        char *equals = strchr(line, '='); if (equals == NULL) goto invalid;
-        *equals++ = '\0'; infiltratr_trim_line_end(equals);
-        if (strcmp(line, "device") == 0) { free(state->device); state->device = value_copy(equals); }
-        else if (strcmp(line, "target_identity") == 0) { free(state->target_identity); state->target_identity = value_copy(equals); }
-        else if (strcmp(line, "serial") == 0) infiltratr_copy_string(state->serial, sizeof(state->serial), equals);
-        else if (strcmp(line, "operation") == 0) infiltratr_copy_string(state->operation, sizeof(state->operation), equals);
-        else if (strcmp(line, "phase") == 0) infiltratr_copy_string(state->phase, sizeof(state->phase), equals);
-        else if (strcmp(line, "stage") == 0) { free(state->stage); state->stage = value_copy(equals); }
-        else if (strcmp(line, "plan") == 0) { free(state->plan); state->plan = value_copy(equals); }
-        else if (strcmp(line, "physical_bytes") == 0 && parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
-        else if (strcmp(line, "filesystem_bytes") == 0 && parse_u64(equals, &state->filesystem_bytes) != 0) goto invalid;
-        else if (strcmp(line, "commit_cluster") == 0 && parse_u64(equals, &state->commit_cluster) != 0) goto invalid;
-        else if (strcmp(line, "move_clusters") == 0 && parse_u64(equals, &state->move_clusters) != 0) goto invalid;
-        else if (strcmp(line, "workspace_start") == 0 && parse_u64(equals, &state->workspace_start) != 0) goto invalid;
-        else if (strcmp(line, "workspace_clusters") == 0 && parse_u64(equals, &state->workspace_clusters) != 0) goto invalid;
+        char *key = NULL;
+        char *equals = NULL;
+        if (infiltratr_config_parse_line(line, &key, &equals) !=
+            INFILTRATR_CONFIG_LINE_ENTRY)
+            goto invalid;
+        if (strcmp(key, "device") == 0) { free(state->device); state->device = value_copy(equals); }
+        else if (strcmp(key, "target_identity") == 0) { free(state->target_identity); state->target_identity = value_copy(equals); }
+        else if (strcmp(key, "serial") == 0) infiltratr_copy_string(state->serial, sizeof(state->serial), equals);
+        else if (strcmp(key, "operation") == 0) infiltratr_copy_string(state->operation, sizeof(state->operation), equals);
+        else if (strcmp(key, "phase") == 0) infiltratr_copy_string(state->phase, sizeof(state->phase), equals);
+        else if (strcmp(key, "stage") == 0) { free(state->stage); state->stage = value_copy(equals); }
+        else if (strcmp(key, "plan") == 0) { free(state->plan); state->plan = value_copy(equals); }
+        else if (strcmp(key, "physical_bytes") == 0 && parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
+        else if (strcmp(key, "filesystem_bytes") == 0 && parse_u64(equals, &state->filesystem_bytes) != 0) goto invalid;
+        else if (strcmp(key, "commit_cluster") == 0 && parse_u64(equals, &state->commit_cluster) != 0) goto invalid;
+        else if (strcmp(key, "move_clusters") == 0 && parse_u64(equals, &state->move_clusters) != 0) goto invalid;
+        else if (strcmp(key, "workspace_start") == 0 && parse_u64(equals, &state->workspace_start) != 0) goto invalid;
+        else if (strcmp(key, "workspace_clusters") == 0 && parse_u64(equals, &state->workspace_clusters) != 0) goto invalid;
     }
     free(line); fclose(file);
     if (state->device == NULL || state->target_identity == NULL || state->stage == NULL || state->plan == NULL ||

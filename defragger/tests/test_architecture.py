@@ -248,7 +248,7 @@ def test_infiltratr_common_integration() -> None:
     fat_journal = (GUI / "filesystems" / "fat" / "native" / "fat_journal.c").read_text()
     assert "infiltratr_parse_u64" in fat_journal
     assert "infiltratr_parse_u64_range" in fat_journal
-    assert "infiltratr_trim_line_end" in fat_journal
+    assert "infiltratr_config_parse_line" in fat_journal
     production_c = "\n".join(
         path.read_text(encoding="utf-8", errors="replace")
         for path in [*Path(ROOT / "src").rglob("*.c"),
@@ -356,6 +356,30 @@ def test_infiltratr_common_integration() -> None:
         )
 
     protocol = (ROOT / "src" / "core" / "ld_protocol.c").read_text()
+    journal_config_consumers = (
+        GUI / "filesystems" / "fat" / "native" / "fat_journal.c",
+        GUI / "filesystems" / "affs" / "native" / "affs_worker.c",
+        GUI / "filesystems" / "sfs" / "native" / "sfs_worker.c",
+        GUI / "filesystems" / "xfs" / "native" / "xfs_worker.c",
+        GUI / "filesystems" / "ext4" / "native" / "ext_worker.c",
+        GUI / "filesystems" / "exfat" / "native" / "exfat_worker.c",
+        GUI / "filesystems" / "ntfs" / "native" / "ntfs_worker.c",
+        GUI / "filesystems" / "hfsplus" / "native" / "hfsplus_worker.c",
+        GUI / "filesystems" / "exfat" / "native" / "exfat_relayout.c",
+    )
+    for path in journal_config_consumers:
+        source = path.read_text()
+        assert "infiltratr_config_parse_line" in source, (
+            f"{path.relative_to(ROOT)} duplicates Common key=value parsing"
+        )
+        assert "strchr(line, '=')" not in source, (
+            f"{path.relative_to(ROOT)} retained a private key=value splitter"
+        )
+
+    exfat_common = (GUI / "filesystems" / "exfat" / "native" / "exfat_common.c").read_text()
+    assert "infiltratr_path_join" in exfat_common
+    assert "join_path_alloc" in exfat_common
+
     assert "infiltratr_escape_json" in protocol
     result_workers = (
         GUI / "filesystems" / "fat" / "native" / "writer.c",
@@ -402,6 +426,8 @@ def test_infiltratr_common_integration() -> None:
     assert "infiltratr_array_reserve" in test_media_worker
     assert "infiltratr_path_basename" in test_media_worker
     assert "infiltratr_string_starts_with" in test_media_worker
+    assert "infiltratr_path_join" in test_media_worker
+    assert "static int join_path(" not in test_media_worker
     test_media_cmake = (ROOT / "cmake" / "test_media.cmake").read_text()
     assert "InfiltratrCommon::Common" in test_media_cmake
     assert "infiltratr_array_reserve" in test_media_amiga
@@ -423,6 +449,7 @@ def test_infiltratr_common_integration() -> None:
     path_source = (ROOT / "src" / "core" / "ld_path.c").read_text()
     path_header = (ROOT / "src" / "core" / "ld_path.h").read_text()
     assert "infiltratr_size_add_checked" in path_source
+    assert "infiltratr_path_concat" in path_source
     assert "ld_path_open_atomic_temp" not in path_source + path_header
     assert "ld_path_fsync_parent" not in path_source + path_header
 

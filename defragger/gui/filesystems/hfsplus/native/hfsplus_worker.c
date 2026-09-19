@@ -3,6 +3,7 @@
 #include "version.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/config.h"
 #include "infiltratr/posix.h"
 #include "infiltratr/endian.h"
 #include "ld_device.h"
@@ -162,41 +163,42 @@ static int journal_load(const char *path, HfsPlusJournal *state, char **error) {
         goto invalid;
     }
     while (getline(&line, &capacity, file) >= 0) {
-        infiltratr_trim_line_end(line);
-        char *equals = strchr(line, '=');
-        if (equals == NULL) goto invalid;
-        *equals++ = '\0';
-        if (strcmp(line, "device") == 0) {
+        char *key = NULL;
+        char *equals = NULL;
+        if (infiltratr_config_parse_line(line, &key, &equals) !=
+            INFILTRATR_CONFIG_LINE_ENTRY)
+            goto invalid;
+        if (strcmp(key, "device") == 0) {
             free(state->device); state->device = ld_xstrdup(equals);
-        } else if (strcmp(line, "target_identity") == 0) {
+        } else if (strcmp(key, "target_identity") == 0) {
             free(state->target_identity); state->target_identity = ld_xstrdup(equals);
-        } else if (strcmp(line, "stage") == 0) {
+        } else if (strcmp(key, "stage") == 0) {
             free(state->stage); state->stage = ld_xstrdup(equals);
-        } else if (strcmp(line, "operation") == 0) {
+        } else if (strcmp(key, "operation") == 0) {
             infiltratr_copy_string(state->operation, sizeof(state->operation), equals);
-        } else if (strcmp(line, "phase") == 0) {
+        } else if (strcmp(key, "phase") == 0) {
             infiltratr_copy_string(state->phase, sizeof(state->phase), equals);
-        } else if (strcmp(line, "volume_token") == 0) {
+        } else if (strcmp(key, "volume_token") == 0) {
             infiltratr_copy_string(state->volume_token, sizeof(state->volume_token), equals);
-        } else if (strcmp(line, "stage_sha256") == 0) {
+        } else if (strcmp(key, "stage_sha256") == 0) {
             infiltratr_copy_string(state->stage_sha256, sizeof(state->stage_sha256), equals);
-        } else if (strcmp(line, "physical_bytes") == 0) {
+        } else if (strcmp(key, "physical_bytes") == 0) {
             if (parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
-        } else if (strcmp(line, "filesystem_bytes") == 0) {
+        } else if (strcmp(key, "filesystem_bytes") == 0) {
             if (parse_u64(equals, &state->filesystem_bytes) != 0) goto invalid;
-        } else if (strcmp(line, "block_size") == 0) {
+        } else if (strcmp(key, "block_size") == 0) {
             uint64_t value = 0;
             if (parse_u64(equals, &value) != 0 || value > UINT32_MAX) goto invalid;
             state->block_size = (uint32_t)value;
-        } else if (strcmp(line, "total_blocks") == 0) {
+        } else if (strcmp(key, "total_blocks") == 0) {
             uint64_t value = 0;
             if (parse_u64(equals, &value) != 0 || value > UINT32_MAX) goto invalid;
             state->total_blocks = (uint32_t)value;
-        } else if (strcmp(line, "signature") == 0) {
+        } else if (strcmp(key, "signature") == 0) {
             uint64_t value = 0;
             if (parse_u64(equals, &value) != 0 || value > UINT16_MAX) goto invalid;
             state->signature = (uint16_t)value;
-        } else if (strcmp(line, "version") == 0) {
+        } else if (strcmp(key, "version") == 0) {
             uint64_t value = 0;
             if (parse_u64(equals, &value) != 0 || value > UINT16_MAX) goto invalid;
             state->version = (uint16_t)value;
