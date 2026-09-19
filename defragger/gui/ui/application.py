@@ -8,23 +8,20 @@ import sys
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk
+from gi.repository import Gtk
 
+from .icon_assets import apply_default_window_icon
 from .theme import apply_theme, load_theme_mode
 from .window import MainWindow
 
 
 APP_ID = "io.github.linuxdefragger"
-APP_ICON_FILE = "/usr/lib/linux-defragger/defragmenter-icon.png"
 
 
 class LinuxDefraggerApplication(Gtk.Application):
     def __init__(self) -> None:
         super().__init__(application_id=APP_ID, flags=0)
-        try:
-            Gtk.Window.set_default_icon_from_file(APP_ICON_FILE)
-        except GLib.Error:
-            Gtk.Window.set_default_icon_name(APP_ID)
+        apply_default_window_icon()
         self.windows: list[MainWindow] = []
 
     def new_window(self) -> None:
