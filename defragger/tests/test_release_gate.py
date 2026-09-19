@@ -107,6 +107,7 @@ def main() -> None:
         'Applies to: release version ${VERSION}',
         "Audited source commit:",
         'git diff --quiet "$AUDITED_COMMIT" HEAD',
+        "CMakeLists.txt cmake native gui src shared packaging",
         "Audited release-governance commit:",
         "GOVERNANCE_COMMIT",
         ":(top).github/workflows",
@@ -209,6 +210,7 @@ def main() -> None:
     audited_paths = (
         "defragger/CMakeLists.txt",
         "defragger/cmake",
+        "defragger/native",
         "defragger/gui",
         "defragger/src",
         "defragger/shared",
