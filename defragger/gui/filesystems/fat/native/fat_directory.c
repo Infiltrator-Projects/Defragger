@@ -18,6 +18,7 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "infiltratr/arithmetic.h"
+#include "infiltratr/endian.h"
 
 #define FAT_PROGRAM_NAME "linux-defragger-fat-worker"
 #define MAX_RECURSION_DEPTH 128U
@@ -161,7 +162,7 @@ static void lfn_accept_entry(LfnState *state, const uint8_t entry[32]) {
     };
     size_t base = (slot - 1U) * 13U;
     for (size_t i = 0; i < 13; i++) {
-        state->chars[base + i] = ld_read_le16(entry + offsets[i]);
+        state->chars[base + i] = infiltratr_load_le16(entry + offsets[i]);
     }
     state->present[slot - 1U] = 1;
 }
@@ -337,9 +338,9 @@ static void scan_directory(
                 lfn_reset(&lfn);
                 continue;
             }
-            uint32_t first = ld_read_le16(entry + 26);
+            uint32_t first = infiltratr_load_le16(entry + 26);
             if (fs->fat_type == FAT_TYPE_32) {
-                first |= (uint32_t)ld_read_le16(entry + 20) << 16;
+                first |= (uint32_t)infiltratr_load_le16(entry + 20) << 16;
             }
             first &= fat_mask(fs);
             if (dir_refs != NULL && first != 0) {
@@ -368,7 +369,7 @@ static void scan_directory(
                 free(long_name);
                 continue;
             }
-            uint32_t size = ld_read_le32(entry + 28);
+            uint32_t size = infiltratr_load_le32(entry + 28);
             bool is_directory = (attributes & 0x10) != 0;
             char *full_path = path_join(path, name);
             free(long_name);

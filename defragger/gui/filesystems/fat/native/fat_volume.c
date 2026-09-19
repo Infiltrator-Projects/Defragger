@@ -14,6 +14,7 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 #include "infiltratr/arithmetic.h"
+#include "infiltratr/endian.h"
 
 #define PROGRAM_NAME "linux-defragger-fat-worker"
 
@@ -92,7 +93,7 @@ static uint32_t decode_fat_entry(
         if (offset + 1 >= fat_bytes) {
             ld_die("FAT12 entry outside loaded table");
         }
-        uint16_t pair = ld_read_le16(raw + offset);
+        uint16_t pair = infiltratr_load_le16(raw + offset);
         return (cluster & 1u)
             ? (uint32_t)(pair >> 4)
             : (uint32_t)(pair & 0x0FFFu);
@@ -101,12 +102,12 @@ static uint32_t decode_fat_entry(
         if (offset + 1 >= fat_bytes) {
             ld_die("FAT16 entry outside loaded table");
         }
-        return ld_read_le16(raw + offset);
+        return infiltratr_load_le16(raw + offset);
     }
     if (offset + 3 >= fat_bytes) {
         ld_die("FAT32 entry outside loaded table");
     }
-    return ld_read_le32(raw + offset) & FAT32_MASK;
+    return infiltratr_load_le32(raw + offset) & FAT32_MASK;
 }
 
 uint32_t fat_value(const Fat32 *fs, uint32_t cluster) {
@@ -146,15 +147,15 @@ bool fat_geometry_parse(
         return geometry_error(error, error_size, "invalid boot-sector signature");
     }
 
-    geometry->bytes_per_sector = ld_read_le16(boot + 11);
+    geometry->bytes_per_sector = infiltratr_load_le16(boot + 11);
     geometry->sectors_per_cluster = boot[13];
-    geometry->reserved_sectors = ld_read_le16(boot + 14);
+    geometry->reserved_sectors = infiltratr_load_le16(boot + 14);
     geometry->fat_count = boot[16];
-    geometry->root_entry_count = ld_read_le16(boot + 17);
-    uint16_t total16 = ld_read_le16(boot + 19);
-    uint16_t fat16_sectors = ld_read_le16(boot + 22);
-    uint32_t total32 = ld_read_le32(boot + 32);
-    uint32_t fat32_sectors = ld_read_le32(boot + 36);
+    geometry->root_entry_count = infiltratr_load_le16(boot + 17);
+    uint16_t total16 = infiltratr_load_le16(boot + 19);
+    uint16_t fat16_sectors = infiltratr_load_le16(boot + 22);
+    uint32_t total32 = infiltratr_load_le32(boot + 32);
+    uint32_t fat32_sectors = infiltratr_load_le32(boot + 36);
     geometry->total_sectors = total16 != 0 ? total16 : total32;
 
     if (!(geometry->bytes_per_sector == 512
@@ -206,8 +207,8 @@ bool fat_geometry_parse(
     }
 
     if (geometry->fat_type == FAT_TYPE_32) {
-        geometry->ext_flags = ld_read_le16(boot + 40);
-        if (ld_read_le16(boot + 42) != 0) {
+        geometry->ext_flags = infiltratr_load_le16(boot + 40);
+        if (infiltratr_load_le16(boot + 42) != 0) {
             return geometry_error(error, error_size, "unsupported nonzero FAT32 filesystem version");
         }
         geometry->fat_mirroring =
@@ -218,10 +219,10 @@ bool fat_geometry_parse(
         if (geometry->active_fat >= geometry->fat_count) {
             return geometry_error(error, error_size, "active FAT index is outside the FAT count");
         }
-        geometry->root_cluster = ld_read_le32(boot + 44) & FAT32_MASK;
-        geometry->fsinfo_sector = ld_read_le16(boot + 48);
-        geometry->backup_boot_sector = ld_read_le16(boot + 50);
-        geometry->volume_id = ld_read_le32(boot + 67);
+        geometry->root_cluster = infiltratr_load_le32(boot + 44) & FAT32_MASK;
+        geometry->fsinfo_sector = infiltratr_load_le16(boot + 48);
+        geometry->backup_boot_sector = infiltratr_load_le16(boot + 50);
+        geometry->volume_id = infiltratr_load_le32(boot + 67);
         if (geometry->root_entry_count != 0 || fat16_sectors != 0) {
             return geometry_error(error, error_size, "FAT32 layout fields are inconsistent");
         }
@@ -235,7 +236,7 @@ bool fat_geometry_parse(
         geometry->root_cluster = 0;
         geometry->fsinfo_sector = 0;
         geometry->backup_boot_sector = 0;
-        geometry->volume_id = ld_read_le32(boot + 39);
+        geometry->volume_id = infiltratr_load_le32(boot + 39);
         if (geometry->root_entry_count == 0 || fat16_sectors == 0) {
             return geometry_error(error, error_size, "FAT12/FAT16 layout fields are inconsistent");
         }
@@ -479,17 +480,17 @@ void fat32_write_entry(
             ld_die_errno("read FAT entry before update");
         }
         if (fs->fat_type == FAT_TYPE_12) {
-            uint16_t pair = ld_read_le16(raw);
+            uint16_t pair = infiltratr_load_le16(raw);
             uint32_t value = new_value & UINT32_C(0x0FFF);
             pair = (cluster & 1u)
                 ? (uint16_t)((pair & 0x000Fu) | (value << 4))
                 : (uint16_t)((pair & 0xF000u) | value);
-            ld_write_le16(raw, pair);
+            infiltratr_store_le16(raw, pair);
         } else if (fs->fat_type == FAT_TYPE_16) {
-            ld_write_le16(raw, (uint16_t)new_value);
+            infiltratr_store_le16(raw, (uint16_t)new_value);
         } else {
-            uint32_t old = ld_read_le32(raw);
-            ld_write_le32(
+            uint32_t old = infiltratr_load_le32(raw);
+            infiltratr_store_le32(
                 raw,
                 (old & UINT32_C(0xF0000000))
                 | (new_value & FAT32_MASK)
@@ -587,7 +588,7 @@ void fat32_apply_updates(
             ((size_t)first_sector * fs->bytes_per_sector) / 4;
         size_t entry_count = bytes / 4;
         for (size_t entry = 0; entry < entry_count; entry++) {
-            ld_write_le32(
+            infiltratr_store_le32(
                 raw + entry * 4,
                 fs->fat[first_entry + entry]
             );

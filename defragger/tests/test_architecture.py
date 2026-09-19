@@ -311,6 +311,9 @@ def test_infiltratr_common_integration() -> None:
     assert "ld_xrealloc(" not in ext_plan
     runtime_header = (ROOT / "src" / "core" / "ld_runtime.h").read_text()
     runtime_source = (ROOT / "src" / "core" / "ld_runtime.c").read_text()
+    for retired in ("ld_read_le16", "ld_read_le32", "ld_write_le16", "ld_write_le32"):
+        assert retired not in runtime_header
+        assert retired not in production_c
     assert "ld_xrealloc" not in runtime_header
     assert "ld_xrealloc" not in runtime_source
     assert "infiltratr_size_add_checked" in runtime_source

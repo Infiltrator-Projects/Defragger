@@ -18,11 +18,6 @@
 #define APFS_BLOCK_COUNT_OFFSET 40U
 #define APFS_UUID_OFFSET 72U
 
-static uint64_t apfs_read_le64(const uint8_t *p)
-{
-    return infiltratr_load_le64(p);
-}
-
 static void apfs_error(char *error, size_t error_size, const char *message)
 {
     if (error != NULL && error_size != 0U)
@@ -64,8 +59,8 @@ int apfs_read_summary(const char *path, ApfsSummary *summary,
         return -1;
     }
 
-    const uint32_t block_size = ld_read_le32(block + APFS_BLOCK_SIZE_OFFSET);
-    const uint64_t block_count = apfs_read_le64(block + APFS_BLOCK_COUNT_OFFSET);
+    const uint32_t block_size = infiltratr_load_le32(block + APFS_BLOCK_SIZE_OFFSET);
+    const uint64_t block_count = infiltratr_load_le64(block + APFS_BLOCK_COUNT_OFFSET);
     if (block_size < APFS_NX_BLOCK_BYTES ||
         (block_size & (block_size - 1U)) != 0U || block_count == 0U) {
         apfs_error(error, error_size, "invalid APFS container geometry");

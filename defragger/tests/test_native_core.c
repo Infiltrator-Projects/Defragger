@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "infiltratr/core.h"
+#include "infiltratr/endian.h"
 #include "infiltratr/posix.h"
 #include "ld_device.h"
 #include "ld_io.h"
@@ -161,10 +162,10 @@ int main(void) {
     rmdir(tree_root);
 
     uint8_t encoded[8] = {0};
-    ld_write_le16(encoded, UINT16_C(0xa55a));
-    ld_write_le32(encoded + 2, UINT32_C(0x89abcdef));
-    if (ld_read_le16(encoded) != UINT16_C(0xa55a)) return fail("le16 codec");
-    if (ld_read_le32(encoded + 2) != UINT32_C(0x89abcdef)) return fail("le32 codec");
+    infiltratr_store_le16(encoded, UINT16_C(0xa55a));
+    infiltratr_store_le32(encoded + 2, UINT32_C(0x89abcdef));
+    if (infiltratr_load_le16(encoded) != UINT16_C(0xa55a)) return fail("le16 codec");
+    if (infiltratr_load_le32(encoded + 2) != UINT32_C(0x89abcdef)) return fail("le32 codec");
 
     uint64_t result = 0;
     if (!infiltratr_u64_add_checked(10, 20, &result) || result != 30)

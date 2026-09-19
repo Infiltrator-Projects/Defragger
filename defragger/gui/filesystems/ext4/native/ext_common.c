@@ -4,6 +4,7 @@
 #include "ld_runtime.h"
 
 #include "infiltratr/arithmetic.h"
+#include "infiltratr/endian.h"
 #include "infiltratr/posix_io.h"
 
 #include <com_err.h>
@@ -131,24 +132,24 @@ int ext_read_geometry(const char *path, ExtGeometry *geometry, char **error) {
                       strerror(saved));
         return -1;
     }
-    if (ld_read_le16(sb + 56) != EXT2_SUPER_MAGIC) {
+    if (infiltratr_load_le16(sb + 56) != EXT2_SUPER_MAGIC) {
         ext_set_error(error, "not an EXT2/EXT3/EXT4 filesystem");
         return -1;
     }
-    uint32_t log_block = ld_read_le32(sb + 24);
+    uint32_t log_block = infiltratr_load_le32(sb + 24);
     if (log_block > 6U) {
         ext_set_error(error, "unsupported EXT block size exponent %u", log_block);
         return -1;
     }
     uint32_t block_size = 1024U << log_block;
-    uint32_t incompat = ld_read_le32(sb + 96);
-    uint32_t compat = ld_read_le32(sb + 92);
-    uint32_t ro_compat = ld_read_le32(sb + 100);
-    uint64_t blocks = ld_read_le32(sb + 4);
-    uint64_t free_blocks = ld_read_le32(sb + 12);
+    uint32_t incompat = infiltratr_load_le32(sb + 96);
+    uint32_t compat = infiltratr_load_le32(sb + 92);
+    uint32_t ro_compat = infiltratr_load_le32(sb + 100);
+    uint64_t blocks = infiltratr_load_le32(sb + 4);
+    uint64_t free_blocks = infiltratr_load_le32(sb + 12);
     if ((incompat & EXT4_FEATURE_INCOMPAT_64BIT) != 0U) {
-        blocks |= (uint64_t)ld_read_le32(sb + 0x150) << 32;
-        free_blocks |= (uint64_t)ld_read_le32(sb + 0x158) << 32;
+        blocks |= (uint64_t)infiltratr_load_le32(sb + 0x150) << 32;
+        free_blocks |= (uint64_t)infiltratr_load_le32(sb + 0x158) << 32;
     }
     if (blocks == 0 || free_blocks > blocks || blocks > physical_bytes / block_size) {
         ext_set_error(error, "EXT filesystem geometry exceeds the target device");
@@ -160,7 +161,7 @@ int ext_read_geometry(const char *path, ExtGeometry *geometry, char **error) {
     geometry->free_blocks = free_blocks;
     geometry->physical_blocks = physical_blocks;
     geometry->physical_bytes = physical_bytes;
-    geometry->first_data_block = ld_read_le32(sb + 20);
+    geometry->first_data_block = infiltratr_load_le32(sb + 20);
     geometry->ro_compat = ro_compat;
     geometry->incompat = incompat;
     geometry->compat = compat;

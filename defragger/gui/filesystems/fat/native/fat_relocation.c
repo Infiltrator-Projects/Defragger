@@ -20,6 +20,8 @@
 #include "ld_io.h"
 #include "ld_runtime.h"
 
+#include "infiltratr/endian.h"
+
 typedef struct {
     uint64_t sector_offset;
     uint64_t entry_offset;
@@ -89,13 +91,13 @@ static size_t write_dirent_first_clusters_batched(
                 free(ordered);
                 ld_die("conflicting directory-entry patches in one transaction");
             }
-            ld_write_le16(
+            infiltratr_store_le16(
                 sector + within + 20,
                 filesystem->fat_type == FAT_TYPE_32
                     ? (uint16_t)((ordered[end].new_target >> 16) & UINT32_C(0xFFFF))
                     : 0
             );
-            ld_write_le16(
+            infiltratr_store_le16(
                 sector + within + 26,
                 (uint16_t)(ordered[end].new_target & UINT32_C(0xFFFF))
             );
@@ -127,9 +129,9 @@ static uint32_t read_dirent_first_cluster(Fat32 *filesystem, uint64_t offset) {
             offset) != (ssize_t)sizeof(entry)) {
         ld_die_errno("read directory entry");
     }
-    uint32_t first = ld_read_le16(entry + 26);
+    uint32_t first = infiltratr_load_le16(entry + 26);
     if (filesystem->fat_type == FAT_TYPE_32) {
-        first |= (uint32_t)ld_read_le16(entry + 20) << 16;
+        first |= (uint32_t)infiltratr_load_le16(entry + 20) << 16;
     }
     return first & fat_mask(filesystem);
 }
@@ -186,7 +188,7 @@ static void write_boot_root_cluster_one(
         free(sector);
         ld_die("invalid FAT32 boot-sector copy while updating root cluster");
     }
-    ld_write_le32(sector + 44, root_cluster & FAT32_MASK);
+    infiltratr_store_le32(sector + 44, root_cluster & FAT32_MASK);
     if (ld_pwrite_full(
             filesystem->dev.fd,
             sector,
@@ -234,10 +236,10 @@ static void update_fsinfo_one(
         ld_die_errno("read FSInfo");
     }
     if (bytes_per_sector >= 512
-            && ld_read_le32(sector) == UINT32_C(0x41615252)
-            && ld_read_le32(sector + 484) == UINT32_C(0x61417272)
-            && ld_read_le32(sector + 508) == UINT32_C(0xAA550000)) {
-        ld_write_le32(sector + 492, next_free);
+            && infiltratr_load_le32(sector) == UINT32_C(0x41615252)
+            && infiltratr_load_le32(sector + 484) == UINT32_C(0x61417272)
+            && infiltratr_load_le32(sector + 508) == UINT32_C(0xAA550000)) {
+        infiltratr_store_le32(sector + 492, next_free);
         if (ld_pwrite_full(
                 filesystem->dev.fd,
                 sector,
