@@ -4,10 +4,10 @@
 Status: **complete**
 
 Completed: 2026-08-25
-Extended: 2026-09-18
+Extended: 2026-09-19
 
-Applies to: release version 1.8.0-171
-Audited source commit: 608dc7e98d2bc3d6e7a38fa11d1089546f554b0e
+Applies to: release version 1.8.0-172
+Audited source commit: 358d100df8d2ffd18f0c3ed15357feb1bfd2761e
 Audited release-governance commit: 0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -338,8 +338,9 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     documentation and release metadata. Public source archives are now named
     `Defragmenter-<version>.zip`. Stable compatibility identifiers remain
     unchanged where renaming would break upgrades, persisted state or external
-    automation: the Debian package and executable family remain
-    `linux-defragger`, the desktop application ID remains
+    automation. The Debian/APT package now uses the protected
+    `infiltrator-defragmenter` identity, while the installed executable family
+    remains `linux-defragger`; the desktop application ID remains
     `io.github.linuxdefragger`, and existing state paths, environment
     variables and journal magic retain their established identifiers. A
     permanent architecture regression rejects the retired product labels from
@@ -347,6 +348,14 @@ hazard/control matrix above and the invariants in [DESIGN.md](DESIGN.md).
     contract. Exact audited source baseline `f4c538e4d8bfa724d8de53b391d76325e2f993d3` contains the completed rename;
     release-governance is independently bound below; publication remains
     conditional on the exact-head quality gate and immutable release checks.
+
+37. Release 1.8.0-172 moves only the Debian/APT package identity into the
+    collision-resistant `infiltrator-defragmenter` namespace. The package
+    declares compatibility replacement for earlier `linux-defragger`
+    installations, while executables, desktop IDs, runtime/configuration paths,
+    journal formats and filesystem engines remain unchanged. The audited source
+    baseline above includes the complete packaging migration; no production
+    filesystem mutation code changed after that baseline.
 
 37. The quality-gate concurrency identity was renewed from v2 to v3 after
     GitHub left a cancelled self-hosted job attached to
