@@ -1,11 +1,15 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Defragmenter
 
-> **Safety status:** The version 1.8.0-171 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
+> **Safety status:** The version 1.8.0-172 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
 
 Defragmenter is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
 
 The current software version is defined by [`VERSION`](VERSION). Installable builds are published on the repository's Releases page.
+
+### Compatibility naming
+
+The user-facing product remains **Defragmenter**. The Debian/APT package identity is `infiltrator-defragmenter` so it cannot collide with a future distribution package. The installed executable family, desktop application ID, runtime paths, configuration paths, environment variables and recovery/journal identities retain their established `linux-defragger` compatibility names. Existing `linux-defragger` package installations migrate through the central Infiltrator repository transition package.
 
 > **Important:** defragmentation changes filesystem allocation metadata and data placement. Use verified backups and test media before using write-capable operations on important filesystems.
 
