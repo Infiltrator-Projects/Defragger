@@ -23,7 +23,7 @@ trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 mkdir -p "$WORK/bin"
 ln -s "$ROOT/tests/test_deb_package_versions.sh" "$WORK/bin/cmake"
 
-PACKAGE="$WORK/linux-defragger_${NATIVE_VERSION}_amd64.deb"
+PACKAGE="$WORK/infiltrator-defragmenter_${NATIVE_VERSION}_amd64.deb"
 PATH="$WORK/bin:$PATH" \
 LD_TEST_FAKE_CMAKE=1 \
 LD_BUILD_FLAVOR=native \
@@ -33,7 +33,7 @@ BUILD_DIR="$WORK/build" \
 OUTPUT_PATH="$PACKAGE" \
     "$ROOT/packaging/build-deb.sh" >/dev/null
 
-[ "$(dpkg-deb -f "$PACKAGE" Package)" = linux-defragger ]
+[ "$(dpkg-deb -f "$PACKAGE" Package)" = infiltrator-defragmenter ]
 [ "$(dpkg-deb -f "$PACKAGE" Version)" = "$NATIVE_VERSION" ]
 [ "$(dpkg-deb -f "$PACKAGE" Architecture)" = amd64 ]
 [ "$(dpkg-deb -f "$PACKAGE" X-Linux-Defragger-Build)" = native ]
