@@ -4,6 +4,14 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-183
+
+- Completed a second forensic Common 1.19.10 reuse pass without moving filesystem semantics or recovery policy out of Defragmenter.
+- Replaced private key=value splitting in FAT, AFFS, SFS, XFS, EXT, exFAT, NTFS and HFS+ recovery/relayout readers with Common's allocation-free configuration-line parser.
+- Replaced private lexical path joining in Test Media and exFAT catalogue construction with Common's POSIX path-join contract, and made Defragmenter's allocating suffix adapter delegate byte-exact concatenation to Common.
+- Added architecture regressions that reject reintroduction of private journal splitters and path-join duplicates where Common owns the exact mechanism.
+- Retained local ASCII case-folding, mount/device topology, filesystem structures, transaction fields, target safety, placement and recovery decisions where Common either deliberately exposes no matching public contract or the behaviour is domain-specific.
+
 ## 1.8.0-182
 
 - Advanced the exact Infiltratr Common dependency from 1.19.8 to released 1.19.10 at commit `33e69c0a462b56d388881d89c4eb49f72fa0b0fe` across the submodule, CMake build and local installer.

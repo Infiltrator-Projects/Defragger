@@ -5,8 +5,8 @@ Status: **complete**
 Completed: 2026-08-25  
 Extended: 2026-09-20
 
-Applies to: release version 1.8.0-182
-Audited source commit: 2fe8ec886d47baf4d6b85d7652486453fe0b946d
+Applies to: release version 1.8.0-183
+Audited source commit: c41d0aaa279c740a441d447fd9558df59c6e379b
 Audited release-governance commit: b5f891f623f37df16d0d902029a22ca715301581
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -75,7 +75,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-182 is the current audited release line. It advances the reusable foundation to Common 1.19.10 at the exact audited pin, consumes the complete shared Day/Night semantic role set in the GTK and Test Media adapters, and removes the remaining private About palette. The forensic pass also removes a dead Python transaction/journal durability implementation and unused Python raw-write capability; authoritative mutation remains in the native writers through Common exact-I/O and durable-file primitives. Filesystem semantics, destructive-operation safety and recovery policy remain Defragmenter-owned, and the C++17 application-service plus first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
+Version 1.8.0-183 is the current audited release line. It retains the exact Common 1.19.10 pin and completes a second reuse pass over generic native mechanics: recovery and relayout key=value parsing now uses Common's allocation-free configuration parser, while shared lexical path joining and byte-exact suffix concatenation use Common's POSIX path contracts. Filesystem journal schemas, target-safety decisions, placement, mutation and recovery semantics remain Defragmenter-owned. Local helpers are retained where Common intentionally exposes no matching public contract, including filesystem-specific parsing and application policy. The C++17 application-service plus first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 
