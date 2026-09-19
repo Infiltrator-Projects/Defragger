@@ -220,7 +220,7 @@ def test_infiltratr_common_integration() -> None:
     assert "shared/infiltratr-common" in gitmodules
     assert "Infiltrator-Libraries.git" in gitmodules
     cmake = _cmake_source()
-    assert "4964786ebf1e66dfdb9309c3813dcb17bce19eb5" in cmake
+    assert "a0e26896cc2a5674a138b29f009a7b30f0d636c6" in cmake
     assert "add_subdirectory(" in cmake
     assert "InfiltratrCommon::Common" in cmake
     assert "set(INFILTRATR_COMMON_BUILD_TESTS OFF)" in cmake
@@ -229,7 +229,7 @@ def test_infiltratr_common_integration() -> None:
     assert '${INFILTRATR_COMMON_DIR}/src/posix.c' not in cmake
     local_installer = (ROOT / "packaging" / "build-local-run.sh").read_text()
     assert 'COMMON_VERSION="1.19.6"' in local_installer
-    assert 'COMMON_COMMIT="4964786ebf1e66dfdb9309c3813dcb17bce19eb5"' in local_installer
+    assert 'COMMON_COMMIT="a0e26896cc2a5674a138b29f009a7b30f0d636c6"' in local_installer
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
     assert "infiltratr_realpath_copy" in device
     assert "infiltratr_read_u64_file" in device
