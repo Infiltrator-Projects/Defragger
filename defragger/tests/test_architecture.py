@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -642,13 +643,24 @@ def test_user_facing_branding_is_defragmenter() -> None:
 
     project_cmake = (ROOT / "cmake" / "project.cmake").read_text()
     assert "packaging/io.github.linuxdefragger.png" in project_cmake
-    assert "share/icons/hicolor/128x128/apps" in project_cmake
+    assert "share/icons/hicolor/256x256/apps" in project_cmake
+    assert "share/icons/hicolor/128x128/apps" not in project_cmake
     assert "DESTINATION share/app-install/icons" in project_cmake
     assert "RENAME infiltrator-defragmenter.png" in project_cmake
     assert "DESTINATION lib/linux-defragger" in project_cmake
     assert "RENAME defragmenter-icon.png" in project_cmake
     assert "packaging/io.github.linuxdefragger.svg" not in project_cmake
-    assert (ROOT / "packaging" / "io.github.linuxdefragger.png").is_file()
+    icon_path = ROOT / "packaging" / "io.github.linuxdefragger.png"
+    assert icon_path.is_file()
+    assert subprocess.check_output(
+        ["git", "hash-object", str(icon_path)],
+        cwd=ROOT.parent,
+        text=True,
+    ).strip() == "6c860b623ef3e9608e8d5bbde5fa91cb4fe6783f"
+    png = icon_path.read_bytes()
+    assert png[:8] == b"\\x89PNG\\r\\n\\x1a\\n"
+    assert int.from_bytes(png[16:20], "big") == 256
+    assert int.from_bytes(png[20:24], "big") == 256
     assert not (ROOT / "packaging" / "io.github.linuxdefragger.svg").exists()
 
     release_workflow = (ROOT.parent / ".github" / "workflows" / "release.yml").read_text()
