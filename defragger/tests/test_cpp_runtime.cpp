@@ -5,8 +5,12 @@
 #include "process.hpp"
 
 #include <cstdio>
+#include <cstdlib>
+#include <stdexcept>
 #include <string>
 #include <vector>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace {
 
@@ -14,6 +18,26 @@ bool check(bool condition, const char* message) {
     if (condition) return true;
     std::fprintf(stderr, "cpp runtime test failed: %s\n", message);
     return false;
+}
+
+std::string fake_map_worker(const char* payload) {
+    char path[] = "/tmp/defragger-map-worker.XXXXXX";
+    const int fd = mkstemp(path);
+    if (fd < 0) throw std::runtime_error("mkstemp failed");
+    FILE* stream = fdopen(fd, "w");
+    if (stream == nullptr) {
+        (void)close(fd);
+        (void)unlink(path);
+        throw std::runtime_error("fdopen failed");
+    }
+    const int written = std::fprintf(
+        stream, "#!/bin/sh\nprintf '%%s\\n' '%s'\n", payload);
+    const int closed = std::fclose(stream);
+    if (written < 0 || closed != 0 || chmod(path, 0700) != 0) {
+        (void)unlink(path);
+        throw std::runtime_error("cannot create fake map worker");
+    }
+    return path;
 }
 
 } // namespace
@@ -77,6 +101,56 @@ int main() {
         rejected_over_limit = true;
     }
     ok = check(rejected_over_limit, "output beyond limit is rejected") && ok;
+
+    const BackendInfo* btrfs = backend_by_fstype("btrfs");
+    ok = check(btrfs != nullptr, "Btrfs lookup") && ok;
+    if (btrfs != nullptr) {
+        const std::string valid_worker = fake_map_worker(
+            "{\"schema\":1,\"backend\":\"read-only-domain\","
+            "\"filesystem\":\"btrfs\",\"map_accuracy\":\"exact-single-device\","
+            "\"unit_size\":4096,\"total_units\":1,\"cell_count\":1,"
+            "\"cells\":[{\"start\":0,\"end\":0}]}");
+        (void)setenv("LINUX_DEFRAGGER_BTRFS_WORKER", valid_worker.c_str(), 1);
+        try {
+            const Json mapped = map_backend(*btrfs, "/dev/null", 1U);
+            ok = check(mapped.at("filesystem").string() == "btrfs",
+                       "valid native map accepted") && ok;
+        } catch (...) {
+            ok = check(false, "valid native map accepted") && ok;
+        }
+        (void)unlink(valid_worker.c_str());
+
+        const std::string wrong_identity = fake_map_worker(
+            "{\"schema\":1,\"backend\":\"read-only-domain\","
+            "\"filesystem\":\"zfs\",\"map_accuracy\":\"exact-single-device\","
+            "\"unit_size\":4096,\"total_units\":1,\"cell_count\":1,"
+            "\"cells\":[{\"start\":0,\"end\":0}]}");
+        (void)setenv("LINUX_DEFRAGGER_BTRFS_WORKER", wrong_identity.c_str(), 1);
+        bool rejected_identity = false;
+        try {
+            (void)map_backend(*btrfs, "/dev/null", 1U);
+        } catch (const std::runtime_error&) {
+            rejected_identity = true;
+        }
+        ok = check(rejected_identity, "native map identity mismatch rejected") && ok;
+        (void)unlink(wrong_identity.c_str());
+
+        const std::string wrong_accuracy = fake_map_worker(
+            "{\"schema\":1,\"backend\":\"read-only-domain\","
+            "\"filesystem\":\"btrfs\",\"map_accuracy\":\"summary\","
+            "\"unit_size\":4096,\"total_units\":1,\"cell_count\":1,"
+            "\"cells\":[{\"start\":0,\"end\":0}]}");
+        (void)setenv("LINUX_DEFRAGGER_BTRFS_WORKER", wrong_accuracy.c_str(), 1);
+        bool rejected_accuracy = false;
+        try {
+            (void)map_backend(*btrfs, "/dev/null", 1U);
+        } catch (const std::runtime_error&) {
+            rejected_accuracy = true;
+        }
+        ok = check(rejected_accuracy, "native map accuracy mismatch rejected") && ok;
+        (void)unlink(wrong_accuracy.c_str());
+        (void)unsetenv("LINUX_DEFRAGGER_BTRFS_WORKER");
+    }
 
     const HelperCommand helper = helper_command(
         "operation-engine",

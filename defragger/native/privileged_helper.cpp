@@ -331,8 +331,6 @@ private:
             return;
         }
 
-        if (worker_.joinable()) worker_.join();
-
         {
             std::lock_guard<std::mutex> lock(active_mutex_);
             if (worker_running_ || active_pid_ > 0) {
@@ -340,6 +338,10 @@ private:
                            "another privileged operation is already active");
                 return;
             }
+        }
+        if (worker_.joinable()) worker_.join();
+        {
+            std::lock_guard<std::mutex> lock(active_mutex_);
             worker_running_ = true;
         }
 
