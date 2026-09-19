@@ -4,6 +4,15 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-180
+
+- Advanced the exact Infiltratr Common dependency from 1.19.6 to released 1.19.8.
+- Replaced C++ JSON real conversion with Common's deterministic locale-independent finite-decimal parser and hardened local string allocation with Common checked size arithmetic.
+- Extended the generated GTK design adapter to consume Common typography roles and neutral structural metrics; the allocation-map placeholder now uses the same generated typography identity.
+- Moved Test Media typography and shared radius identity onto Common's native design API without changing Defragmenter-specific presentation or filesystem behaviour.
+- Removed duplicated MB Corpo source/hash constants from Defragmenter packaging; font provenance and verification are now read from the exact pinned Common design contract.
+- Strengthened architecture, GUI and release regressions so these Common ownership boundaries and the exact 1.19.8 pin cannot silently drift.
+
 ## 1.8.0-179
 
 - Restored the exact 256×256 Defragmenter artwork previously supplied for the desktop and About presentation.
