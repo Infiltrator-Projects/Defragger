@@ -1,37 +1,121 @@
 # Architecture
 
-## Purpose
+Defragmenter separates GTK presentation, filesystem-neutral safety/runtime services, per-filesystem engines, recovery state and reusable Common mechanisms. That separation is a correctness boundary: the UI expresses intent and presents completed state, while raw-storage and filesystem code owns the rules that can change on-disk data.
 
-Defragmenter is an offline filesystem allocation analyser and defragmenter that owns parsing, placement planning, staging, recovery and verified mutation rather than delegating write behaviour to mounted filesystem drivers or external repair tools.
+## First-principles design
 
-## System decomposition
+Defragmenter starts from filesystem structures, durability rules and target-safety requirements rather than treating a mounted filesystem driver or external repair utility as the specification.
 
-- GTK application
-- filesystem-neutral raw-I/O and safety core
-- per-filesystem analysis/mutation engines
-- persistent recovery/staging machinery
-- test-fixture generators
-- quality-gate and safety regression suite
-- pinned Common primitives
+First principles does not mean reimplementing every mechanism. Linux supplies raw block I/O and process primitives; GTK supplies presentation; system libraries may provide documented in-process APIs; Infiltratr Common supplies reusable first-party primitives. Defragmenter retains ownership of filesystem interpretation, placement, mutation, recovery and user-visible safety policy.
 
-## Ownership boundaries
+A dependency is chosen because its contract is stronger for the job, not because it is convenient. Unsupported or ambiguous layouts remain unsupported instead of being guessed.
 
-The operating system supplies block I/O. Defragmenter owns filesystem interpretation, placement, mutation and recovery for the formats it explicitly supports. Unsupported layouts fail closed.
+## Structure
 
-The architectural rule is that mechanisms may come from an operating system, toolkit, shared first-party library or documented external API, but product semantics remain with their owning repository. Dependencies are accepted because their contract is useful, not as a substitute for understanding the behaviour being exposed to users.
+```text
+GTK 3 presentation
+        ↓
+MainWindow / coordinators / service models
+        ↓
+filesystem plugin registry and worker protocol
+        ↓
+filesystem-neutral native safety/runtime core
+        ↓
+per-filesystem native analysers / planners / writers
+        ↓
+raw image or unmounted block device
 
-## Source of truth
+Infiltratr Common 1.19.2
+        ↓
+checked arithmetic / parsing / endian / path / exact-I/O /
+allocation-growth / JSON / durable-file primitives
+```
 
-Implementation and tests define executable behaviour. This document defines module ownership and dependency direction. Specialist documents refine particular subsystems but must not create a competing architecture.
+The source tree reflects those responsibilities:
 
-## Change rules
+```text
+defragger/
+├── gui/ui/                 presentation and user interaction
+├── gui/core/               shared application protocol/transaction contracts
+├── gui/engine/             worker resolution and orchestration
+├── gui/backends/           plugin contracts and single registry
+├── gui/filesystems/        authoritative per-filesystem implementations
+├── src/core/               filesystem-neutral native safety/runtime services
+├── test_media/             destructive sacrificial-media utility
+├── tests/                  native, filesystem, GUI, safety and release evidence
+├── packaging/              Debian/native installer construction
+└── shared/                 pinned Infiltratr Common dependency
+```
 
-Cross-layer shortcuts require a documented reason. Platform handles and toolkit objects should not leak into portable/domain contracts. Failure states must remain representable across boundaries rather than being converted into plausible-looking values.
+## Contracts and ownership
+
+`gui/backends/registry.py` is the only filesystem registry. Each filesystem package owns its probe, analyser, placement rules, writer and verifier. Native C below a filesystem package is an implementation detail of that package rather than a second plugin hierarchy.
+
+`src/core/` owns mechanics that are genuinely filesystem-neutral: exact raw I/O adaptation, target identity/capacity checks, overlap-aware mounted-target rejection, Stop state, resource defaults and machine-readable result emission. Filesystem geometry, metadata interpretation, transaction stages and recovery rules stay with the owning filesystem.
+
+GTK objects stay in the presentation layer. Runner, policy and storage models exchange plain values and typed events rather than making presentation code responsible for raw-device or filesystem policy.
+
+## Target safety and privilege boundary
+
+Write-capable operations target only an unmounted block device or regular filesystem image. Selection is not treated as authority: the project revalidates target identity, capacity and mounted overlap across open/privilege boundaries before authoritative mutation.
+
+The privileged helper accepts a constrained command contract and a user-specific recovery namespace. Filesystem workers still perform their own target and format validation; privilege does not bypass safety policy.
+
+Paths and device-provided metadata are external input. A previously valid path may refer to a different object later, so persistent transactions bind to stable target and filesystem identity where the format exposes it.
+
+## Filesystem engine contract
+
+Read-only plugins may probe and map a filesystem without implementing mutation. A write-capable plugin additionally owns a first-party native mutation path and an explicit Recover contract.
+
+Production writers do not mount the target, ask a mounted filesystem to choose placement, or launch external repair/defragmentation utilities. In-process system libraries are permitted where their documented API is part of the chosen implementation, but Defragmenter remains responsible for placement, transaction, verification and failure policy.
+
+Workers communicate through typed phase/live-range/result records. Human-readable logs are diagnostic text, not an API.
+
+## Transaction and recovery contract
+
+A write operation follows one architecture-wide sequence:
+
+1. identify the filesystem and declared operation;
+2. revalidate target identity and mounted state;
+3. scan the complete source model and reject unsupported states;
+4. construct and validate the canonical target plan;
+5. establish persistent recovery material before source bytes can require recovery;
+6. perform bounded durable mutation at filesystem-safe transaction boundaries;
+7. honour Stop only at a valid or recoverable boundary;
+8. reopen the target read-only and verify the required postcondition before success.
+
+Recovery state is monotonic and tied to one target. An unfinished transaction cannot be silently replaced by unrelated state. A successful writer return is not sufficient evidence of success without the final verification pass.
+
+## Failure model
+
+Failure is explicit. Unknown features, contradictory geometry, malformed metadata, target replacement, missing recovery material, unavailable dependencies and failed verification reject the affected operation.
+
+A numeric or apparently valid result is never substituted merely to keep an operation moving. For destructive paths, uncertainty is a reason not to write.
+
+The project assumes the kernel, libc, required libraries and storage hardware honour their documented contracts. It does not claim recovery from a compromised root environment or hardware that falsely acknowledges persistence and later loses data.
+
+## Common
+
+`shared/infiltratr-common` is pinned to Infiltratr Common 1.19.2 at exact commit `44409af17c89b6ece6b4bcb2c0c133213c695c23`.
+
+Common is authoritative for reusable mechanisms whose semantics are genuinely generic. If Defragmenter has a stronger implementation of a generic primitive, the preferred direction is to improve Common until its contract preserves that correctness, performance and resilience, then remove the local duplicate.
+
+Do not move filesystem policy, target-safety decisions or transaction semantics into Common merely to reduce line count.
+
+## Verification and assurance
+
+Correctness is enforced at several levels: warnings-as-errors native builds, unit and parser tests, disposable filesystem-image tests, recovery/fault-injection tests, GUI/service regressions, architecture/safety checks, ASan/UBSan qualification, packaging tests and exact-head release gates.
+
+The exact release revision must satisfy the project quality gate. The current write-safety decision is recorded separately in [AUDIT_STATUS.md](AUDIT_STATUS.md), while [VALIDATION.md](VALIDATION.md) defines what each class of evidence proves and does not prove.
+
+## Build and release contract
+
+Release artifacts are built from the exact qualified `main` revision. Published tags and assets are immutable identities. The Debian package/native installer, Common pin, audit source baseline and release-governance baseline are checked as part of publication rather than treated as post-release bookkeeping.
 
 ## Specialist documents
 
-- docs/AUDIT_STATUS.md
-- docs/DECISIONS.md
-- docs/DESIGN.md
-- docs/REFERENCES.md
-- docs/VALIDATION.md
+- [Design](DESIGN.md) — first-principles goals, non-goals, trade-offs and failure philosophy.
+- [Decisions](DECISIONS.md) — durable architectural choices and consequences.
+- [Validation](VALIDATION.md) — evidence classes, destructive-path validation and release criteria.
+- [Audit status](AUDIT_STATUS.md) — current write-safety case and exact audited baselines.
+- [References](REFERENCES.md) — filesystem/platform specifications and engineering sources.

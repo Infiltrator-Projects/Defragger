@@ -4,7 +4,8 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
-- Documentation baseline aligned with the Infiltrator project family.
+- Aligned the documentation roles with Calendar and System Monitor: architecture now owns system contracts, design is concise rationale, validation records evidence boundaries, and Audit Status records only the current safety case.
+- Removed duplicated product/manual material from the source-tree README and retained historical audit development in Git/release history instead of the current-state audit.
 
 ## Recording policy
 

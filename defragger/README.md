@@ -1,21 +1,12 @@
-<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-# Defragmenter
+# Defragmenter source tree
 
-> **Safety status:** The version 1.8.0-172 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility remains deliberately destructive and must be used only on sacrificial targets. See [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md).
+This directory contains the application implementation and build root. Product overview, engineering ethos, release policy and current safety status are maintained in the [repository README](../README.md) and [Audit Status](../docs/AUDIT_STATUS.md) rather than duplicated here.
 
-Defragmenter is a C-first, offline filesystem allocation analyser and defragmenter for Linux. Write-capable engines operate directly on unmounted block devices or filesystem images. They do not mount the target, ask the kernel filesystem driver to choose physical placement, or launch external filesystem repair/defragmentation tools to perform production mutations.
+The current software version is defined by [VERSION](VERSION).
 
-The current software version is defined by [`VERSION`](VERSION). Installable builds are published on the repository's Releases page.
+## Compatibility naming
 
-### Compatibility naming
-
-The user-facing product remains **Defragmenter**. The Debian/APT package identity is `infiltrator-defragmenter` so it cannot collide with a future distribution package. The installed executable family, desktop application ID, runtime paths, configuration paths, environment variables and recovery/journal identities retain their established `linux-defragger` compatibility names. Existing `linux-defragger` package installations migrate through the central Infiltrator repository transition package.
-
-> **Important:** defragmentation changes filesystem allocation metadata and data placement. Use verified backups and test media before using write-capable operations on important filesystems.
-
-## Appearance
-
-The main GTK application supports **Follow system**, **Day** and **Night** themes from **View → Theme**. Follow system preserves the desktop's GTK/Mint colour authority; Day and Night apply explicit Infiltrator palettes. The preference is stored per user and applies consistently to every open window.
+The user-facing product is **Defragmenter**. The Debian/APT package identity is `infiltrator-defragmenter`. Established executable, desktop application ID, runtime/configuration paths and recovery/journal identities retain their `linux-defragger` compatibility names so upgrades and persisted state continue to work.
 
 ## Filesystem support
 
@@ -27,97 +18,70 @@ The main GTK application supports **Follow system**, **Day** and **Night** theme
 | ext2 / ext3 / ext4 | Exact | Native C staged writer | Native C, exact 10% reserve | Yes |
 | XFS v5 | Exact | Native C raw userspace writer | Native C, exact 10% reserve | Yes |
 | Amiga OFS / FFS | Exact | Native C | Native C, exact 10% reserve | Yes |
-| Amiga SFS0 | Exact allocation + file-extent fragmentation analysis, native C | First-party native C offline raw relayout | Exact 10% post-file reserve | Yes |
+| Amiga SFS0 | Exact allocation + file-extent analysis | Native C supported-subset relayout | Exact 10% reserve | Yes |
 | Amiga SFS2 | Not implemented | Not implemented | Not implemented | No |
 | Amiga PFS3 | Not implemented | Not implemented | Not implemented | No |
 | HFS+ / HFSX | Exact | Native C, fail-closed preflight | Native C, exact 10% reserve | Yes |
 | Classic Macintosh HFS | Exact, native C read-only | Not implemented | Not implemented | No |
 | Btrfs | Exact read-only raw analysis | Not implemented | Not implemented | No |
 | APFS | Summary read-only analysis, native C | Not implemented | Not implemented | No |
-| Minix v1 / v2 / v3 | Exact read-only allocation and fragmentation analysis, native C | Not implemented | Not implemented | No |
+| Minix v1 / v2 / v3 | Exact read-only analysis, native C | Not implemented | Not implemented | No |
 | UFS1 | Summary read-only analysis, native C | Not implemented | Not implemented | No |
 | UFS2 | Exact allocation read-only analysis, native C | Not implemented | Not implemented | No |
 | ZFS / OpenZFS member | Summary read-only analysis, native C | Not implemented | Not implemented | No |
-| Linux swap | Exact inactive / aggregate active read-only analysis, native C | Not applicable | Not applicable | No |
+| Linux swap | Exact inactive / aggregate active analysis | Not applicable | Not applicable | No |
 
-Unsupported on-disk layouts fail closed rather than being guessed. Exact writers perform a final read-only rescan before reporting success.
+Unsupported or structurally ambiguous layouts fail closed.
 
-## Design
+## Source layout
 
-Defragmenter is intentionally filesystem-driver independent for placement work. The operating system still provides ordinary raw device I/O, but filesystem parsing, allocation planning, staging and metadata updates are owned by the project rather than delegated to the mounted kernel filesystem implementation.
+- `gui/ui/` — GTK presentation, coordinators and user interaction.
+- `gui/core/` — shared application protocol and transaction contracts.
+- `gui/engine/` — worker discovery/orchestration.
+- `gui/backends/` — plugin declarations and the single registry.
+- `gui/filesystems/<format>/` — authoritative filesystem implementations; private native C lives below `native/`.
+- `src/core/` — filesystem-neutral native safety/runtime services.
+- `test_media/` — separate destructive sacrificial-media utility.
+- `tests/` — native, filesystem, GUI, safety and release regressions.
+- `packaging/` — Debian and native local installer construction.
+- `shared/infiltratr-common/` — exact pinned Common dependency.
 
-Each filesystem has one authoritative implementation under `defragger/gui/filesystems/<format>/`, with native C under `native/` where exact low-level analysis or mutation is implemented. Filesystem-neutral device safety, raw I/O, Stop handling and shared runtime support live under `defragger/src/core/`.
+Detailed ownership and transaction rules are in [Architecture](../docs/ARCHITECTURE.md).
 
-Persistent write-capable engines use verified staging and recovery state before authoritative source changes. The architecture and regression tests reject known external filesystem mutation/repair orchestration and duplicate implementation paths.
+## Production operations
 
-The repository does not vendor third-party source trees. Shared first-party functionality is consumed through the pinned Infiltratr Common dependency, while required system libraries are supplied by the host distribution.
+**Defragment** places supported movable allocations into the earliest legal canonical layout. **Growth Defrag** applies the same placement model while reserving exactly 10% of each regular file's allocated length immediately after that file. **Recover** resumes or completes an interrupted supported transaction when its recovery contract permits it.
 
-For the detailed technical contract, see [`docs/DESIGN.md`](docs/DESIGN.md).
-
-## Operations
-
-Defragmenter exposes three production operations:
-
-- **Defragment** — places supported movable allocations into the earliest legal canonical layout.
-- **Growth Defrag** — uses the same canonical placement model while reserving exactly 10% free space immediately after each regular file.
-- **Recover** — resumes or repairs supported interrupted persistent transactions when the filesystem-specific recovery contract permits it.
-
-Stop requests are honoured at filesystem-safe transaction boundaries rather than by abandoning an authoritative write mid-transaction.
+Stop is cooperative and takes effect only at a filesystem-safe boundary.
 
 ## Test Media
 
-The package includes **Defragmenter Test Media**, a separate all-C GTK utility for preparing sacrificial test disks. It can use removable media or a dedicated secondary fixed disk, while protecting the system/boot disk and repeating destructive-target checks after privilege elevation.
+The package includes **Defragmenter Test Media**, a separate all-C GTK utility for manufacturing sacrificial test filesystems. It repeats destructive-target checks after privilege elevation and must never be pointed at a system disk or irreplaceable media.
 
-The standard test layout provides dedicated slots for FAT12, FAT16, FAT32, exFAT, NTFS, ext2, ext3, ext4, XFS, Btrfs, Amiga OFS, Amiga FFS, Amiga SFS/SFS2, Amiga PFS3, classic HFS, HFS+, Minix, UFS, ZFS, APFS and Swap. Unsupported creator/engine combinations remain explicitly reserved rather than receiving fake filesystem signatures.
-
-Formatting utilities are permitted inside Test Media solely to manufacture hostile test filesystems. Production analyser and writer engines remain subject to the raw-userspace/no-external-mutation rule.
+Formatting utilities used by Test Media are fixture-generation tools only; they are not part of production defragmentation.
 
 ## Build and test
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
-cmake --build build -j"$(nproc)"
+cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-The permanent GitHub quality gate performs a warnings-as-errors C build and runs the complete native, filesystem, GUI, architecture, safety and release regression suite.
+The aggregate suite covers native/filesystem behaviour, GUI/service contracts, safety/transaction invariants, packaging and release gates. Hosted CI also runs ASan/UBSan qualification.
 
-## Release downloads
+## Packaging
 
-Each numbered release publishes two installable project deliverables plus a checksum manifest:
+A numbered release publishes the generic amd64 Debian artifact, the hardware-native local compile/install `.run` artifact and `RELEASE_SHA256SUMS.txt`. GitHub supplies its standard tag source archives automatically.
 
-| File | Purpose |
-|---|---|
-| `Defragmenter-${VERSION}-amd64.deb` | Generic amd64 Debian package (`-march=x86-64 -mtune=generic`). |
-| `Defragmenter-${VERSION}-local-folder.run` | Hardware-optimised local compile-and-install program (`-march=native -mtune=native`). |
-| `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for the Debian package and native installer. |
+The package/install contract is described in the repository [README](../README.md); exact release qualification is recorded in [Audit Status](../docs/AUDIT_STATUS.md).
 
-Release publication is gated: the release workflow only publishes the requested version after the reusable project quality gate succeeds. GitHub supplies the standard tag `Source code (zip)` and `Source code (tar.gz)` links automatically; Defragmenter does not upload a duplicate custom source archive.
+## Documentation map
 
-## Engineering documentation
-
-The project separates current design rationale from validation evidence and
-release history:
-
-- [`docs/DESIGN.md`](docs/DESIGN.md) defines architectural responsibilities,
-  trust assumptions, safety invariants, trade-offs and resource bounds.
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) records the major alternatives,
-  decisions and consequences that produced the current architecture.
-- [`docs/VALIDATION.md`](docs/VALIDATION.md) explains how those claims are
-  verified, which test oracles are independent, and what the evidence does not
-  prove.
-- [`docs/AUDIT_STATUS.md`](docs/AUDIT_STATUS.md) binds the enabled native
-  writer set and release decision to exact audited commits.
-- [`docs/REFERENCES.md`](docs/REFERENCES.md) records the external filesystem
-  and platform references used to interpret on-disk structures and durability
-  semantics.
-
-## Repository layout
-
-This directory is the canonical project root. It contains the implementation, native engines, CMake modules, tests, test-media code, packaging, design documentation and pinned shared dependency.
-
-## Licence
-
-Copyright © 2026 Shannon Smith.
-
-Defragmenter first-party code, scripts, tests, packaging and documentation are licensed under the **GNU General Public License version 3 or, at your option, any later version** (`GPL-3.0-or-later`). The canonical licence text is [`LICENSE`](LICENSE).
+- [Documentation index](../docs/README.md)
+- [Architecture](../docs/ARCHITECTURE.md)
+- [Design](../docs/DESIGN.md)
+- [Decisions](../docs/DECISIONS.md)
+- [Validation](../docs/VALIDATION.md)
+- [Audit status](../docs/AUDIT_STATUS.md)
+- [References](../docs/REFERENCES.md)

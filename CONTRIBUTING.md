@@ -1,25 +1,45 @@
 # Contributing
 
-## Engineering standard
+Defragmenter combines GTK orchestration, filesystem-neutral safety/runtime code and first-party filesystem engines. Contributions should preserve those boundaries and keep destructive behaviour demonstrably recoverable.
 
-Changes to Defragmenter should preserve its first-principles ownership model. Start by identifying which layer owns the behaviour and what evidence will demonstrate the change.
+## Engineering rules
 
-## Before coding
-
-1. Read README.md, docs/ARCHITECTURE.md and docs/DESIGN.md.
-2. Search for an existing implementation before creating a parallel path.
-3. Keep generic shared behaviour in the appropriate first-party shared project rather than copying it.
-4. Add or update regression coverage for the changed contract.
-5. Update roadmap, validation or specialist documentation when support boundaries move.
+- Keep GTK presentation in `gui/ui/` and raw/filesystem policy below the presentation layer.
+- Keep one filesystem registry and one authoritative implementation per filesystem.
+- Keep filesystem-neutral device/runtime mechanics in `src/core/`; keep format semantics with the owning filesystem package.
+- Reuse the pinned Infiltratr Common API when it is the correct generic abstraction; improve Common first if Defragmenter has the stronger generic implementation.
+- Do not add external repair/defragmentation commands to production mutation paths.
+- Treat unsupported, ambiguous or malformed on-disk state as a fail-closed result.
+- Preserve target-identity, mounted-overlap, durable-recovery, safe-Stop and final-verification contracts.
+- Add deterministic regression coverage for parser, planner, writer, transaction, safety, GUI/service or packaging changes.
+- Do not create parallel Markdown for a subject already owned by the canonical documentation set.
 
 ## Language and dependency policy
 
-Prefer C/C++ for first-party native code where suitable. Use platform-native language only at a platform boundary that genuinely requires it. External dependencies must have a clear contract and must not replace project-owned semantics merely for convenience.
+C is preferred for low-level parsing, native filesystem engines and direct storage work. Python is used for GTK/backend orchestration where it does not duplicate filesystem policy.
 
-## Verification
+Platform/system libraries are acceptable when their documented contract is the stronger engineering choice. Convenience alone is not a reason to move Defragmenter-owned semantics into a dependency.
 
-Run the repository's normal build and test path before publishing a change and ensure the relevant CI workflows remain green. Warnings, sanitizer failures, packaging failures and deliberately skipped mandatory evidence are not successful validation.
+## Build and validation
 
-## Repository policy
+Clone recursively because the project pins Infiltratr Common:
 
-main is the working branch. Published tags and releases are immutable source identities. Changes should be small enough that their ownership, tests and documentation can be reviewed together.
+```bash
+git clone --recurse-submodules https://github.com/Infiltrator-Projects/Defragmenter.git
+cd Defragmenter/defragger
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLD_ENABLE_WERROR=ON
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+Write-capable changes require evidence appropriate to the affected safety boundary. When a transaction or recovery contract changes, add interruption/fault coverage as well as a successful image path.
+
+## Documentation and comments
+
+Read `docs/README.md` for document authority. Architecture belongs in `docs/ARCHITECTURE.md`; rationale in `docs/DESIGN.md`; durable choices in `docs/DECISIONS.md`; direction in `docs/ROADMAP.md`; validation evidence in `docs/VALIDATION.md`; current release safety qualification in `docs/AUDIT_STATUS.md`.
+
+Comments should preserve information expensive to reconstruct: on-disk units, ownership, target identity, transaction boundaries, durability assumptions, complexity limits and non-obvious format rules. Do not narrate straightforward syntax.
+
+## Repository discipline
+
+`main` is the authoritative development and release branch. Keep commits focused. Published tags/releases are immutable identities, and release publication is bound to the exact qualified commit.

@@ -4,9 +4,9 @@
 ## Purpose
 
 This document records the small set of architectural decisions that materially
-shape Defragmenter. It complements [DESIGN.md](DESIGN.md): the design document
-states the current architecture and invariants, while this record states the
-alternatives considered, the selected approach and its consequences.
+shape Defragmenter. [ARCHITECTURE.md](ARCHITECTURE.md) states the current system
+contracts, [DESIGN.md](DESIGN.md) states the first-principles rationale, and this
+record preserves the alternatives considered, selected approach and consequences.
 
 These decisions are intentionally few. Routine implementation choices belong in
 source comments, tests or Git history rather than being promoted into permanent

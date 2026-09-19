@@ -69,10 +69,10 @@ A numbered release publishes:
 | File | Purpose |
 | --- | --- |
 | `Defragmenter-<version>-amd64.deb` | Generic amd64 Debian package. |
-
-The `.deb` keeps the human-facing `Defragmenter-...` asset filename while its Debian/APT package identity is `infiltrator-defragmenter`; existing `linux-defragger` installations migrate through the repository transition package.
 | `Defragmenter-<version>-local-folder.run` | Hardware-native local compile/install program. |
 | `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for the two project release artifacts. |
+
+The `.deb` keeps the human-facing `Defragmenter-...` asset filename while its Debian/APT package identity is `infiltrator-defragmenter`; existing `linux-defragger` installations migrate through the repository transition package.
 
 GitHub automatically provides its standard `Source code (zip)` and `Source code (tar.gz)` links for every release tag. Defragmenter does not upload a duplicate custom source archive.
 
@@ -88,12 +88,13 @@ Existing version tags and published releases are immutable and are never moved, 
 
 ## Documentation
 
-- `defragger/README.md` — detailed project manual and filesystem-support matrix.
-- `docs/DESIGN.md` — architecture, assumptions, invariants and trade-offs.
-- `docs/DECISIONS.md` — major architectural choices, alternatives and consequences.
-- `docs/VALIDATION.md` — verification methodology, evidence traceability and limitations.
-- `docs/AUDIT_STATUS.md` — release-specific safety case and exact audited baselines.
+- `docs/ARCHITECTURE.md` — ownership, layers, safety boundaries and system contracts.
+- `docs/DESIGN.md` — first-principles goals, non-goals, trade-offs and failure philosophy.
+- `docs/DECISIONS.md` — durable architectural choices and consequences.
+- `docs/VALIDATION.md` — automated, destructive-path, manual and release evidence boundaries.
+- `docs/AUDIT_STATUS.md` — current write-safety case and exact audited baselines.
 - `docs/REFERENCES.md` — filesystem/platform technical references.
+- `defragger/README.md` — source-tree layout, filesystem-support matrix and local build notes.
 - `defragger/VERSION` — current source version.
 
 ## Safety
