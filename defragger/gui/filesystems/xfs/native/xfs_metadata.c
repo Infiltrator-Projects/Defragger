@@ -893,7 +893,11 @@ static int check_source_rmaps(const XfsCatalogue *source, const XfsRmapVec *reco
         XfsRmapRecord record = records->items[index];
         bool movable_data = source_has_file_inode(source, record.owner) &&
             (record.offset_flags & (XFS_RMAP_ATTR_FORK | XFS_RMAP_BMBT_BLOCK)) == 0;
-        if (!movable_data) xfs_rmap_push(kept, record);
+        /* Allocation-tree ownership is regenerated from the final tree
+         * block set below.  Keeping source XFS_RMAP_OWN_AG records would
+         * describe old tree blocks after a relayout. */
+        if (!movable_data && record.owner != XFS_RMAP_OWN_AG)
+            xfs_rmap_push(kept, record);
     }
     return 0;
 }
@@ -975,6 +979,262 @@ static int unique_pool(XfsU64Vec *pool, size_t expected, char **error) {
     return 0;
 }
 
+static void copy_ranges(const XfsRangeVec *from, XfsRangeVec *to) {
+    for (size_t index = 0; index < from->count; ++index)
+        xfs_range_push(to, from->items[index].start, from->items[index].end);
+}
+
+static void intersect_ranges(const XfsRangeVec *left, const XfsRangeVec *right,
+                             XfsRangeVec *out) {
+    size_t li = 0, ri = 0;
+    while (li < left->count && ri < right->count) {
+        uint64_t start = left->items[li].start > right->items[ri].start
+            ? left->items[li].start : right->items[ri].start;
+        uint64_t end = left->items[li].end < right->items[ri].end
+            ? left->items[li].end : right->items[ri].end;
+        if (start < end) xfs_range_push(out, start, end);
+        if (left->items[li].end < right->items[ri].end) li++;
+        else if (right->items[ri].end < left->items[li].end) ri++;
+        else { li++; ri++; }
+    }
+}
+
+static int protected_growth_ranges(sqlite3 *db, XfsRangeVec *out, char **error) {
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(
+            db,
+            "SELECT target_start,target_blocks,reserve FROM objects WHERE reserve > 0 ORDER BY target_start",
+            -1, &stmt, NULL) != SQLITE_OK) {
+        xfs_set_error(error, "cannot query XFS Growth Defrag reserve ranges: %s",
+                      sqlite3_errmsg(db));
+        return -1;
+    }
+    int step;
+    while ((step = sqlite3_step(stmt)) == SQLITE_ROW) {
+        sqlite3_int64 start0 = sqlite3_column_int64(stmt, 0);
+        sqlite3_int64 blocks0 = sqlite3_column_int64(stmt, 1);
+        sqlite3_int64 reserve0 = sqlite3_column_int64(stmt, 2);
+        if (start0 < 0 || blocks0 < 0 || reserve0 < 0) {
+            sqlite3_finalize(stmt);
+            xfs_set_error(error, "negative XFS Growth Defrag reserve geometry");
+            return -1;
+        }
+        uint64_t start = (uint64_t)start0;
+        uint64_t blocks = (uint64_t)blocks0;
+        uint64_t reserve = (uint64_t)reserve0;
+        if (UINT64_MAX - start < blocks ||
+            UINT64_MAX - (start + blocks) < reserve) {
+            sqlite3_finalize(stmt);
+            xfs_set_error(error, "XFS Growth Defrag reserve range overflows the data-device address space");
+            return -1;
+        }
+        xfs_range_push(out, start + blocks, start + blocks + reserve);
+    }
+    if (step != SQLITE_DONE) {
+        sqlite3_finalize(stmt);
+        xfs_set_error(error, "cannot read XFS Growth Defrag reserve ranges: %s",
+                      sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_finalize(stmt);
+    xfs_range_sort_merge(out);
+    return 0;
+}
+
+static bool take_last_range_block(XfsRangeVec *ranges, uint64_t *block) {
+    while (ranges->count != 0) {
+        XfsRange *last = &ranges->items[ranges->count - 1U];
+        if (last->start >= last->end) {
+            ranges->count--;
+            continue;
+        }
+        *block = last->end - 1U;
+        last->end--;
+        if (last->start == last->end) ranges->count--;
+        return true;
+    }
+    return false;
+}
+
+static void remove_one_range_block(XfsRangeVec *ranges, uint64_t block) {
+    XfsRangeVec cut = {0};
+    xfs_range_push(&cut, block, block + 1U);
+    (void)subtract_ranges(ranges, &cut);
+    xfs_range_free(&cut);
+}
+
+static size_t ag_owner_record_count(const XfsU64Vec *pool, size_t tree_blocks) {
+    if (tree_blocks == 0) return 0;
+    if (tree_blocks > pool->count) return SIZE_MAX;
+    size_t records = 1U;
+    for (size_t index = 1; index < tree_blocks; ++index)
+        if (pool->items[index] != pool->items[index - 1U] + 1U) records++;
+    return records;
+}
+
+static int append_ag_owner_rmaps(const XfsU64Vec *pool, size_t tree_blocks,
+                                 XfsRmapVec *records, char **error) {
+    if (tree_blocks == 0 || tree_blocks > pool->count) {
+        xfs_set_error(error, "XFS allocation-tree ownership block set is inconsistent");
+        return -1;
+    }
+    size_t index = 0;
+    while (index < tree_blocks) {
+        uint64_t start = pool->items[index];
+        uint64_t end = start + 1U;
+        index++;
+        while (index < tree_blocks && pool->items[index] == end) {
+            end++;
+            index++;
+        }
+        if (start > UINT32_MAX || end - start > UINT32_MAX) {
+            xfs_set_error(error, "XFS allocation-tree ownership range exceeds on-disk width");
+            return -1;
+        }
+        xfs_rmap_push(records, (XfsRmapRecord){
+            (uint32_t)start, (uint32_t)(end - start), XFS_RMAP_OWN_AG, 0U
+        });
+    }
+    return 0;
+}
+
+static int conservative_rmap_blocks(uint32_t block_size, size_t base_records,
+                                    size_t nb, size_t nc, size_t *out,
+                                    char **error) {
+    size_t guess = 1U;
+    for (unsigned iteration = 0; iteration < 64U; ++iteration) {
+        size_t tree_blocks = 0, records = 0;
+        if (!infiltratr_size_add_checked(nb, nc, &tree_blocks) ||
+            !infiltratr_size_add_checked(tree_blocks, guess, &tree_blocks) ||
+            !infiltratr_size_add_checked(base_records, tree_blocks, &records)) {
+            xfs_set_error(error, "XFS rmap allocation-tree sizing overflow");
+            return -1;
+        }
+        size_t next = tree_required_blocks(&SPEC_RMAPBT, block_size, records);
+        if (next == 0) {
+            xfs_set_error(error, "XFS rmap allocation-tree geometry is not representable");
+            return -1;
+        }
+        if (next == guess) {
+            *out = next;
+            return 0;
+        }
+        guess = next;
+    }
+    xfs_set_error(error, "XFS rmap allocation-tree sizing did not converge");
+    return -1;
+}
+
+static int exact_rmap_blocks(uint32_t block_size, size_t base_records,
+                             size_t nb, size_t nc, const XfsU64Vec *pool,
+                             size_t upper, size_t *out, char **error) {
+    size_t guess = upper;
+    for (unsigned iteration = 0; iteration < 64U; ++iteration) {
+        size_t tree_blocks = 0;
+        if (!infiltratr_size_add_checked(nb, nc, &tree_blocks) ||
+            !infiltratr_size_add_checked(tree_blocks, guess, &tree_blocks) ||
+            tree_blocks > pool->count) {
+            xfs_set_error(error, "XFS rmap allocation-tree pool is smaller than its fixed-point requirement");
+            return -1;
+        }
+        size_t owner_records = ag_owner_record_count(pool, tree_blocks);
+        size_t records = 0;
+        if (owner_records == SIZE_MAX ||
+            !infiltratr_size_add_checked(base_records, owner_records, &records)) {
+            xfs_set_error(error, "XFS rmap allocation-tree record count overflow");
+            return -1;
+        }
+        size_t next = tree_required_blocks(&SPEC_RMAPBT, block_size, records);
+        if (next == 0 || next > upper) {
+            xfs_set_error(error, "XFS rmap allocation-tree fixed point exceeded its conservative bound");
+            return -1;
+        }
+        if (next == guess) {
+            *out = next;
+            return 0;
+        }
+        guess = next;
+    }
+    xfs_set_error(error, "XFS rmap allocation-tree fixed point did not converge");
+    return -1;
+}
+
+static int ensure_allocation_tree_pool(
+    uint32_t block_size, bool has_rmap, size_t base_rmap_records,
+    XfsRangeVec *free_local, const XfsRangeVec *source_free_local,
+    const XfsRangeVec *protected_local, XfsU64Vec *pool,
+    size_t *nb_out, size_t *nc_out, size_t *nr_out, char **error) {
+    XfsRangeVec candidates = {0};
+    intersect_ranges(source_free_local, free_local, &candidates);
+    if (protected_local->count != 0)
+        (void)subtract_ranges(&candidates, protected_local);
+
+    size_t nb = 0, nc = 0, nr_upper = 0;
+    for (;;) {
+        if (free_local->count == 0) {
+            xfs_set_error(error, "XFS allocation group has no free extent for its free-space trees");
+            xfs_range_free(&candidates);
+            return -1;
+        }
+        nb = tree_required_blocks(&SPEC_BNOBT, block_size, free_local->count);
+        nc = tree_required_blocks(&SPEC_CNTBT, block_size, free_local->count);
+        if (nb == 0 || nc == 0) {
+            xfs_set_error(error, "XFS free-space allocation-tree geometry is not representable");
+            xfs_range_free(&candidates);
+            return -1;
+        }
+        nr_upper = 0;
+        if (has_rmap &&
+            conservative_rmap_blocks(block_size, base_rmap_records, nb, nc,
+                                     &nr_upper, error) != 0) {
+            xfs_range_free(&candidates);
+            return -1;
+        }
+        size_t required = 0;
+        if (!infiltratr_size_add_checked(nb, nc, &required) ||
+            !infiltratr_size_add_checked(required, nr_upper, &required)) {
+            xfs_set_error(error, "XFS allocation-tree block requirement overflow");
+            xfs_range_free(&candidates);
+            return -1;
+        }
+        if (required <= pool->count) break;
+
+        uint64_t borrowed = 0;
+        if (!take_last_range_block(&candidates, &borrowed)) {
+            xfs_set_error(
+                error,
+                "XFS allocation trees need %zu blocks but only %zu tree/AGFL blocks are reserved and no safe currently-free block remains outside file targets and Growth Defrag reserves",
+                required, pool->count);
+            xfs_range_free(&candidates);
+            return -1;
+        }
+        remove_one_range_block(free_local, borrowed);
+        xfs_u64_push(pool, borrowed);
+        qsort(pool->items, pool->count, sizeof(*pool->items), u64_compare);
+    }
+
+    size_t nr = 0;
+    if (has_rmap &&
+        exact_rmap_blocks(block_size, base_rmap_records, nb, nc, pool,
+                          nr_upper, &nr, error) != 0) {
+        xfs_range_free(&candidates);
+        return -1;
+    }
+    size_t exact = 0;
+    if (!infiltratr_size_add_checked(nb, nc, &exact) ||
+        !infiltratr_size_add_checked(exact, nr, &exact) ||
+        exact > pool->count) {
+        xfs_set_error(error, "XFS allocation-tree exact block requirement is inconsistent");
+        xfs_range_free(&candidates);
+        return -1;
+    }
+    *nb_out = nb;
+    *nc_out = nc;
+    *nr_out = nr;
+    xfs_range_free(&candidates);
+    return 0;
+}
+
 static uint64_t free_block_count(const XfsRangeVec *ranges) {
     uint64_t total = 0;
     for (size_t index = 0; index < ranges->count; ++index) total += ranges->items[index].end - ranges->items[index].start;
@@ -997,16 +1257,24 @@ int xfs_rebuild_allocation_metadata(const char *path, const XfsCatalogue *source
         xfs_set_error(error, "raw XFS mutation currently requires the CRC-enabled v5 format");
         return -1;
     }
-    XfsRangeVec expected_free = {0};
+    XfsRangeVec expected_free = {0}, protected_global = {0};
     if (expected_free_ranges(source, db, &expected_free, error) != 0) return -1;
+    if (protected_growth_ranges(db, &protected_global, error) != 0) {
+        xfs_range_free(&expected_free);
+        return -1;
+    }
     AgRmapVec targets = {0};
     if (target_rmaps(db, g, &targets, error) != 0) {
         xfs_range_free(&expected_free);
+        xfs_range_free(&protected_global);
         return -1;
     }
     RawMeta meta;
     if (meta_open(&meta, path, g, true, error) != 0) {
-        xfs_range_free(&expected_free); ag_rmap_free(&targets); return -1;
+        xfs_range_free(&expected_free);
+        xfs_range_free(&protected_global);
+        ag_rmap_free(&targets);
+        return -1;
     }
     int result = 0;
     for (uint32_t agno = 0; agno < g->agcount && result == 0; ++agno) {
@@ -1014,7 +1282,7 @@ int xfs_rebuild_allocation_metadata(const char *path, const XfsCatalogue *source
         XfsU64Vec bno_blocks = {0}, cnt_blocks = {0}, rmap_blocks = {0}, agfl = {0}, pool = {0};
         RawVec bno_old = {0}, cnt_old = {0}, rmap_old_raw = {0};
         XfsRmapVec old_rmaps = {0}, new_rmaps = {0};
-        XfsRangeVec free_local = {0};
+        XfsRangeVec free_local = {0}, source_free_local = {0}, protected_local = {0};
         RawVec bno_records = {0}, cnt_records = {0}, rmap_records = {0};
         XfsU64Vec bno_used = {0}, cnt_used = {0}, rmap_used = {0};
         uint32_t capacity = 0;
@@ -1026,70 +1294,172 @@ int xfs_rebuild_allocation_metadata(const char *path, const XfsCatalogue *source
         }
         bool has_rmap = (g->features_ro_compat & XFS_SB_FEAT_RO_COMPAT_RMAPBT) != 0;
         if (has_rmap) {
-            if (rmaproot == 0) { xfs_set_error(error, "XFS rmapbt feature is enabled but AG %u has no rmap root", agno); result = -1; goto ag_done; }
-            if (read_tree(&meta, agno, rmaproot, &SPEC_RMAPBT, &rmap_blocks, &rmap_old_raw, error) != 0) { result = -1; goto ag_done; }
+            if (rmaproot == 0) {
+                xfs_set_error(error, "XFS rmapbt feature is enabled but AG %u has no rmap root", agno);
+                result = -1; goto ag_done;
+            }
+            if (read_tree(&meta, agno, rmaproot, &SPEC_RMAPBT,
+                          &rmap_blocks, &rmap_old_raw, error) != 0) {
+                result = -1; goto ag_done;
+            }
             decode_rmaps(&rmap_old_raw, &old_rmaps);
         }
-        if (read_agfl(&meta, agno, agf, &agfl, &capacity, error) != 0) { result = -1; goto ag_done; }
-        append_pool(&pool, &bno_blocks); append_pool(&pool, &cnt_blocks); append_pool(&pool, &rmap_blocks); append_pool(&pool, &agfl);
-        if (unique_pool(&pool, bno_blocks.count + cnt_blocks.count + rmap_blocks.count + agfl.count, error) != 0) { result = -1; goto ag_done; }
+        if (read_agfl(&meta, agno, agf, &agfl, &capacity, error) != 0) {
+            result = -1; goto ag_done;
+        }
+        append_pool(&pool, &bno_blocks);
+        append_pool(&pool, &cnt_blocks);
+        append_pool(&pool, &rmap_blocks);
+        append_pool(&pool, &agfl);
+        if (unique_pool(&pool,
+                        bno_blocks.count + cnt_blocks.count +
+                        rmap_blocks.count + agfl.count,
+                        error) != 0) {
+            result = -1; goto ag_done;
+        }
+
         split_ag_ranges(&expected_free, g, agno, &free_local);
-        if (free_local.count == 0) { xfs_set_error(error, "XFS allocation group %u has no free extent for its free-space trees", agno); result = -1; goto ag_done; }
+        split_ag_ranges(&source->free_ranges, g, agno, &source_free_local);
+        split_ag_ranges(&protected_global, g, agno, &protected_local);
+        if (free_local.count == 0) {
+            xfs_set_error(error, "XFS allocation group %u has no free extent for its free-space trees", agno);
+            result = -1; goto ag_done;
+        }
+
+        if (has_rmap) {
+            if (check_source_rmaps(source, &old_rmaps, agno, &new_rmaps, error) != 0) {
+                result = -1; goto ag_done;
+            }
+            for (size_t index = 0; index < targets.count; ++index)
+                if (targets.items[index].agno == agno)
+                    xfs_rmap_push(&new_rmaps, targets.items[index].record);
+            if (new_rmaps.count == 0) {
+                xfs_set_error(error, "XFS rmapbt in AG %u would become empty", agno);
+                result = -1; goto ag_done;
+            }
+        }
+
+        size_t nb = 0, nc = 0, nr = 0;
+        if (ensure_allocation_tree_pool(
+                g->block_size, has_rmap, new_rmaps.count,
+                &free_local, &source_free_local, &protected_local, &pool,
+                &nb, &nc, &nr, error) != 0) {
+            result = -1; goto ag_done;
+        }
+
         make_bno_records(&free_local, &bno_records);
         make_cnt_records(&free_local, &cnt_records);
-        size_t nb = tree_required_blocks(&SPEC_BNOBT, g->block_size, bno_records.count);
-        size_t nc = tree_required_blocks(&SPEC_CNTBT, g->block_size, cnt_records.count);
-        size_t nr = 0;
+        if (tree_required_blocks(&SPEC_BNOBT, g->block_size, bno_records.count) != nb ||
+            tree_required_blocks(&SPEC_CNTBT, g->block_size, cnt_records.count) != nc) {
+            xfs_set_error(error, "XFS free-space tree sizing changed after metadata reservation");
+            result = -1; goto ag_done;
+        }
+
         if (has_rmap) {
-            if (check_source_rmaps(source, &old_rmaps, agno, &new_rmaps, error) != 0) { result = -1; goto ag_done; }
-            for (size_t index = 0; index < targets.count; ++index)
-                if (targets.items[index].agno == agno) xfs_rmap_push(&new_rmaps, targets.items[index].record);
-            if (new_rmaps.count == 0) { xfs_set_error(error, "XFS rmapbt in AG %u would become empty", agno); result = -1; goto ag_done; }
+            size_t tree_blocks = 0;
+            if (!infiltratr_size_add_checked(nb, nc, &tree_blocks) ||
+                !infiltratr_size_add_checked(tree_blocks, nr, &tree_blocks) ||
+                append_ag_owner_rmaps(&pool, tree_blocks, &new_rmaps, error) != 0) {
+                if (*error == NULL)
+                    xfs_set_error(error, "XFS allocation-tree ownership sizing overflow");
+                result = -1; goto ag_done;
+            }
             qsort(new_rmaps.items, new_rmaps.count, sizeof(*new_rmaps.items), rmap_compare);
             raw_init(&rmap_records, 24);
             for (size_t index = 0; index < new_rmaps.count; ++index) {
-                uint8_t encoded[24]; encode_rmap(&new_rmaps.items[index], encoded); raw_push(&rmap_records, encoded);
+                uint8_t encoded[24];
+                encode_rmap(&new_rmaps.items[index], encoded);
+                raw_push(&rmap_records, encoded);
             }
-            nr = tree_required_blocks(&SPEC_RMAPBT, g->block_size, rmap_records.count);
+            if (tree_required_blocks(&SPEC_RMAPBT, g->block_size, rmap_records.count) != nr) {
+                xfs_set_error(error, "XFS rmap allocation-tree sizing changed after ownership regeneration");
+                result = -1; goto ag_done;
+            }
         }
-        size_t required = nb + nc + nr;
-        if (required > pool.count) {
-            xfs_set_error(error, "XFS AG %u needs %zu allocation-tree blocks but has only %zu existing tree/AGFL reserve blocks", agno, required, pool.count);
+
+        size_t cursor = 0;
+        uint32_t bno_root_new = 0, bno_levels = 0;
+        uint32_t cnt_root_new = 0, cnt_levels = 0;
+        uint32_t rmap_root_new = 0, rmap_levels = 0;
+        if (build_tree(&meta, agno, &SPEC_BNOBT, &bno_records,
+                       pool.items + cursor, nb,
+                       &bno_root_new, &bno_levels, &bno_used, error) != 0) {
             result = -1; goto ag_done;
         }
-        size_t cursor = 0;
-        uint32_t bno_root_new = 0, bno_levels = 0, cnt_root_new = 0, cnt_levels = 0, rmap_root_new = 0, rmap_levels = 0;
-        if (build_tree(&meta, agno, &SPEC_BNOBT, &bno_records, pool.items + cursor, nb,
-                       &bno_root_new, &bno_levels, &bno_used, error) != 0) { result = -1; goto ag_done; }
         cursor += nb;
-        if (build_tree(&meta, agno, &SPEC_CNTBT, &cnt_records, pool.items + cursor, nc,
-                       &cnt_root_new, &cnt_levels, &cnt_used, error) != 0) { result = -1; goto ag_done; }
+        if (build_tree(&meta, agno, &SPEC_CNTBT, &cnt_records,
+                       pool.items + cursor, nc,
+                       &cnt_root_new, &cnt_levels, &cnt_used, error) != 0) {
+            result = -1; goto ag_done;
+        }
         cursor += nc;
         if (has_rmap) {
-            if (build_tree(&meta, agno, &SPEC_RMAPBT, &rmap_records, pool.items + cursor, nr,
-                           &rmap_root_new, &rmap_levels, &rmap_used, error) != 0) { result = -1; goto ag_done; }
+            if (build_tree(&meta, agno, &SPEC_RMAPBT, &rmap_records,
+                           pool.items + cursor, nr,
+                           &rmap_root_new, &rmap_levels, &rmap_used, error) != 0) {
+                result = -1; goto ag_done;
+            }
             cursor += nr;
         }
+
         size_t leftover = pool.count - cursor;
-        if (leftover > capacity || write_agfl(&meta, agno, pool.items + cursor, leftover, capacity, error) != 0) { result = -1; goto ag_done; }
-        xfs_put_be32(agf + 16, bno_root_new); xfs_put_be32(agf + 20, cnt_root_new); xfs_put_be32(agf + 24, rmap_root_new);
-        xfs_put_be32(agf + 28, bno_levels); xfs_put_be32(agf + 32, cnt_levels); xfs_put_be32(agf + 36, rmap_levels);
-        xfs_put_be32(agf + 40, 0); xfs_put_be32(agf + 44, leftover ? (uint32_t)(leftover - 1U) : capacity - 1U); xfs_put_be32(agf + 48, (uint32_t)leftover);
-        uint64_t free_blocks = free_block_count(&free_local), longest = longest_free(&free_local);
-        if (free_blocks > UINT32_MAX || longest > UINT32_MAX) { xfs_set_error(error, "XFS AG free-space counter exceeds on-disk width"); result = -1; goto ag_done; }
-        xfs_put_be32(agf + 52, (uint32_t)free_blocks); xfs_put_be32(agf + 56, (uint32_t)longest);
-        size_t nonroots = (bno_used.count ? bno_used.count - 1U : 0) + (cnt_used.count ? cnt_used.count - 1U : 0) + (rmap_used.count ? rmap_used.count - 1U : 0);
-        if (nonroots > UINT32_MAX || rmap_used.count > UINT32_MAX) { xfs_set_error(error, "XFS AG B+tree counter exceeds on-disk width"); result = -1; goto ag_done; }
-        xfs_put_be32(agf + 60, (uint32_t)nonroots); xfs_put_be32(agf + 80, (uint32_t)rmap_used.count);
-        xfs_put_be64(agf + 208, 0); xfs_write_crc_le(agf, g->sector_size, XFS_AGF_CRC_FIELD);
-        if (meta_write(&meta, agf, g->sector_size, xfs_ag_offset(g, agno, 0) + g->sector_size, "XFS AGF", error) != 0) result = -1;
+        if (leftover > capacity ||
+            write_agfl(&meta, agno, pool.items + cursor, leftover, capacity, error) != 0) {
+            result = -1; goto ag_done;
+        }
+        xfs_put_be32(agf + 16, bno_root_new);
+        xfs_put_be32(agf + 20, cnt_root_new);
+        xfs_put_be32(agf + 24, rmap_root_new);
+        xfs_put_be32(agf + 28, bno_levels);
+        xfs_put_be32(agf + 32, cnt_levels);
+        xfs_put_be32(agf + 36, rmap_levels);
+        xfs_put_be32(agf + 40, 0);
+        xfs_put_be32(agf + 44, leftover ? (uint32_t)(leftover - 1U) : capacity - 1U);
+        xfs_put_be32(agf + 48, (uint32_t)leftover);
+        uint64_t free_blocks = free_block_count(&free_local);
+        uint64_t longest = longest_free(&free_local);
+        if (free_blocks > UINT32_MAX || longest > UINT32_MAX) {
+            xfs_set_error(error, "XFS AG free-space counter exceeds on-disk width");
+            result = -1; goto ag_done;
+        }
+        xfs_put_be32(agf + 52, (uint32_t)free_blocks);
+        xfs_put_be32(agf + 56, (uint32_t)longest);
+        size_t nonroots =
+            (bno_used.count ? bno_used.count - 1U : 0) +
+            (cnt_used.count ? cnt_used.count - 1U : 0) +
+            (rmap_used.count ? rmap_used.count - 1U : 0);
+        if (nonroots > UINT32_MAX || rmap_used.count > UINT32_MAX) {
+            xfs_set_error(error, "XFS AG B+tree counter exceeds on-disk width");
+            result = -1; goto ag_done;
+        }
+        xfs_put_be32(agf + 60, (uint32_t)nonroots);
+        xfs_put_be32(agf + 80, (uint32_t)rmap_used.count);
+        xfs_put_be64(agf + 208, 0);
+        xfs_write_crc_le(agf, g->sector_size, XFS_AGF_CRC_FIELD);
+        if (meta_write(&meta, agf, g->sector_size,
+                       xfs_ag_offset(g, agno, 0) + g->sector_size,
+                       "XFS AGF", error) != 0)
+            result = -1;
+
 ag_done:
-        free(agf); xfs_u64_free(&bno_blocks); xfs_u64_free(&cnt_blocks); xfs_u64_free(&rmap_blocks); xfs_u64_free(&agfl); xfs_u64_free(&pool);
-        raw_free(&bno_old); raw_free(&cnt_old); raw_free(&rmap_old_raw); xfs_rmap_free(&old_rmaps); xfs_rmap_free(&new_rmaps); xfs_range_free(&free_local);
-        raw_free(&bno_records); raw_free(&cnt_records); raw_free(&rmap_records); xfs_u64_free(&bno_used); xfs_u64_free(&cnt_used); xfs_u64_free(&rmap_used);
+        free(agf);
+        xfs_u64_free(&bno_blocks); xfs_u64_free(&cnt_blocks);
+        xfs_u64_free(&rmap_blocks); xfs_u64_free(&agfl); xfs_u64_free(&pool);
+        raw_free(&bno_old); raw_free(&cnt_old); raw_free(&rmap_old_raw);
+        xfs_rmap_free(&old_rmaps); xfs_rmap_free(&new_rmaps);
+        xfs_range_free(&free_local); xfs_range_free(&source_free_local);
+        xfs_range_free(&protected_local);
+        raw_free(&bno_records); raw_free(&cnt_records); raw_free(&rmap_records);
+        xfs_u64_free(&bno_used); xfs_u64_free(&cnt_used); xfs_u64_free(&rmap_used);
     }
-    if (result == 0 && fsync(meta.fd) != 0) { xfs_set_error(error, "cannot sync rebuilt XFS allocation metadata: %s", strerror(errno)); result = -1; }
-    meta_close(&meta); xfs_range_free(&expected_free); ag_rmap_free(&targets);
+    if (result == 0 && fsync(meta.fd) != 0) {
+        xfs_set_error(error, "cannot sync rebuilt XFS allocation metadata: %s", strerror(errno));
+        result = -1;
+    }
+    meta_close(&meta);
+    xfs_range_free(&expected_free);
+    xfs_range_free(&protected_global);
+    ag_rmap_free(&targets);
     return result;
 }
 
@@ -1142,59 +1512,203 @@ static void semantics_from_target(const AgRmapVec *targets, uint32_t agno, Seman
     semantic_sort_coalesce(out);
 }
 
+static int verify_ag_owner_rmaps(
+    const XfsRmapVec *rmaps, const XfsU64Vec *bno_blocks,
+    const XfsU64Vec *cnt_blocks, const XfsU64Vec *rmap_blocks,
+    uint64_t ag_len, uint32_t agno, char **error) {
+    XfsRangeVec expected = {0}, actual = {0};
+    const XfsU64Vec *sets[] = {bno_blocks, cnt_blocks, rmap_blocks};
+    for (size_t set = 0; set < sizeof(sets) / sizeof(sets[0]); ++set) {
+        for (size_t index = 0; index < sets[set]->count; ++index) {
+            uint64_t block = sets[set]->items[index];
+            if (block >= ag_len) {
+                xfs_set_error(error, "XFS allocation-tree block lies outside AG %u", agno);
+                xfs_range_free(&expected); xfs_range_free(&actual);
+                return -1;
+            }
+            xfs_range_push(&expected, block, block + 1U);
+        }
+    }
+    for (size_t index = 0; index < rmaps->count; ++index) {
+        XfsRmapRecord record = rmaps->items[index];
+        if (record.owner != XFS_RMAP_OWN_AG) continue;
+        uint64_t end = (uint64_t)record.start + record.count;
+        if (record.count == 0 || end > ag_len || record.offset_flags != 0U) {
+            xfs_set_error(error, "XFS AG-owner rmap record is invalid in AG %u", agno);
+            xfs_range_free(&expected); xfs_range_free(&actual);
+            return -1;
+        }
+        xfs_range_push(&actual, record.start, end);
+    }
+    xfs_range_sort_merge(&expected);
+    xfs_range_sort_merge(&actual);
+    bool ok = range_vec_equal(&expected, &actual);
+    xfs_range_free(&expected);
+    xfs_range_free(&actual);
+    if (!ok) {
+        xfs_set_error(error, "XFS AG-owner rmap records do not match the final allocation trees in AG %u", agno);
+        return -1;
+    }
+    return 0;
+}
+
+static int subtract_final_metadata(
+    XfsRangeVec *expected_free, uint64_t base, uint64_t ag_len,
+    const XfsU64Vec *bno_blocks, const XfsU64Vec *cnt_blocks,
+    const XfsU64Vec *rmap_blocks, const XfsU64Vec *agfl, char **error) {
+    XfsRangeVec cuts = {0};
+    const XfsU64Vec *sets[] = {bno_blocks, cnt_blocks, rmap_blocks, agfl};
+    for (size_t set = 0; set < sizeof(sets) / sizeof(sets[0]); ++set) {
+        for (size_t index = 0; index < sets[set]->count; ++index) {
+            uint64_t block = sets[set]->items[index];
+            if (block >= ag_len || UINT64_MAX - base <= block) {
+                xfs_set_error(error, "XFS final metadata reserve lies outside its allocation group");
+                xfs_range_free(&cuts);
+                return -1;
+            }
+            uint64_t global = base + block;
+            xfs_range_push(&cuts, global, global + 1U);
+        }
+    }
+    xfs_range_sort_merge(&cuts);
+    (void)subtract_ranges(expected_free, &cuts);
+    xfs_range_free(&cuts);
+    return 0;
+}
+
 int xfs_verify_allocation_metadata(const char *path, const XfsCatalogue *source,
                                    sqlite3 *db, char **error) {
     XfsRangeVec expected_free = {0}, actual_global = {0};
     if (expected_free_ranges(source, db, &expected_free, error) != 0) return -1;
     AgRmapVec targets = {0};
-    if (target_rmaps(db, &source->geometry, &targets, error) != 0) { xfs_range_free(&expected_free); return -1; }
+    if (target_rmaps(db, &source->geometry, &targets, error) != 0) {
+        xfs_range_free(&expected_free);
+        return -1;
+    }
     RawMeta meta;
-    if (meta_open(&meta, path, &source->geometry, false, error) != 0) { xfs_range_free(&expected_free); ag_rmap_free(&targets); return -1; }
+    if (meta_open(&meta, path, &source->geometry, false, error) != 0) {
+        xfs_range_free(&expected_free);
+        ag_rmap_free(&targets);
+        return -1;
+    }
     int result = 0;
+    bool has_rmap =
+        (source->geometry.features_ro_compat & XFS_SB_FEAT_RO_COMPAT_RMAPBT) != 0;
     for (uint32_t agno = 0; agno < source->geometry.agcount && result == 0; ++agno) {
         uint8_t *agf = ld_xmalloc(source->geometry.sector_size);
         XfsU64Vec bno_blocks = {0}, cnt_blocks = {0}, rmap_blocks = {0}, agfl = {0};
         RawVec bno_raw = {0}, cnt_raw = {0}, rmap_raw = {0};
+        XfsRmapVec rmaps = {0};
         XfsRangeVec bno = {0}, expected_ag = {0};
         uint32_t capacity = 0;
-        if (read_agf(&meta, agno, agf, error) != 0) { result = -1; goto verify_done; }
-        if (le32(agf + XFS_AGF_CRC_FIELD) != xfs_crc_field(agf, source->geometry.sector_size, XFS_AGF_CRC_FIELD)) {
-            xfs_set_error(error, "XFS AGF CRC mismatch in allocation group %u", agno); result = -1; goto verify_done;
+        if (read_agf(&meta, agno, agf, error) != 0) {
+            result = -1; goto verify_done;
         }
-        if (read_tree(&meta, agno, xfs_be32(agf + 16), &SPEC_BNOBT, &bno_blocks, &bno_raw, error) != 0 ||
-            read_tree(&meta, agno, xfs_be32(agf + 20), &SPEC_CNTBT, &cnt_blocks, &cnt_raw, error) != 0) { result = -1; goto verify_done; }
-        if (verify_bno_order(&bno_raw, &bno, error) != 0 || verify_cnt_order(&cnt_raw, error) != 0) { result = -1; goto verify_done; }
-        split_ag_ranges(&expected_free, &source->geometry, agno, &expected_ag);
-        if (!range_vec_equal(&bno, &expected_ag)) { xfs_set_error(error, "XFS bnobt does not describe the planned free map in AG %u", agno); result = -1; goto verify_done; }
+        if (le32(agf + XFS_AGF_CRC_FIELD) !=
+            xfs_crc_field(agf, source->geometry.sector_size, XFS_AGF_CRC_FIELD)) {
+            xfs_set_error(error, "XFS AGF CRC mismatch in allocation group %u", agno);
+            result = -1; goto verify_done;
+        }
+        if (read_tree(&meta, agno, xfs_be32(agf + 16), &SPEC_BNOBT,
+                      &bno_blocks, &bno_raw, error) != 0 ||
+            read_tree(&meta, agno, xfs_be32(agf + 20), &SPEC_CNTBT,
+                      &cnt_blocks, &cnt_raw, error) != 0) {
+            result = -1; goto verify_done;
+        }
+        if (read_agfl(&meta, agno, agf, &agfl, &capacity, error) != 0) {
+            result = -1; goto verify_done;
+        }
+        if (has_rmap) {
+            if (read_tree(&meta, agno, xfs_be32(agf + 24), &SPEC_RMAPBT,
+                          &rmap_blocks, &rmap_raw, error) != 0) {
+                result = -1; goto verify_done;
+            }
+            decode_rmaps(&rmap_raw, &rmaps);
+            for (size_t index = 1; index < rmaps.count; ++index) {
+                if (rmap_compare(&rmaps.items[index - 1U], &rmaps.items[index]) > 0) {
+                    xfs_set_error(error, "XFS rmapbt leaf records are not sorted");
+                    result = -1; goto verify_done;
+                }
+            }
+        }
+
         uint64_t base = (uint64_t)agno * source->geometry.agblocks;
-        for (size_t index = 0; index < bno.count; ++index) xfs_range_push(&actual_global, base + bno.items[index].start, base + bno.items[index].end);
-        uint64_t free_count = free_block_count(&bno), longest = longest_free(&bno);
-        if (free_count != xfs_be32(agf + 52) || longest != xfs_be32(agf + 56)) { xfs_set_error(error, "XFS AGF free-space counters disagree with bnobt"); result = -1; goto verify_done; }
-        if (read_agfl(&meta, agno, agf, &agfl, &capacity, error) != 0) { result = -1; goto verify_done; }
-        if ((source->geometry.features_ro_compat & XFS_SB_FEAT_RO_COMPAT_RMAPBT) != 0) {
-            if (read_tree(&meta, agno, xfs_be32(agf + 24), &SPEC_RMAPBT, &rmap_blocks, &rmap_raw, error) != 0) { result = -1; goto verify_done; }
-            XfsRmapVec rmaps = {0}; decode_rmaps(&rmap_raw, &rmaps);
-            for (size_t index = 1; index < rmaps.count; ++index) if (rmap_compare(&rmaps.items[index - 1], &rmaps.items[index]) > 0) {
-                xfs_set_error(error, "XFS rmapbt leaf records are not sorted"); result = -1; break;
-            }
-            if (result == 0) {
-                SemanticVec actual = {0}, wanted = {0};
-                semantics_from_rmaps(&rmaps, true, source, &actual);
-                semantics_from_target(&targets, agno, &wanted);
-                if (!semantic_equal(&actual, &wanted)) { xfs_set_error(error, "XFS rmapbt file ownership differs from target inode mappings in AG %u", agno); result = -1; }
-                semantic_free(&actual); semantic_free(&wanted);
-            }
-            xfs_rmap_free(&rmaps);
+        uint64_t ag_len = xfs_ag_length(&source->geometry, agno);
+        if (subtract_final_metadata(
+                &expected_free, base, ag_len, &bno_blocks, &cnt_blocks,
+                &rmap_blocks, &agfl, error) != 0) {
+            result = -1; goto verify_done;
         }
+        if (verify_bno_order(&bno_raw, &bno, error) != 0 ||
+            verify_cnt_order(&cnt_raw, error) != 0) {
+            result = -1; goto verify_done;
+        }
+        split_ag_ranges(&expected_free, &source->geometry, agno, &expected_ag);
+        if (!range_vec_equal(&bno, &expected_ag)) {
+            xfs_set_error(error, "XFS bnobt does not describe the planned free map in AG %u", agno);
+            result = -1; goto verify_done;
+        }
+        for (size_t index = 0; index < bno.count; ++index)
+            xfs_range_push(&actual_global, base + bno.items[index].start,
+                           base + bno.items[index].end);
+
+        uint64_t free_count = free_block_count(&bno);
+        uint64_t longest = longest_free(&bno);
+        if (free_count != xfs_be32(agf + 52) ||
+            longest != xfs_be32(agf + 56)) {
+            xfs_set_error(error, "XFS AGF free-space counters disagree with bnobt");
+            result = -1; goto verify_done;
+        }
+        size_t nonroots =
+            (bno_blocks.count ? bno_blocks.count - 1U : 0) +
+            (cnt_blocks.count ? cnt_blocks.count - 1U : 0) +
+            (rmap_blocks.count ? rmap_blocks.count - 1U : 0);
+        if (nonroots > UINT32_MAX || xfs_be32(agf + 60) != (uint32_t)nonroots) {
+            xfs_set_error(error, "XFS AGF allocation-tree block counter is inconsistent");
+            result = -1; goto verify_done;
+        }
+        if (has_rmap &&
+            (rmap_blocks.count > UINT32_MAX ||
+             xfs_be32(agf + 80) != (uint32_t)rmap_blocks.count)) {
+            xfs_set_error(error, "XFS AGF rmap block counter is inconsistent");
+            result = -1; goto verify_done;
+        }
+
+        if (has_rmap) {
+            SemanticVec actual = {0}, wanted = {0};
+            semantics_from_rmaps(&rmaps, true, source, &actual);
+            semantics_from_target(&targets, agno, &wanted);
+            if (!semantic_equal(&actual, &wanted)) {
+                xfs_set_error(error,
+                              "XFS rmapbt file ownership differs from target inode mappings in AG %u",
+                              agno);
+                result = -1;
+            }
+            semantic_free(&actual);
+            semantic_free(&wanted);
+            if (result == 0 &&
+                verify_ag_owner_rmaps(&rmaps, &bno_blocks, &cnt_blocks,
+                                      &rmap_blocks, ag_len, agno, error) != 0)
+                result = -1;
+        }
+
 verify_done:
-        free(agf); xfs_u64_free(&bno_blocks); xfs_u64_free(&cnt_blocks); xfs_u64_free(&rmap_blocks); xfs_u64_free(&agfl);
-        raw_free(&bno_raw); raw_free(&cnt_raw); raw_free(&rmap_raw); xfs_range_free(&bno); xfs_range_free(&expected_ag);
+        free(agf);
+        xfs_u64_free(&bno_blocks); xfs_u64_free(&cnt_blocks);
+        xfs_u64_free(&rmap_blocks); xfs_u64_free(&agfl);
+        raw_free(&bno_raw); raw_free(&cnt_raw); raw_free(&rmap_raw);
+        xfs_rmap_free(&rmaps);
+        xfs_range_free(&bno); xfs_range_free(&expected_ag);
     }
     xfs_range_sort_merge(&actual_global);
     if (result == 0 && !range_vec_equal(&actual_global, &expected_free)) {
-        xfs_set_error(error, "rebuilt XFS free-space trees do not match the planned global free map"); result = -1;
+        xfs_set_error(error, "rebuilt XFS free-space trees do not match the planned global free map");
+        result = -1;
     }
-    meta_close(&meta); xfs_range_free(&expected_free); xfs_range_free(&actual_global); ag_rmap_free(&targets);
+    meta_close(&meta);
+    xfs_range_free(&expected_free);
+    xfs_range_free(&actual_global);
+    ag_rmap_free(&targets);
     return result;
 }
 

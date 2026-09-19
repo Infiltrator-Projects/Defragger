@@ -155,8 +155,76 @@ static int test_clean_log_head_detection(void) {
     return 0;
 }
 
+static int test_allocation_tree_pool_growth(void) {
+    XfsRangeVec planned_free = {0}, source_free = {0}, protected = {0};
+    XfsU64Vec pool = {0};
+    const uint64_t first = 1000U;
+    const size_t free_records = 9500U;
+
+    /*
+     * 9,500 one-block extents at 4 KiB require 20 bnobt blocks and
+     * 20 cntbt blocks.  This reproduces the field failure where a normal
+     * relayout needed 40 allocation-tree blocks but the AG had only 13
+     * existing tree/AGFL blocks.
+     */
+    for (size_t index = 0; index < free_records; ++index) {
+        uint64_t block = first + (uint64_t)index * 2U;
+        xfs_range_push(&planned_free, block, block + 1U);
+        xfs_range_push(&source_free, block, block + 1U);
+    }
+    uint64_t protected_block = first + (uint64_t)(free_records - 1U) * 2U;
+    xfs_range_push(&protected, protected_block, protected_block + 1U);
+
+    for (uint64_t block = 50U; block < 63U; ++block) xfs_u64_push(&pool, block);
+    CHECK(pool.count == 13U);
+    CHECK(tree_required_blocks(&SPEC_BNOBT, 4096U, planned_free.count) == 20U);
+    CHECK(tree_required_blocks(&SPEC_CNTBT, 4096U, planned_free.count) == 20U);
+
+    size_t nb = 0, nc = 0, nr = 0;
+    char *error = NULL;
+    CHECK(ensure_allocation_tree_pool(
+              4096U, false, 0U, &planned_free, &source_free, &protected,
+              &pool, &nb, &nc, &nr, &error) == 0);
+    CHECK(error == NULL);
+    CHECK(nb + nc == 40U);
+    CHECK(nr == 0U);
+    CHECK(pool.count >= nb + nc);
+    CHECK(xfs_range_contains(&planned_free, protected_block, protected_block + 1U));
+
+    xfs_range_free(&planned_free);
+    xfs_range_free(&source_free);
+    xfs_range_free(&protected);
+    xfs_u64_free(&pool);
+    return 0;
+}
+
+static int test_ag_owner_rmap_regeneration(void) {
+    XfsU64Vec pool = {0};
+    XfsRmapVec records = {0};
+    for (const uint64_t blocks[] = {4U, 5U, 8U, 9U, 10U, 20U};
+         pool.count < sizeof(blocks) / sizeof(blocks[0]); )
+        xfs_u64_push(&pool, blocks[pool.count]);
+
+    char *error = NULL;
+    CHECK(append_ag_owner_rmaps(&pool, 5U, &records, &error) == 0);
+    CHECK(error == NULL);
+    CHECK(records.count == 2U);
+    CHECK(records.items[0].start == 4U && records.items[0].count == 2U);
+    CHECK(records.items[1].start == 8U && records.items[1].count == 3U);
+    CHECK(records.items[0].owner == XFS_RMAP_OWN_AG);
+    CHECK(records.items[1].owner == XFS_RMAP_OWN_AG);
+    CHECK(records.items[0].offset_flags == 0U);
+    CHECK(records.items[1].offset_flags == 0U);
+
+    xfs_u64_free(&pool);
+    xfs_rmap_free(&records);
+    return 0;
+}
+
 int main(void) {
     CHECK(test_clean_log_head_detection() == 0);
+    CHECK(test_allocation_tree_pool_growth() == 0);
+    CHECK(test_ag_owner_rmap_regeneration() == 0);
     XfsGeometry geometry;
     memset(&geometry, 0, sizeof(geometry));
     geometry.block_size = 4096U;

@@ -53,6 +53,8 @@
 #define XFS_RMAP_UNWRITTEN (UINT64_C(1) << 61)
 #define XFS_RMAP_BMBT_BLOCK (UINT64_C(1) << 62)
 #define XFS_RMAP_ATTR_FORK (UINT64_C(1) << 63)
+/* XFS on-disk special owner for AG free-space/rmap B+tree blocks (-5ULL). */
+#define XFS_RMAP_OWN_AG UINT64_C(0xfffffffffffffffb)
 #define XFS_NULLAGBLOCK UINT32_C(0xffffffff)
 
 typedef struct {
