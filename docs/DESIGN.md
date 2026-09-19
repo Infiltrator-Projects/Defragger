@@ -25,7 +25,7 @@ C is preferred for low-level parsing, native filesystem engines and direct stora
 
 Platform libraries and in-process filesystem libraries are used when their documented contract is the stronger engineering choice. External command-line repair or defragmentation programs are not part of production mutation paths.
 
-The reusable first-party dependency is pinned to Infiltratr Common 1.19.2 at exact commit `44409af17c89b6ece6b4bcb2c0c133213c695c23`. Generic parsing, arithmetic, byte-order, path, allocation-growth, JSON and exact-I/O mechanisms belong there when their contracts match. Filesystem geometry, placement, target safety and transaction/recovery policy remain local.
+The reusable first-party dependency is pinned to Infiltratr Common 1.19.3 at exact commit `de7251ce12ed176048df1bad05ef7e4d0db7e9ec`. Generic parsing, arithmetic, byte-order, path, allocation-growth, JSON and exact-I/O mechanisms belong there when their contracts match. Filesystem geometry, placement, target safety and transaction/recovery policy remain local.
 
 ## Failure philosophy
 
