@@ -90,7 +90,6 @@ def test_exfat(work: Path) -> None:
     packed = run_json(worker, image)
     assert packed["serial"] == serial
     assert_clean(packed, growth=False)
-    assert map_json("ntfs", image)["fragmented_files"] == 0
     assert map_json("exfat", image)["fragmented_files"] == 0
     output = mutate(worker, image, "growth-defrag", work / "exfat-growth.journal")
     assert "exFAT unified workspace layout:" in output, output
@@ -117,6 +116,7 @@ def test_ntfs(work: Path) -> None:
     packed = run_json(worker, image)
     assert packed["serial"] == serial
     assert_clean(packed, growth=False)
+    assert map_json("ntfs", image)["fragmented_files"] == 0
     output = mutate(worker, image, "growth-defrag", work / "ntfs-growth.journal")
     assert "NTFS direct metadata layout:" in output, output
     assert "internally verified raw NTFS working image" not in output, output
