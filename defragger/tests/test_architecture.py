@@ -480,7 +480,7 @@ def test_production_write_safety_is_enforced_at_every_boundary() -> None:
 
     for path in (
         native / "ext4" / "native" / "ext_catalog.c",
-        native / "ntfs" / "native" / "ntfs_plan.c",
+        native / "ntfs" / "native" / "ntfs_plan_db.cpp",
         native / "xfs" / "native" / "xfs_plan.c",
     ):
         assert "SQLITE_OPEN_NOFOLLOW" in path.read_text(), (
