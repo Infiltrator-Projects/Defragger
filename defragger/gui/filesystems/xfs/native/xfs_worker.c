@@ -16,6 +16,7 @@
 #include "ld_path.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/config.h"
 #include "infiltratr/posix.h"
 #include "ld_stop.h"
 #include "version.h"
@@ -163,23 +164,24 @@ static int journal_load(const char *path, XfsJournal *state, char **error) {
     }
     bool filesystem_ok = false;
     while (getline(&line, &capacity, file) >= 0) {
-        infiltratr_trim_line_end(line);
-        char *equals = strchr(line, '=');
-        if (equals == NULL) continue;
-        *equals++ = '\0';
-        if (strcmp(line, "filesystem") == 0) filesystem_ok = strcmp(equals, "xfs") == 0;
-        else if (strcmp(line, "device") == 0) { free(state->device); state->device = value_copy(equals); }
-        else if (strcmp(line, "target_identity") == 0) { free(state->target_identity); state->target_identity = value_copy(equals); }
-        else if (strcmp(line, "uuid") == 0) infiltratr_copy_string(state->uuid, sizeof(state->uuid), equals);
-        else if (strcmp(line, "operation") == 0) infiltratr_copy_string(state->operation, sizeof(state->operation), equals);
-        else if (strcmp(line, "phase") == 0) infiltratr_copy_string(state->phase, sizeof(state->phase), equals);
-        else if (strcmp(line, "stage") == 0) { free(state->stage); state->stage = value_copy(equals); }
-        else if (strcmp(line, "plan") == 0) { free(state->plan); state->plan = value_copy(equals); }
-        else if (strcmp(line, "physical_bytes") == 0 && parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
-        else if (strcmp(line, "filesystem_bytes") == 0 && parse_u64(equals, &state->filesystem_bytes) != 0) goto invalid;
-        else if (strcmp(line, "commit_offset") == 0 && parse_u64(equals, &state->commit_offset) != 0) goto invalid;
-        else if (strcmp(line, "movable_blocks") == 0 && parse_u64(equals, &state->movable_blocks) != 0) goto invalid;
-        else if (strcmp(line, "move_blocks") == 0 && parse_u64(equals, &state->move_blocks) != 0) goto invalid;
+        char *key = NULL;
+        char *equals = NULL;
+        if (infiltratr_config_parse_line(line, &key, &equals) !=
+            INFILTRATR_CONFIG_LINE_ENTRY)
+            continue;
+        if (strcmp(key, "filesystem") == 0) filesystem_ok = strcmp(equals, "xfs") == 0;
+        else if (strcmp(key, "device") == 0) { free(state->device); state->device = value_copy(equals); }
+        else if (strcmp(key, "target_identity") == 0) { free(state->target_identity); state->target_identity = value_copy(equals); }
+        else if (strcmp(key, "uuid") == 0) infiltratr_copy_string(state->uuid, sizeof(state->uuid), equals);
+        else if (strcmp(key, "operation") == 0) infiltratr_copy_string(state->operation, sizeof(state->operation), equals);
+        else if (strcmp(key, "phase") == 0) infiltratr_copy_string(state->phase, sizeof(state->phase), equals);
+        else if (strcmp(key, "stage") == 0) { free(state->stage); state->stage = value_copy(equals); }
+        else if (strcmp(key, "plan") == 0) { free(state->plan); state->plan = value_copy(equals); }
+        else if (strcmp(key, "physical_bytes") == 0 && parse_u64(equals, &state->physical_bytes) != 0) goto invalid;
+        else if (strcmp(key, "filesystem_bytes") == 0 && parse_u64(equals, &state->filesystem_bytes) != 0) goto invalid;
+        else if (strcmp(key, "commit_offset") == 0 && parse_u64(equals, &state->commit_offset) != 0) goto invalid;
+        else if (strcmp(key, "movable_blocks") == 0 && parse_u64(equals, &state->movable_blocks) != 0) goto invalid;
+        else if (strcmp(key, "move_blocks") == 0 && parse_u64(equals, &state->move_blocks) != 0) goto invalid;
     }
     free(line); fclose(file);
     if (!filesystem_ok || state->device == NULL || state->target_identity == NULL ||

@@ -14,6 +14,7 @@
 #include "ld_runtime.h"
 #include "ld_path.h"
 #include "infiltratr/core.h"
+#include "infiltratr/config.h"
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/posix.h"
 #include "infiltratr/token.h"
@@ -162,18 +163,19 @@ Journal journal_read(const char *path) {
     }
     size_t expected_count = 0;
     while (getline(&line, &cap, fp) >= 0) {
-        infiltratr_trim_line_end(line);
-        char *eq = strchr(line, '=');
-        if (eq == NULL) continue;
-        *eq++ = '\0';
-        if (strcmp(line, "device") == 0) j.device_path = ld_xstrdup(eq);
-        else if (strcmp(line, "volume_id") == 0) j.volume_id = parse_u32_value(eq, 16U, "volume_id");
-        else if (strcmp(line, "stage") == 0) j.stage = parse_stage_value(eq);
-        else if (strcmp(line, "dirent_offset") == 0) j.dirent_offset = parse_u64_value(eq, 10U, "dirent_offset");
-        else if (strcmp(line, "old_first") == 0) j.old_first = parse_u32_value(eq, 10U, "old_first");
-        else if (strcmp(line, "dest_start") == 0) j.dest_start = parse_u32_value(eq, 10U, "dest_start");
-        else if (strcmp(line, "count") == 0) expected_count = parse_size_value(eq, "count");
-        else if (strcmp(line, "source") == 0) {
+        char *key = NULL;
+        char *eq = NULL;
+        if (infiltratr_config_parse_line(line, &key, &eq) !=
+            INFILTRATR_CONFIG_LINE_ENTRY)
+            continue;
+        if (strcmp(key, "device") == 0) j.device_path = ld_xstrdup(eq);
+        else if (strcmp(key, "volume_id") == 0) j.volume_id = parse_u32_value(eq, 16U, "volume_id");
+        else if (strcmp(key, "stage") == 0) j.stage = parse_stage_value(eq);
+        else if (strcmp(key, "dirent_offset") == 0) j.dirent_offset = parse_u64_value(eq, 10U, "dirent_offset");
+        else if (strcmp(key, "old_first") == 0) j.old_first = parse_u32_value(eq, 10U, "old_first");
+        else if (strcmp(key, "dest_start") == 0) j.dest_start = parse_u32_value(eq, 10U, "dest_start");
+        else if (strcmp(key, "count") == 0) expected_count = parse_size_value(eq, "count");
+        else if (strcmp(key, "source") == 0) {
             const char *cursor = eq;
             if (*cursor == '\0') {
                 journal_free(&j);
@@ -221,19 +223,20 @@ RelocationJournal relocation_journal_read(const char *path) {
     size_t expected_moves = 0;
     size_t expected_patches = 0;
     while (getline(&line, &cap, fp) >= 0) {
-        infiltratr_trim_line_end(line);
-        char *eq = strchr(line, '=');
-        if (eq == NULL) continue;
-        *eq++ = '\0';
-        if (strcmp(line, "device") == 0) j.device_path = ld_xstrdup(eq);
-        else if (strcmp(line, "volume_id") == 0) j.volume_id = parse_u32_value(eq, 16U, "volume_id");
-        else if (strcmp(line, "stage") == 0) j.stage = parse_stage_value(eq);
-        else if (strcmp(line, "root_old") == 0) j.root_old = parse_u32_value(eq, 10U, "root_old");
-        else if (strcmp(line, "root_new") == 0) j.root_new = parse_u32_value(eq, 10U, "root_new");
-        else if (strcmp(line, "move_count") == 0) expected_moves = parse_size_value(eq, "move_count");
-        else if (strcmp(line, "dir_patch_count") == 0) {
+        char *key = NULL;
+        char *eq = NULL;
+        if (infiltratr_config_parse_line(line, &key, &eq) !=
+            INFILTRATR_CONFIG_LINE_ENTRY)
+            continue;
+        if (strcmp(key, "device") == 0) j.device_path = ld_xstrdup(eq);
+        else if (strcmp(key, "volume_id") == 0) j.volume_id = parse_u32_value(eq, 16U, "volume_id");
+        else if (strcmp(key, "stage") == 0) j.stage = parse_stage_value(eq);
+        else if (strcmp(key, "root_old") == 0) j.root_old = parse_u32_value(eq, 10U, "root_old");
+        else if (strcmp(key, "root_new") == 0) j.root_new = parse_u32_value(eq, 10U, "root_new");
+        else if (strcmp(key, "move_count") == 0) expected_moves = parse_size_value(eq, "move_count");
+        else if (strcmp(key, "dir_patch_count") == 0) {
             expected_patches = parse_size_value(eq, "dir_patch_count");
-        } else if (strcmp(line, "move") == 0) {
+        } else if (strcmp(key, "move") == 0) {
             uint64_t fields[4] = {0};
             if (!parse_csv_u64(eq, fields, 4U) ||
                 fields[0] > UINT32_MAX || fields[1] > UINT32_MAX ||
@@ -248,7 +251,7 @@ RelocationJournal relocation_journal_read(const char *path) {
                 .predecessor = (uint32_t)fields[3],
             };
             relocation_journal_add_move(&j, m);
-        } else if (strcmp(line, "dir_patch") == 0) {
+        } else if (strcmp(key, "dir_patch") == 0) {
             uint64_t fields[3] = {0};
             if (!parse_csv_u64(eq, fields, 3U) ||
                 fields[1] > UINT32_MAX || fields[2] > UINT32_MAX) {
