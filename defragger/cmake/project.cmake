@@ -461,7 +461,10 @@ install(FILES packaging/io.github.linuxdefragger.png
         DESTINATION lib/linux-defragger
         RENAME defragmenter-icon.png)
 
-install(FILES README.md docs/DESIGN.md docs/AUDIT_STATUS.md
+# Install only documentation that is part of the self-contained application
+# source tree. Canonical repository documentation lives at ../docs and is not
+# duplicated into the native installer payload.
+install(FILES README.md
         DESTINATION share/doc/linux-defragger)
 install(FILES LICENSE
         DESTINATION share/doc/linux-defragger RENAME COPYING.GPL-3.0)
