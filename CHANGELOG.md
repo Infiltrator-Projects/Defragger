@@ -4,6 +4,13 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-178
+
+- Enforced the three-face MB Corpo typography contract across the main Defragmenter UI and the separate Test Media utility.
+- Removed generic host-font fallbacks and the Test Media log's forced system monospace setting; normal text now stays on MB Corpo S and application titles stay on MB Corpo A.
+- Removed runtime font-family probing from both interfaces because supported packages already install and register the verified MB font bundle.
+- Added a permanent GUI regression that rejects generic/system font escape hatches and verifies all three packaged MB font files remain part of the release contract.
+
 ## 1.8.0-177
 
 - Fixed XFS Defragment/Growth Defrag when a valid relayout needs more bnobt/cntbt/rmapbt blocks than the allocation group already has in its tree/AGFL reserve.

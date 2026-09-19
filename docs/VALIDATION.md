@@ -33,6 +33,8 @@ Growth Defrag tests verify the exact 10% post-file reserve rather than treating 
 
 The XFS metadata white-box suite includes the field-shaped allocation-tree pressure case in which the final free-space map needs 40 bnobt/cntbt blocks while only 13 tree/AGFL blocks are initially available. The regression verifies safe reserve growth from source-free/final-free blocks, preservation of protected Growth Defrag runs and regeneration of XFS AG-owner reverse mappings. This is structural disposable-test evidence; the user's physical 2 GB XFS device remains separate live-media evidence.
 
+GUI contract tests also treat typography as release behaviour rather than decoration. They verify that the main application and Test Media reference only the MB Corpo A/S families, that the package still installs the A Condensed, S Regular and S Bold font files, and that generic/system font fallbacks or a forced host monospace log cannot be silently reintroduced.
+
 The mutation path is not accepted as its own sole oracle where a separate structural or payload check can be used.
 
 ## Manual and environment-dependent evidence
