@@ -643,6 +643,8 @@ def test_user_facing_branding_is_defragmenter() -> None:
     project_cmake = (ROOT / "cmake" / "project.cmake").read_text()
     assert "packaging/io.github.linuxdefragger.png" in project_cmake
     assert "share/icons/hicolor/128x128/apps" in project_cmake
+    assert "DESTINATION share/app-install/icons" in project_cmake
+    assert "RENAME infiltrator-defragmenter.png" in project_cmake
     assert "DESTINATION lib/linux-defragger" in project_cmake
     assert "RENAME defragmenter-icon.png" in project_cmake
     assert "packaging/io.github.linuxdefragger.svg" not in project_cmake

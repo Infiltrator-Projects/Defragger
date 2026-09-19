@@ -535,6 +535,9 @@ install(FILES packaging/io.github.linuxdefragger.desktop
 install(FILES packaging/io.github.linuxdefragger.png
         DESTINATION share/icons/hicolor/128x128/apps)
 install(FILES packaging/io.github.linuxdefragger.png
+        DESTINATION share/app-install/icons
+        RENAME infiltrator-defragmenter.png)
+install(FILES packaging/io.github.linuxdefragger.png
         DESTINATION lib/linux-defragger
         RENAME defragmenter-icon.png)
 
