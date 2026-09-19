@@ -28,7 +28,7 @@ per-filesystem native C analysers / planners / writers
         ↓
 raw image or unmounted block device
 
-Infiltratr Common 1.19.6
+Infiltratr Common 1.19.8
         ↓
 checked arithmetic / parsing / endian / path / exact-I/O /
 allocation-growth / JSON / durable-file primitives
@@ -112,9 +112,11 @@ The project assumes the kernel, libc, required libraries and storage hardware ho
 
 ## Common
 
-`shared/infiltratr-common` is pinned to Infiltratr Common 1.19.6 at exact commit `a0e26896cc2a5674a138b29f009a7b30f0d636c6`.
+`shared/infiltratr-common` is pinned to Infiltratr Common 1.19.8 at exact commit `3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9`.
 
 Common is authoritative for reusable mechanisms whose semantics are genuinely generic. If Defragmenter has a stronger implementation of a generic primitive, the preferred direction is to improve Common until its contract preserves that correctness, performance and resilience, then remove the local duplicate.
+
+For this pin, Common also owns deterministic finite-decimal conversion used by the C++ JSON adapter, checked allocation sizing used by local runtime wrappers, native typography/structural design identity, and immutable MB Corpo asset provenance. The GTK adapter is generated from Common's design JSON; Test Media consumes the native design API. Defragmenter's no-font-fallback policy remains product-local because the package installs the verified Common-described faces itself.
 
 Do not move filesystem policy, target-safety decisions or transaction semantics into Common merely to reduce line count.
 
