@@ -12,7 +12,7 @@ Defragmenter is a C-first offline filesystem allocation analyser and defragmente
 
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** The version 1.8.0-172 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `defragger/docs/AUDIT_STATUS.md`.
+> **Safety status:** The version 1.8.0-172 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
 
 ## Engineering ethos
 
@@ -89,11 +89,11 @@ Existing version tags and published releases are immutable and are never moved, 
 ## Documentation
 
 - `defragger/README.md` — detailed project manual and filesystem-support matrix.
-- `defragger/docs/DESIGN.md` — architecture, assumptions, invariants and trade-offs.
-- `defragger/docs/DECISIONS.md` — major architectural choices, alternatives and consequences.
-- `defragger/docs/VALIDATION.md` — verification methodology, evidence traceability and limitations.
-- `defragger/docs/AUDIT_STATUS.md` — release-specific safety case and exact audited baselines.
-- `defragger/docs/REFERENCES.md` — filesystem/platform technical references.
+- `docs/DESIGN.md` — architecture, assumptions, invariants and trade-offs.
+- `docs/DECISIONS.md` — major architectural choices, alternatives and consequences.
+- `docs/VALIDATION.md` — verification methodology, evidence traceability and limitations.
+- `docs/AUDIT_STATUS.md` — release-specific safety case and exact audited baselines.
+- `docs/REFERENCES.md` — filesystem/platform technical references.
 - `defragger/VERSION` — current source version.
 
 ## Safety
