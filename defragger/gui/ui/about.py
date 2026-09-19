@@ -10,7 +10,6 @@ from .icon_assets import load_app_icon_pixbuf
 from .window_view import (
     ABOUT_COMMENTS,
     ABOUT_LICENSE,
-    APP_ICON_NAME,
     APP_NAME,
     COPYRIGHT,
     PROJECT_URL,
