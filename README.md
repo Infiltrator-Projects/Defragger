@@ -6,13 +6,13 @@
 
 Defragmenter is a C-first offline filesystem allocation analyser and defragmenter for Linux. Native C owns the raw filesystem engines and storage-safety core; C++17 owns selected filesystem-neutral application services where RAII, stronger value types and explicit process/protocol ownership improve the implementation. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-178
+**Current version:** 1.8.0-179
 
 **Platform:** Linux
 
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** The version 1.8.0-178 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
+> **Safety status:** The version 1.8.0-179 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
 
 ## Engineering ethos
 
@@ -27,6 +27,8 @@ The project prefers the strongest justified method, not automatically the newest
 The main GTK application supports **Follow system**, **Day** and **Night** appearance modes. Follow system leaves the host GTK/Mint palette authoritative while retaining the Infiltrator typography and layout hierarchy. Day and Night apply explicit Infiltrator light and graphite/silver palettes. The selected mode is persisted per user and synchronised across open windows.
 
 Typography is deliberately closed to the three packaged MB Corpo faces: MB Corpo A Condensed for primary titles, MB Corpo S Regular for normal interface text and MB Corpo S Bold for emphasis. Defragmenter and Test Media do not request generic system or monospace fallback families; the Debian and local installers ship and register the same verified font bundle used by MBLINK.
+
+The desktop, window and About surfaces use one approved 256×256 Defragmenter artwork asset. Packaging installs the same file into the desktop icon theme, Mint app-install icon path and the application's private About/window path so those surfaces cannot drift to different artwork.
 
 ## Capabilities
 

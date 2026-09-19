@@ -4,6 +4,12 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-179
+
+- Restored the exact 256×256 Defragmenter artwork previously supplied for the desktop and About presentation.
+- Installed the artwork in the matching 256×256 hicolor directory while retaining the same asset for Mint app-install metadata and the private About/window copy.
+- Added a regression that pins the approved Git blob and PNG dimensions so a substitute icon cannot silently replace the application artwork again.
+
 ## 1.8.0-178
 
 - Enforced the three-face MB Corpo typography contract across the main Defragmenter UI and the separate Test Media utility.

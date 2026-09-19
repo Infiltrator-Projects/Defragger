@@ -5,8 +5,8 @@ Status: **complete**
 Completed: 2026-08-25  
 Extended: 2026-09-19
 
-Applies to: release version 1.8.0-178
-Audited source commit: e9b867141a2f5c48b5b3286e7cbf3124ed75cef0
+Applies to: release version 1.8.0-179
+Audited source commit: 660eddea5395b2236976d3cdf44dee2536c6d7ac
 Audited release-governance commit: b5f891f623f37df16d0d902029a22ca715301581
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -75,7 +75,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-178 is the current audited release line. It retains the 1.8.0-177 XFS allocation-tree capacity correction and adds a deterministic typography contract: the main GTK application and Test Media request only the three packaged MB Corpo faces, with MB Corpo A for primary titles and MB Corpo S for normal/bold interface text. Generic host-font fallbacks, runtime font probing and the Test Media system-monospace override were removed. A permanent GUI regression verifies the three packaged font files and rejects reintroduction of generic/system font escape hatches. The C++17 application-service and first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
+Version 1.8.0-179 is the current audited release line. It retains the 1.8.0-177 XFS allocation-tree correction and the 1.8.0-178 MB-only typography contract, and restores the approved 256×256 Defragmenter artwork as the single desktop, window and About icon source. Packaging places that same asset in the matching hicolor size directory, Mint app-install path and private application path. A permanent architecture regression pins the approved Git blob and PNG dimensions so unrelated or substitute artwork cannot silently replace it. The C++17 application-service and first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 
