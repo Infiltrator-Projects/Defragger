@@ -338,8 +338,9 @@ std::string json_quote(std::string_view value) {
     return "\"" + std::string(escaped.data()) + "\"";
 }
 
-std::string registry_manifest_json() {
-    std::string out = "{\"schema\":3,\"backends\":[";
+std::string registry_manifest_json(unsigned schema) {
+    if (schema == 0U) throw std::invalid_argument("manifest schema must be non-zero");
+    std::string out = "{\"schema\":" + std::to_string(schema) + ",\"backends\":[";
     bool first_backend = true;
     for (const auto& backend : backend_registry()) {
         if (!first_backend) out += ',';

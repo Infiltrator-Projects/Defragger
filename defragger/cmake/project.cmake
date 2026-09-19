@@ -161,6 +161,7 @@ target_link_libraries(linux-defragger-core PUBLIC InfiltratrCommon::Common)
 # mutation remain in the existing native C engines.
 add_library(linux-defragger-runtime-cpp STATIC
     native/json.cpp
+    native/map.cpp
     native/process.cpp
     native/runtime.cpp)
 target_include_directories(linux-defragger-runtime-cpp PUBLIC
@@ -184,6 +185,18 @@ target_compile_options(linux-defragger-operation-engine-cpp PRIVATE
 target_compile_definitions(linux-defragger-operation-engine-cpp PRIVATE
     _FILE_OFFSET_BITS=64 _GNU_SOURCE)
 target_link_libraries(linux-defragger-operation-engine-cpp PRIVATE
+    linux-defragger-runtime-cpp linux-defragger-core)
+
+add_executable(linux-defragger-mapper-cpp
+    native/mapper.cpp)
+target_include_directories(linux-defragger-mapper-cpp PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/native"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-mapper-cpp PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-mapper-cpp PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-mapper-cpp PRIVATE
     linux-defragger-runtime-cpp linux-defragger-core)
 
 # FAT remains native C, but it is a private implementation detail of the
@@ -521,6 +534,8 @@ if(BUILD_TESTING)
         COMMAND linux-defragger-cpp-runtime-test)
     add_test(NAME linux-defragger-operation-engine-cpp-manifest
         COMMAND linux-defragger-operation-engine-cpp --list-plugins)
+    add_test(NAME linux-defragger-mapper-cpp-manifest
+        COMMAND linux-defragger-mapper-cpp --list-backends)
 
     add_executable(linux-defragger-apfs-native-test
         tests/test_apfs_native.c)
