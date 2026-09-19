@@ -8,6 +8,7 @@ from typing import Any
 from gi.repository import Gtk
 
 from .map_geometry import MapGeometry, allocation_grid, block_bounds, source_cell_at
+from .theme_tokens import TYPOGRAPHY
 
 MIN_MAP_CELLS = 256
 MAX_MAP_CELLS = 1048576
@@ -97,7 +98,7 @@ class DiskMap(Gtk.DrawingArea):
         cr.fill()
         if not self.cells:
             cr.set_source_rgb(0.38, 0.40, 0.44)
-            cr.select_font_face("MB Corpo S Title WEB", 0, 0)
+            cr.select_font_face(TYPOGRAPHY["ui_family"], 0, 0)
             cr.set_font_size(15)
             message = "Select a supported volume and click Analyse"
             extents = cr.text_extents(message)
