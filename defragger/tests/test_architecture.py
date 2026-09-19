@@ -164,7 +164,7 @@ def test_single_filesystem_hierarchy_and_c_first_writers() -> None:
     assert "catalogue.growth_10_satisfied" not in ntfs_planning
     assert "class SqliteStatement" in ntfs_plan_db
     assert "class RollbackGuard" in ntfs_plan_db
-    assert \'extern "C" int ntfs_create_plan_db\' in ntfs_plan_db
+    assert 'extern "C" int ntfs_create_plan_db' in ntfs_plan_db
     assert "virtual " not in ntfs_plan_db
     cpp_sources = sorted((GUI / "filesystems").rglob("*.cpp"))
     assert cpp_sources == [ntfs_native / "ntfs_plan_db.cpp"]
