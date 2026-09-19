@@ -22,10 +22,15 @@ for required in (
     "dialog.set_wrap_license(True)",
     'website_label="Project website"',
     "load_app_icon_pixbuf(96)",
+    "dialog.set_logo_icon_name(None)",
     'subtitle="DEFRAGMENTER · NATIVE FILESYSTEM OPTIMISATION"',
     '"Shannon Smith — Author and project maintainer"',
 ):
     assert required in ABOUT, required
+
+# Gtk3 defaults logo-icon-name to "image-missing", and that named-icon
+# property overrides the pixbuf logo.  The About contract must clear it first.
+assert ABOUT.index("dialog.set_logo_icon_name(None)") < ABOUT.index("dialog.set_logo(logo)")
 
 for required in (
     '"/usr/lib/linux-defragger/defragmenter-icon.png"',
