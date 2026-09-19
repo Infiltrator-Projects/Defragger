@@ -213,6 +213,8 @@ static void ld_decode_mount_field(char *value) {
     char *write_cursor = value;
     while (*read_cursor != '\0') {
         if (read_cursor[0] == '\\' &&
+            read_cursor[1] != '\0' && read_cursor[2] != '\0' &&
+            read_cursor[3] != '\0' &&
             read_cursor[1] >= '0' && read_cursor[1] <= '7' &&
             read_cursor[2] >= '0' && read_cursor[2] <= '7' &&
             read_cursor[3] >= '0' && read_cursor[3] <= '7') {

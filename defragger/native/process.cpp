@@ -55,14 +55,11 @@ void read_stream(int fd, std::string& output, std::size_t limit,
             return;
         }
         const auto amount = static_cast<std::size_t>(count);
-        if (output.size() < limit) {
-            const std::size_t available = limit - output.size();
-            output.append(buffer.data(), std::min(available, amount));
-        }
-        if (amount > limit - std::min(limit, output.size()))
-            truncated = true;
-        if (output.size() >= limit && amount != 0U)
-            truncated = true;
+        const std::size_t available =
+            output.size() < limit ? limit - output.size() : 0U;
+        const std::size_t kept = std::min(available, amount);
+        if (kept != 0U) output.append(buffer.data(), kept);
+        if (kept < amount) truncated = true;
     }
 }
 

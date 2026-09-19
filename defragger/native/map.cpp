@@ -390,18 +390,80 @@ Json map_xfs(const BackendInfo& backend, const std::string& path,
         std::move(details), true, "blocks");
 }
 
+bool native_accuracy_matches(const BackendInfo& backend,
+                             std::string_view accuracy) {
+    if (backend.id == "btrfs") return accuracy == "exact-single-device";
+    if (backend.id == "swap")
+        return accuracy == "summary" || accuracy == "exact";
+    if (backend.id == "ufs")
+        return accuracy == "summary" || accuracy == "exact-allocation";
+    return accuracy == backend.map_accuracy;
+}
+
+void validate_native_map(const BackendInfo& backend, const Json& payload) {
+    if (payload.find("schema") == nullptr ||
+        payload.at("schema").unsigned_or(0U) != 1U)
+        throw std::runtime_error(
+            "native filesystem mapper returned incompatible map schema");
+
+    const Json* domain = payload.find("backend");
+    if (domain == nullptr || !domain->is_string() ||
+        domain->string() != "read-only-domain")
+        throw std::runtime_error(
+            "native filesystem mapper returned wrong backend domain");
+
+    const Json* filesystem = payload.find("filesystem");
+    if (filesystem == nullptr || !filesystem->is_string())
+        throw std::runtime_error(
+            "native filesystem mapper omitted filesystem identity");
+    const BackendInfo* resolved = backend_by_fstype(filesystem->string());
+    if (resolved == nullptr || resolved->id != backend.id)
+        throw std::runtime_error(
+            "native filesystem mapper returned wrong filesystem identity");
+
+    const Json* accuracy = payload.find("map_accuracy");
+    if (accuracy == nullptr || !accuracy->is_string() ||
+        !native_accuracy_matches(backend, accuracy->string()))
+        throw std::runtime_error(
+            "native filesystem mapper returned unexpected accuracy contract");
+
+    const Json* raw_cells = payload.find("cells");
+    if (raw_cells == nullptr || !raw_cells->is_array())
+        throw std::runtime_error(
+            "native filesystem mapper omitted allocation cells");
+
+    const std::uint64_t unit_size = required_u64(payload, "unit_size");
+    const std::uint64_t total_units = required_u64(payload, "total_units");
+    const std::uint64_t cell_count = required_u64(payload, "cell_count");
+    if (unit_size == 0U || total_units == 0U || cell_count == 0U ||
+        cell_count != raw_cells->array().size())
+        throw std::runtime_error(
+            "native filesystem mapper returned invalid map geometry");
+
+    std::uint64_t expected_start = 0U;
+    for (const auto& cell : raw_cells->array()) {
+        if (!cell.is_object())
+            throw std::runtime_error(
+                "native filesystem mapper returned malformed allocation cell");
+        const std::uint64_t start = required_u64(cell, "start");
+        const std::uint64_t end = required_u64(cell, "end");
+        if (start != expected_start || end < start || end >= total_units)
+            throw std::runtime_error(
+                "native filesystem mapper returned discontinuous allocation cells");
+        expected_start = end + 1U;
+    }
+    if (expected_start != total_units)
+        throw std::runtime_error(
+            "native filesystem mapper did not cover the complete map");
+}
+
 Json map_native(const BackendInfo& backend, const std::string& path,
                 std::size_t cells) {
     Json payload = parse_worker_json(
         worker(backend, "map", path,
                {"--cells", std::to_string(std::max<std::size_t>(1U, cells))}),
         "native filesystem mapper");
-    if (payload.find("schema") == nullptr ||
-        payload.at("schema").unsigned_or(0U) != 1U ||
-        !payload.find("cells") || !payload.at("cells").is_array()) {
-        throw std::runtime_error(
-            "native filesystem mapper returned incompatible map schema");
-    }
+    validate_native_map(backend, payload);
     return payload;
 }
 

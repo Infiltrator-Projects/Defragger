@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -14,14 +15,17 @@
 #include <memory>
 #include <mutex>
 #include <regex>
+#include <spawn.h>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
-#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+extern char **environ;
 
 namespace defragger {
 namespace {
@@ -43,6 +47,54 @@ public:
 private:
     int value_;
 };
+
+class SpawnActions {
+public:
+    SpawnActions() {
+        const int result = posix_spawn_file_actions_init(&value_);
+        if (result != 0)
+            throw std::runtime_error(
+                std::string("posix_spawn file-actions init failed: ") +
+                std::strerror(result));
+        initialised_ = true;
+    }
+    ~SpawnActions() {
+        if (initialised_) (void)posix_spawn_file_actions_destroy(&value_);
+    }
+    SpawnActions(const SpawnActions&) = delete;
+    SpawnActions& operator=(const SpawnActions&) = delete;
+    posix_spawn_file_actions_t* get() noexcept { return &value_; }
+private:
+    posix_spawn_file_actions_t value_{};
+    bool initialised_ = false;
+};
+
+class SpawnAttributes {
+public:
+    SpawnAttributes() {
+        const int result = posix_spawnattr_init(&value_);
+        if (result != 0)
+            throw std::runtime_error(
+                std::string("posix_spawn attributes init failed: ") +
+                std::strerror(result));
+        initialised_ = true;
+    }
+    ~SpawnAttributes() {
+        if (initialised_) (void)posix_spawnattr_destroy(&value_);
+    }
+    SpawnAttributes(const SpawnAttributes&) = delete;
+    SpawnAttributes& operator=(const SpawnAttributes&) = delete;
+    posix_spawnattr_t* get() noexcept { return &value_; }
+private:
+    posix_spawnattr_t value_{};
+    bool initialised_ = false;
+};
+
+void require_spawn_success(int result, const char* action) {
+    if (result != 0)
+        throw std::runtime_error(
+            std::string(action) + ": " + std::strerror(result));
+}
 
 Json id_value(const Json& message) {
     const Json* id = message.find("id");
@@ -67,6 +119,104 @@ std::vector<std::string> string_array(const Json& value) {
     return result;
 }
 
+std::vector<std::string> child_environment() {
+    std::vector<std::string> result;
+    if (environ != nullptr) {
+        for (char** item = environ; *item != nullptr; ++item) {
+            const std::string_view value(*item);
+            if (value.rfind("LC_ALL=", 0U) == 0U ||
+                value.rfind("LANG=", 0U) == 0U) {
+                continue;
+            }
+            result.emplace_back(*item);
+        }
+    }
+    result.emplace_back("LC_ALL=C");
+    result.emplace_back("LANG=C");
+    return result;
+}
+
+pid_t spawn_command(const HelperCommand& allowed, int read_fd, int write_fd) {
+    std::vector<std::string> command;
+    command.reserve(allowed.arguments.size() + 1U);
+    command.push_back(allowed.executable);
+    command.insert(command.end(), allowed.arguments.begin(),
+                   allowed.arguments.end());
+
+    std::vector<char*> raw;
+    raw.reserve(command.size() + 1U);
+    for (auto& item : command) raw.push_back(item.data());
+    raw.push_back(nullptr);
+
+    std::vector<std::string> environment = child_environment();
+    std::vector<char*> raw_environment;
+    raw_environment.reserve(environment.size() + 1U);
+    for (auto& item : environment) raw_environment.push_back(item.data());
+    raw_environment.push_back(nullptr);
+
+    SpawnActions actions;
+    require_spawn_success(
+        posix_spawn_file_actions_adddup2(
+            actions.get(), write_fd, STDOUT_FILENO),
+        "posix_spawn stdout redirection failed");
+    require_spawn_success(
+        posix_spawn_file_actions_adddup2(
+            actions.get(), write_fd, STDERR_FILENO),
+        "posix_spawn stderr redirection failed");
+    require_spawn_success(
+        posix_spawn_file_actions_addclose(actions.get(), read_fd),
+        "posix_spawn read-pipe close failed");
+    require_spawn_success(
+        posix_spawn_file_actions_addclose(actions.get(), write_fd),
+        "posix_spawn write-pipe close failed");
+
+    SpawnAttributes attributes;
+    sigset_t defaults;
+    if (sigemptyset(&defaults) != 0 || sigaddset(&defaults, SIGPIPE) != 0)
+        throw std::runtime_error(
+            std::string("preparing child signal defaults failed: ") +
+            std::strerror(errno));
+    require_spawn_success(
+        posix_spawnattr_setsigdefault(attributes.get(), &defaults),
+        "posix_spawn signal-default setup failed");
+    require_spawn_success(
+        posix_spawnattr_setpgroup(attributes.get(), 0),
+        "posix_spawn process-group setup failed");
+    short flags = static_cast<short>(
+        POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGDEF);
+    require_spawn_success(
+        posix_spawnattr_setflags(attributes.get(), flags),
+        "posix_spawn flags setup failed");
+
+    pid_t child = -1;
+    const int result = posix_spawn(
+        &child, allowed.executable.c_str(), actions.get(), attributes.get(),
+        raw.data(), raw_environment.data());
+    require_spawn_success(result, "posix_spawn failed");
+    return child;
+}
+
+int wait_for_child(pid_t child) {
+    int status = 0;
+    for (;;) {
+        const pid_t waited = waitpid(child, &status, 0);
+        if (waited == child) return status;
+        if (waited < 0 && errno == EINTR) continue;
+        throw std::runtime_error(
+            std::string("waitpid failed: ") + std::strerror(errno));
+    }
+}
+
+void stop_and_reap(pid_t child) noexcept {
+    if (child <= 0) return;
+    if (kill(-child, SIGINT) != 0 && errno != ESRCH) {
+        // Waiting is still mandatory. The child may have already exited or
+        // may honour a signal delivered by another shutdown path.
+    }
+    int status = 0;
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+}
+
 class Helper {
 public:
     explicit Helper(std::uint32_t invoking_uid)
@@ -77,15 +227,18 @@ public:
     }
 
     int run() {
-        emit(Json::Object{
-            {"type", Json("ready")},
-            {"protocol", Json::unsigned_integer(kProtocolVersion)},
-            {"pid", Json::unsigned_integer(
-                static_cast<std::uint64_t>(getpid()))}});
+        if (!emit(Json::Object{
+                {"type", Json("ready")},
+                {"protocol", Json::unsigned_integer(kProtocolVersion)},
+                {"pid", Json::unsigned_integer(
+                    static_cast<std::uint64_t>(getpid()))}})) {
+            return 1;
+        }
 
         char* line = nullptr;
         std::size_t capacity = 0U;
-        while (getline(&line, &capacity, stdin) >= 0) {
+        while (!transport_failed_.load(std::memory_order_acquire) &&
+               getline(&line, &capacity, stdin) >= 0) {
             try {
                 Json message = Json::parse(line);
                 if (!message.is_object())
@@ -98,25 +251,25 @@ public:
                 } else if (action == "stop") {
                     handle_stop(message);
                 } else if (action == "ping") {
-                    emit(Json::Object{
+                    (void)emit(Json::Object{
                         {"type", Json("pong")},
                         {"id", id_value(message)}});
                 } else if (action == "quit") {
                     stop_active_and_wait();
-                    emit(Json::Object{{"type", Json("bye")}});
+                    (void)emit(Json::Object{{"type", Json("bye")}});
                     std::free(line);
                     return 0;
                 } else {
-                    fail(id_value(message), "unknown helper action");
+                    (void)fail(id_value(message), "unknown helper action");
                 }
             } catch (const std::exception& error) {
-                fail(Json(nullptr),
-                     std::string("invalid request: ") + error.what());
+                (void)fail(Json(nullptr),
+                           std::string("invalid request: ") + error.what());
             }
         }
         std::free(line);
         stop_active_and_wait();
-        return 0;
+        return transport_failed_.load(std::memory_order_acquire) ? 1 : 0;
     }
 
 private:
@@ -124,21 +277,36 @@ private:
     std::mutex emit_mutex_;
     std::mutex active_mutex_;
     std::thread worker_;
+    std::atomic<bool> transport_failed_{false};
     pid_t active_pid_ = -1;
     std::int64_t active_id_ = 0;
     bool active_has_output_ = false;
     bool pending_stop_ = false;
+    bool worker_running_ = false;
 
-    void emit(Json::Object object) {
-        const std::string encoded = Json(std::move(object)).dump();
-        std::lock_guard<std::mutex> lock(emit_mutex_);
-        std::fwrite(encoded.data(), 1U, encoded.size(), stdout);
-        std::fputc('\n', stdout);
-        std::fflush(stdout);
+    bool emit(Json::Object object) noexcept {
+        if (transport_failed_.load(std::memory_order_acquire)) return false;
+        try {
+            const std::string encoded = Json(std::move(object)).dump();
+            std::lock_guard<std::mutex> lock(emit_mutex_);
+            if (transport_failed_.load(std::memory_order_relaxed)) return false;
+            const std::size_t written =
+                std::fwrite(encoded.data(), 1U, encoded.size(), stdout);
+            const bool ok =
+                written == encoded.size() &&
+                std::fputc('\n', stdout) != EOF &&
+                std::fflush(stdout) == 0;
+            if (!ok)
+                transport_failed_.store(true, std::memory_order_release);
+            return ok;
+        } catch (...) {
+            transport_failed_.store(true, std::memory_order_release);
+            return false;
+        }
     }
 
-    void fail(Json id, const std::string& message) {
-        emit(Json::Object{
+    bool fail(Json id, const std::string& message) noexcept {
+        return emit(Json::Object{
             {"type", Json("error")},
             {"id", std::move(id)},
             {"message", Json(message)}});
@@ -151,7 +319,7 @@ private:
                 ? message.at("program").string_or() : "";
         const Json* raw_arguments = message.find("argv");
         if (raw_arguments == nullptr) {
-            fail(Json::integer(id), "argv must be a list of strings");
+            (void)fail(Json::integer(id), "argv must be a list of strings");
             return;
         }
 
@@ -159,29 +327,38 @@ private:
         try {
             arguments = string_array(*raw_arguments);
         } catch (const std::exception& error) {
-            fail(Json::integer(id), error.what());
+            (void)fail(Json::integer(id), error.what());
             return;
         }
 
-        {
-            std::lock_guard<std::mutex> lock(active_mutex_);
-            if (active_pid_ > 0) {
-                fail(Json::integer(id),
-                     "another privileged operation is already active");
-                return;
-            }
-        }
         if (worker_.joinable()) worker_.join();
 
-        worker_ = std::thread(
-            [this, id, program, arguments = std::move(arguments)] {
-                run_request(id, program, arguments);
-            });
+        {
+            std::lock_guard<std::mutex> lock(active_mutex_);
+            if (worker_running_ || active_pid_ > 0) {
+                (void)fail(Json::integer(id),
+                           "another privileged operation is already active");
+                return;
+            }
+            worker_running_ = true;
+        }
+
+        try {
+            worker_ = std::thread(
+                [this, id, program, arguments = std::move(arguments)] {
+                    run_request(id, program, arguments);
+                });
+        } catch (...) {
+            std::lock_guard<std::mutex> lock(active_mutex_);
+            worker_running_ = false;
+            throw;
+        }
     }
 
     void run_request(std::int64_t id, const std::string& program,
                      const std::vector<std::string>& arguments) noexcept {
         pid_t child = -1;
+        bool reaped = false;
         try {
             const HelperCommand allowed =
                 helper_command(program, arguments, invoking_uid_);
@@ -198,34 +375,7 @@ private:
             Fd read_end(output_pipe[0]);
             Fd write_end(output_pipe[1]);
 
-            child = fork();
-            if (child < 0)
-                throw std::runtime_error(
-                    std::string("fork failed: ") + std::strerror(errno));
-            if (child == 0) {
-                (void)setsid();
-                if (dup2(write_end.get(), STDOUT_FILENO) < 0 ||
-                    dup2(write_end.get(), STDERR_FILENO) < 0) {
-                    _exit(126);
-                }
-                (void)close(read_end.get());
-                (void)close(write_end.get());
-                (void)setenv("LC_ALL", "C", 1);
-                (void)setenv("LANG", "C", 1);
-
-                std::vector<std::string> command;
-                command.reserve(allowed.arguments.size() + 1U);
-                command.push_back(allowed.executable);
-                command.insert(command.end(), allowed.arguments.begin(),
-                               allowed.arguments.end());
-                std::vector<char*> raw;
-                raw.reserve(command.size() + 1U);
-                for (auto& item : command) raw.push_back(item.data());
-                raw.push_back(nullptr);
-                execv(raw[0], raw.data());
-                _exit(errno == ENOENT ? 127 : 126);
-            }
-
+            child = spawn_command(allowed, read_end.get(), write_end.get());
             (void)close(write_end.release());
             {
                 std::lock_guard<std::mutex> lock(active_mutex_);
@@ -234,13 +384,15 @@ private:
                 active_has_output_ = false;
                 pending_stop_ = false;
             }
-            emit(Json::Object{
-                {"type", Json("started")},
-                {"id", Json::integer(id)},
-                {"pid", Json::unsigned_integer(
-                    static_cast<std::uint64_t>(child))},
-                {"pgid", Json::unsigned_integer(
-                    static_cast<std::uint64_t>(child))}});
+            if (!emit(Json::Object{
+                    {"type", Json("started")},
+                    {"id", Json::integer(id)},
+                    {"pid", Json::unsigned_integer(
+                        static_cast<std::uint64_t>(child))},
+                    {"pgid", Json::unsigned_integer(
+                        static_cast<std::uint64_t>(child))}})) {
+                throw std::runtime_error("GUI protocol output closed");
+            }
 
             FILE* stream = fdopen(read_end.release(), "r");
             if (stream == nullptr)
@@ -275,6 +427,7 @@ private:
                 }
 
                 std::smatch match;
+                bool delivered = true;
                 if (std::regex_match(clean, match, progress_expression)) {
                     double percent = std::stod(match[1].str());
                     percent = std::clamp(percent, 0.0, 100.0);
@@ -287,7 +440,7 @@ private:
                     if (last_progress < 0.0 ||
                         std::fabs(percent - last_progress) >= 0.05 ||
                         timed || percent >= 100.0) {
-                        emit(Json::Object{
+                        delivered = emit(Json::Object{
                             {"type", Json("progress")},
                             {"id", Json::integer(id)},
                             {"percent", Json::real(percent)}});
@@ -295,46 +448,42 @@ private:
                         last_progress_time = now;
                     }
                 } else {
-                    emit(Json::Object{
+                    delivered = emit(Json::Object{
                         {"type", Json("output")},
                         {"id", Json::integer(id)},
                         {"line", Json(clean)}});
                 }
 
+                if (!delivered) {
+                    std::free(line);
+                    line = nullptr;
+                    throw std::runtime_error("GUI protocol output closed");
+                }
                 if (deliver_queued_stop)
                     deliver_stop(child, Json(nullptr), id,
                                  "queued SIGINT delivered after engine initialisation");
             }
             std::free(line);
 
-            int status = 0;
-            for (;;) {
-                const pid_t waited = waitpid(child, &status, 0);
-                if (waited == child) break;
-                if (waited < 0 && errno == EINTR) continue;
-                throw std::runtime_error(
-                    std::string("waitpid failed: ") + std::strerror(errno));
-            }
+            const int status = wait_for_child(child);
+            reaped = true;
             const int return_code = WIFEXITED(status)
                 ? WEXITSTATUS(status)
                 : WIFSIGNALED(status)
                     ? 128 + WTERMSIG(status) : 127;
-            emit(Json::Object{
+            (void)emit(Json::Object{
                 {"type", Json("finished")},
                 {"id", Json::integer(id)},
                 {"returncode", Json::integer(return_code)}});
         } catch (const std::exception& error) {
-            if (child > 0) {
-                if (kill(-child, SIGINT) == 0 || errno == ESRCH) {
-                    int status = 0;
-                    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
-                }
+            if (child > 0 && !reaped) stop_and_reap(child);
+            if (!transport_failed_.load(std::memory_order_acquire)) {
+                (void)fail(Json::integer(id), error.what());
+                (void)emit(Json::Object{
+                    {"type", Json("finished")},
+                    {"id", Json::integer(id)},
+                    {"returncode", Json::integer(127)}});
             }
-            fail(Json::integer(id), error.what());
-            emit(Json::Object{
-                {"type", Json("finished")},
-                {"id", Json::integer(id)},
-                {"returncode", Json::integer(127)}});
         }
 
         std::lock_guard<std::mutex> lock(active_mutex_);
@@ -342,12 +491,13 @@ private:
         active_id_ = 0;
         active_has_output_ = false;
         pending_stop_ = false;
+        worker_running_ = false;
     }
 
     void deliver_stop(pid_t pid, Json id, std::int64_t active_id,
                       const char* success_message = "SIGINT delivered") {
         if (kill(-pid, SIGINT) == 0) {
-            emit(Json::Object{
+            (void)emit(Json::Object{
                 {"type", Json("stop-result")},
                 {"id", std::move(id)},
                 {"active_id", Json::integer(active_id)},
@@ -355,7 +505,7 @@ private:
                 {"message", Json(success_message)}});
         } else {
             const int failure = errno;
-            emit(Json::Object{
+            (void)emit(Json::Object{
                 {"type", Json("stop-result")},
                 {"id", std::move(id)},
                 {"active_id", Json::integer(active_id)},
@@ -380,7 +530,7 @@ private:
 
         const Json id = id_value(message);
         if (pid <= 0) {
-            emit(Json::Object{
+            (void)emit(Json::Object{
                 {"type", Json("stop-result")},
                 {"id", id},
                 {"active_id", Json::integer(active_id)},
@@ -389,7 +539,7 @@ private:
             return;
         }
         if (!has_output) {
-            emit(Json::Object{
+            (void)emit(Json::Object{
                 {"type", Json("stop-result")},
                 {"id", id},
                 {"active_id", Json::integer(active_id)},
@@ -405,20 +555,29 @@ private:
         pid_t signalled = -1;
         for (;;) {
             pid_t pid = -1;
+            bool running = false;
             {
                 std::lock_guard<std::mutex> lock(active_mutex_);
                 pid = active_pid_;
+                running = worker_running_;
             }
             if (pid > 0 && pid != signalled) {
                 if (kill(-pid, SIGINT) == 0 || errno == ESRCH)
                     signalled = pid;
             }
-            if (!worker_.joinable()) return;
-            worker_.join();
-            return;
+            if (!running) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
+        if (worker_.joinable()) worker_.join();
     }
 };
+
+bool ignore_sigpipe() {
+    struct sigaction action {};
+    action.sa_handler = SIG_IGN;
+    if (sigemptyset(&action.sa_mask) != 0) return false;
+    return sigaction(SIGPIPE, &action, nullptr) == 0;
+}
 
 } // namespace
 } // namespace defragger
@@ -427,6 +586,12 @@ int main() {
     if (geteuid() != 0) {
         std::fputs(
             "Defragmenter privileged helper must run as root\n", stderr);
+        return 1;
+    }
+    if (!defragger::ignore_sigpipe()) {
+        std::fprintf(
+            stderr, "Defragmenter privileged helper: cannot ignore SIGPIPE: %s\n",
+            std::strerror(errno));
         return 1;
     }
     try {

@@ -66,6 +66,18 @@ int main() {
     ok = check(command.standard_output == "native-cpp", "process stdout") && ok;
     ok = check(command.standard_error == "warning", "process stderr") && ok;
 
+    const CommandResult exact_limit =
+        run_capture({"/bin/sh", "-c", "printf 1234"}, 4U);
+    ok = check(exact_limit.standard_output == "1234",
+               "exact output limit is accepted") && ok;
+    bool rejected_over_limit = false;
+    try {
+        (void)run_capture({"/bin/sh", "-c", "printf 12345"}, 4U);
+    } catch (const std::runtime_error&) {
+        rejected_over_limit = true;
+    }
+    ok = check(rejected_over_limit, "output beyond limit is rejected") && ok;
+
     const HelperCommand helper = helper_command(
         "operation-engine",
         {"defrag", "/dev/test", "--filesystem", "ext4",

@@ -125,6 +125,24 @@ def test_root_owned_journal_namespace() -> None:
             os.environ["PKEXEC_UID"] = old_pkexec
 
 
+def test_native_privileged_helper_contract() -> None:
+    source = (ROOT / "native" / "privileged_helper.cpp").read_text(encoding="utf-8")
+    engine = (ROOT / "native" / "operation_engine.cpp").read_text(encoding="utf-8")
+
+    assert "posix_spawn(" in source
+    assert "fork(" not in source
+    assert "POSIX_SPAWN_SETPGROUP" in source
+    assert "POSIX_SPAWN_SETSIGDEF" in source
+    assert "SIGPIPE" in source and "SIG_IGN" in source
+    assert "transport_failed_" in source
+    assert "worker_running_" in source
+    assert "kill(-child, SIGINT)" in source
+    assert "stop_active_and_wait()" in source
+
+    assert "ld_path_is_mounted(device.c_str())" in engine
+    assert "execv(raw[0], raw.data())" in engine
+
+
 def test_helper_waits_for_writer() -> None:
     events: list[object] = []
 
@@ -171,5 +189,6 @@ if __name__ == "__main__":
     test_block_topology()
     test_regular_image_mount_source()
     test_root_owned_journal_namespace()
+    test_native_privileged_helper_contract()
     test_helper_waits_for_writer()
     print("mount-topology and privileged-helper safety tests passed")
