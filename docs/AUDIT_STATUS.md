@@ -5,8 +5,8 @@ Status: **complete**
 Completed: 2026-08-25  
 Extended: 2026-09-19
 
-Applies to: release version 1.8.0-173
-Audited source commit: ab5f3a69d62cf93a0368d9755ea96ec3e46226b4
+Applies to: release version 1.8.0-174
+Audited source commit: 01ad2ac1d9b82bb63a718931e4e11da906632aaf
 Audited release-governance commit: b5f891f623f37df16d0d902029a22ca715301581
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -75,7 +75,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-173 is the current audited release line. The baseline includes the C++17 application-service migration, fail-safe privileged-helper shutdown, mapper fixture-parity qualification, and release-audit coverage for `defragger/native/`. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
+Version 1.8.0-174 is the current audited release line. The baseline includes the C++17 application-service migration, fail-safe privileged-helper shutdown, mapper fixture-parity qualification, the corrected FAT12/FAT16/FAT32 adapter contract, and release-audit coverage for `defragger/native/`. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 
