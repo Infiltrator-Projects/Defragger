@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <memory>
@@ -225,7 +226,7 @@ private:
                 _exit(errno == ENOENT ? 127 : 126);
             }
 
-            write_end.release();
+            (void)close(write_end.release());
             {
                 std::lock_guard<std::mutex> lock(active_mutex_);
                 active_pid_ = child;
