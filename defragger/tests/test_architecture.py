@@ -414,8 +414,8 @@ def test_infiltratr_common_integration() -> None:
     test_media_dispatch_source = (ROOT / "test_media" / "test_media_amiga_dispatch.c").read_text()
     for source in (test_media_amiga_source, test_media_amiga,
                    test_media_sfs_source, test_media_dispatch_source):
-        assert re.search(r"(?<![A-Za-z0-9_])pread\\s*\\(", source) is None
-        assert re.search(r"(?<![A-Za-z0-9_])pwrite\\s*\\(", source) is None
+        assert re.search(r"(?<![A-Za-z0-9_])pread\s*\(", source) is None
+        assert re.search(r"(?<![A-Za-z0-9_])pwrite\s*\(", source) is None
     ext_worker = (GUI / "filesystems" / "ext4" / "native" / "ext_worker.c").read_text()
     ntfs_worker = (GUI / "filesystems" / "ntfs" / "native" / "ntfs_worker.c").read_text()
     assert "infiltratr_string_starts_with" in ext_worker
