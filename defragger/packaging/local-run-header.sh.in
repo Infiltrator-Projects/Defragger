@@ -35,7 +35,7 @@ fi
 ARCH=$(dpkg --print-architecture)
 [ "$ARCH" = amd64 ] || fail "dpkg architecture is $ARCH; amd64 is required."
 
-INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' linux-defragger 2>/dev/null || true)
+INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' infiltrator-defragmenter 2>/dev/null || true)
 if [ -n "$INSTALLED_VERSION" ] && \
    dpkg --compare-versions "$INSTALLED_VERSION" gt "$NATIVE_PACKAGE_VERSION"; then
     fail "Installed version $INSTALLED_VERSION is newer than $NATIVE_PACKAGE_VERSION; refusing to downgrade it."
@@ -91,7 +91,7 @@ esac
 [ "$JOBS" -gt 0 ] || JOBS=2
 
 BUILD="$WORK/native-build"
-PACKAGE="$WORK/linux-defragger_${NATIVE_PACKAGE_VERSION}_amd64.deb"
+PACKAGE="$WORK/infiltrator-defragmenter_${NATIVE_PACKAGE_VERSION}_amd64.deb"
 printf 'Compiling Defragmenter %s for this machine with -march=native and -mtune=native...\n' \
     "$APP_VERSION"
 env LD_BUILD_FLAVOR=native \
@@ -102,7 +102,7 @@ env LD_BUILD_FLAVOR=native \
     BUILD_JOBS="$JOBS" \
     "$SOURCE/packaging/build-deb.sh"
 
-[ "$(dpkg-deb -f "$PACKAGE" Package)" = linux-defragger ] || \
+[ "$(dpkg-deb -f "$PACKAGE" Package)" = infiltrator-defragmenter ] || \
     fail 'Compiled package identity is invalid.'
 [ "$(dpkg-deb -f "$PACKAGE" Version)" = "$NATIVE_PACKAGE_VERSION" ] || \
     fail 'Compiled package version is invalid.'
@@ -114,7 +114,7 @@ env LD_BUILD_FLAVOR=native \
 printf '%s\n' 'Installing the locally compiled package through dpkg...'
 as_root dpkg --install "$PACKAGE"
 
-FINAL_VERSION=$(dpkg-query -W -f='${Version}' linux-defragger 2>/dev/null || true)
+FINAL_VERSION=$(dpkg-query -W -f='${Version}' infiltrator-defragmenter 2>/dev/null || true)
 [ "$FINAL_VERSION" = "$NATIVE_PACKAGE_VERSION" ] || \
     fail 'Package installation could not be verified.'
 
