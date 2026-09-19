@@ -151,8 +151,8 @@ def main() -> None:
         ('COMMON_TAG="v1.19.6"', 'INFILTRATR_COMMON_TAG "v1.19.6"'),
         ('COMMON_VERSION="1.19.6"', 'INFILTRATR_COMMON_EXPECTED_VERSION "1.19.6"'),
         (
-            'COMMON_COMMIT="4964786ebf1e66dfdb9309c3813dcb17bce19eb5"',
-            '4964786ebf1e66dfdb9309c3813dcb17bce19eb5',
+            'COMMON_COMMIT="a0e26896cc2a5674a138b29f009a7b30f0d636c6"',
+            'a0e26896cc2a5674a138b29f009a7b30f0d636c6',
         ),
     )
     for local_required, cmake_required in common_contract:
@@ -167,7 +167,7 @@ def main() -> None:
         assert f'COMMON_VERSION="{stale_version}"' not in local_run
         assert f"Infiltratr Common {stale_version}" not in design
     assert "Infiltratr Common 1.19.6" in design
-    assert "4964786ebf1e66dfdb9309c3813dcb17bce19eb5" in design
+    assert "a0e26896cc2a5674a138b29f009a7b30f0d636c6" in design
 
     for required in (
         "Status: **complete**",
