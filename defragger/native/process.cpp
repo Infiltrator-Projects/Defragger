@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "process.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cstring>
