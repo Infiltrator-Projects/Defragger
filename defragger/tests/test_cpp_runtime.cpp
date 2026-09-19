@@ -2,6 +2,7 @@
 #include "runtime.hpp"
 #include "helper_policy.hpp"
 #include "json.hpp"
+#include "map.hpp"
 #include "process.hpp"
 
 #include <cstdio>
