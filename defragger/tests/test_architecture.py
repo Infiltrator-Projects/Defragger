@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parent
 GUI = ROOT / "gui"
 if str(GUI) not in sys.path:
     sys.path.insert(0, str(GUI))
@@ -608,8 +609,8 @@ def test_user_facing_branding_is_defragmenter() -> None:
     user_facing = (
         ROOT.parent / "README.md",
         ROOT / "README.md",
-        ROOT / "docs" / "DESIGN.md",
-        ROOT / "docs" / "AUDIT_STATUS.md",
+        REPO_ROOT / "docs" / "DESIGN.md",
+        REPO_ROOT / "docs" / "AUDIT_STATUS.md",
         GUI / "allocation_mapper.py",
         GUI / "privileged_helper.py",
         GUI / "backends" / "registry.py",
@@ -701,11 +702,12 @@ def test_test_media_companion_is_all_c() -> None:
     media_worker = (source_dir / "test_media_worker.c").read_text()
     assert '"crc=1,rmapbt=0,reflink=0"' in media_worker
 
-    design = (ROOT / "docs" / "DESIGN.md").read_text()
+    architecture_doc = (REPO_ROOT / "docs" / "ARCHITECTURE.md").read_text()
     deb_builder = (ROOT / "packaging" / "build-deb.sh").read_text()
-    assert "Amiga SFS0 and HFS+/HFSX are C-owned mutation engines" in design
+    assert "per-filesystem native analysers / planners / writers" in architecture_doc
     assert "Amiga SFS0 and HFS+/HFSX filesystems" in deb_builder
-    assert "docs/AUDIT_STATUS.md" in cmake
+    assert "install(FILES README.md" in cmake
+    assert "docs/AUDIT_STATUS.md" not in cmake
 
 
 def main() -> None:

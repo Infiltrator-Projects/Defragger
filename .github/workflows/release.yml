@@ -47,9 +47,9 @@ jobs:
           test "$main_commit" = "$EXPECTED_SHA"
           VERSION=$(tr -d '\r\n' < VERSION)
           test -n "$VERSION"
-          grep -Fq 'Status: **complete**' docs/AUDIT_STATUS.md
-          grep -Fqx "Applies to: release version ${VERSION}" docs/AUDIT_STATUS.md
-          AUDITED_COMMIT=$(sed -n 's/^Audited source commit: \([0-9a-f]\{40\}\)$/\1/p' docs/AUDIT_STATUS.md)
+          grep -Fq 'Status: **complete**' ../docs/AUDIT_STATUS.md
+          grep -Fqx "Applies to: release version ${VERSION}" ../docs/AUDIT_STATUS.md
+          AUDITED_COMMIT=$(sed -n 's/^Audited source commit: \([0-9a-f]\{40\}\)$/\1/p' ../docs/AUDIT_STATUS.md)
           test -n "$AUDITED_COMMIT"
           git cat-file -e "${AUDITED_COMMIT}^{commit}"
           git merge-base --is-ancestor "$AUDITED_COMMIT" HEAD
@@ -57,7 +57,7 @@ jobs:
             echo "Audited production/build/package source changed after ${AUDITED_COMMIT}; refresh the safety audit before release." >&2
             exit 1
           fi
-          GOVERNANCE_COMMIT=$(sed -n 's/^Audited release-governance commit: \([0-9a-f]\{40\}\)$/\1/p' docs/AUDIT_STATUS.md)
+          GOVERNANCE_COMMIT=$(sed -n 's/^Audited release-governance commit: \([0-9a-f]\{40\}\)$/\1/p' ../docs/AUDIT_STATUS.md)
           test -n "$GOVERNANCE_COMMIT"
           git cat-file -e "${GOVERNANCE_COMMIT}^{commit}"
           git merge-base --is-ancestor "$GOVERNANCE_COMMIT" HEAD
