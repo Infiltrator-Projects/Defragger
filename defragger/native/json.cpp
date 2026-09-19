@@ -3,8 +3,10 @@
 
 #include <infiltratr/escape.h>
 
+#include <cerrno>
 #include <charconv>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
@@ -292,7 +294,48 @@ Json::Json(Number value) : value_(std::move(value)) {}
 
 Json Json::number(std::string text) {
     if (text.empty()) throw std::invalid_argument("empty JSON number");
-    (void)Parser(text).parse_document();
+    std::size_t position = 0U;
+    if (text[position] == '-') {
+        ++position;
+        if (position == text.size())
+            throw std::invalid_argument("invalid JSON number");
+    }
+    if (text[position] == '0') {
+        ++position;
+        if (position < text.size() &&
+            text[position] >= '0' && text[position] <= '9')
+            throw std::invalid_argument("invalid JSON number");
+    } else {
+        if (text[position] < '1' || text[position] > '9')
+            throw std::invalid_argument("invalid JSON number");
+        while (position < text.size() &&
+               text[position] >= '0' && text[position] <= '9')
+            ++position;
+    }
+    if (position < text.size() && text[position] == '.') {
+        ++position;
+        const std::size_t start = position;
+        while (position < text.size() &&
+               text[position] >= '0' && text[position] <= '9')
+            ++position;
+        if (start == position)
+            throw std::invalid_argument("invalid JSON number");
+    }
+    if (position < text.size() &&
+        (text[position] == 'e' || text[position] == 'E')) {
+        ++position;
+        if (position < text.size() &&
+            (text[position] == '+' || text[position] == '-'))
+            ++position;
+        const std::size_t start = position;
+        while (position < text.size() &&
+               text[position] >= '0' && text[position] <= '9')
+            ++position;
+        if (start == position)
+            throw std::invalid_argument("invalid JSON number");
+    }
+    if (position != text.size())
+        throw std::invalid_argument("invalid JSON number");
     return Json(Number{std::move(text)});
 }
 
