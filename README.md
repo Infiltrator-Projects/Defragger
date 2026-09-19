@@ -69,6 +69,8 @@ A numbered release publishes:
 | File | Purpose |
 | --- | --- |
 | `Defragmenter-<version>-amd64.deb` | Generic amd64 Debian package. |
+
+The `.deb` keeps the human-facing `Defragmenter-...` asset filename while its Debian/APT package identity is `infiltrator-defragmenter`; existing `linux-defragger` installations migrate through the repository transition package.
 | `Defragmenter-<version>-local-folder.run` | Hardware-native local compile/install program. |
 | `RELEASE_SHA256SUMS.txt` | SHA-256 checksums for the two project release artifacts. |
 
