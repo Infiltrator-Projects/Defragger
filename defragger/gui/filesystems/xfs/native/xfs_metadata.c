@@ -979,11 +979,6 @@ static int unique_pool(XfsU64Vec *pool, size_t expected, char **error) {
     return 0;
 }
 
-static void copy_ranges(const XfsRangeVec *from, XfsRangeVec *to) {
-    for (size_t index = 0; index < from->count; ++index)
-        xfs_range_push(to, from->items[index].start, from->items[index].end);
-}
-
 static void intersect_ranges(const XfsRangeVec *left, const XfsRangeVec *right,
                              XfsRangeVec *out) {
     size_t li = 0, ri = 0;
