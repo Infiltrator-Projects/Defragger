@@ -63,7 +63,7 @@ Architecture ownership is defined in [ARCHITECTURE.md](ARCHITECTURE.md); design 
 
 ## Dependency baseline
 
-The audited production tree consumes Infiltratr Common 1.19.6 at exact commit `4964786ebf1e66dfdb9309c3813dcb17bce19eb5`. CMake, the native installer and release regressions verify the same pin.
+The audited production tree consumes Infiltratr Common 1.19.6 at exact commit `a0e26896cc2a5674a138b29f009a7b30f0d636c6`. CMake, the native installer and release regressions verify the same pin.
 
 Common owns reusable mechanisms such as checked arithmetic, strict parsing, endian access, bounded growth, path/string helpers, JSON escaping and exact I/O. Defragmenter retains filesystem structure, target-safety, placement, transaction, recovery and user-facing failure policy.
 
