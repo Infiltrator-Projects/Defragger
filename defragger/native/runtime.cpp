@@ -75,7 +75,7 @@ struct ProgramSpec {
     const char* build_name;
 };
 
-constexpr std::array<ProgramSpec, 18> kPrograms{{
+constexpr std::array<ProgramSpec, 19> kPrograms{{
     {"hfsplus-native", "LINUX_DEFRAGGER_HFSPLUS_WORKER",
      "/usr/lib/linux-defragger/filesystems/hfsplus/linux-defragger-hfsplus-worker",
      "linux-defragger-hfsplus-worker"},
@@ -125,6 +125,9 @@ constexpr std::array<ProgramSpec, 18> kPrograms{{
      "linux-defragger-zfs-worker"},
     {"mapper", "LINUX_DEFRAGGER_MAPPER",
      "/usr/lib/linux-defragger/linux-defragger-mapper", "linux-defragger-mapper"},
+    {"operation-engine", "LINUX_DEFRAGGER_OPERATION_ENGINE",
+     "/usr/lib/linux-defragger/linux-defragger-operation-engine",
+     "linux-defragger-operation-engine"},
     {"helper", "LINUX_DEFRAGGER_HELPER",
      "/usr/lib/linux-defragger/linux-defragger-privileged-helper",
      "linux-defragger-privileged-helper"},

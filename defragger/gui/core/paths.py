@@ -94,13 +94,19 @@ PROGRAMS: dict[str, ProgramPath] = {
         "../../build/linux-defragger-zfs-worker"
     ),
     "mapper": ProgramPath(
-        "mapper", "LINUX_DEFRAGGER_MAPPER", "/usr/lib/linux-defragger/allocation_mapper.py", "../allocation_mapper.py"
+        "mapper", "LINUX_DEFRAGGER_MAPPER",
+        "/usr/lib/linux-defragger/linux-defragger-mapper",
+        "../../build/linux-defragger-mapper"
     ),
     "operation-engine": ProgramPath(
-        "operation-engine", "LINUX_DEFRAGGER_OPERATION_ENGINE", "/usr/lib/linux-defragger/operation_engine.py", "../operation_engine.py"
+        "operation-engine", "LINUX_DEFRAGGER_OPERATION_ENGINE",
+        "/usr/lib/linux-defragger/linux-defragger-operation-engine",
+        "../../build/linux-defragger-operation-engine"
     ),
     "helper": ProgramPath(
-        "helper", "LINUX_DEFRAGGER_HELPER", "/usr/lib/linux-defragger/privileged_helper.py", "../privileged_helper.py"
+        "helper", "LINUX_DEFRAGGER_HELPER",
+        "/usr/lib/linux-defragger/linux-defragger-privileged-helper",
+        "../../build/linux-defragger-privileged-helper"
     ),
 
 }

@@ -177,6 +177,8 @@ target_link_libraries(linux-defragger-runtime-cpp PUBLIC
 
 add_executable(linux-defragger-operation-engine-cpp
     native/operation_engine.cpp)
+set_target_properties(linux-defragger-operation-engine-cpp PROPERTIES
+    OUTPUT_NAME linux-defragger-operation-engine)
 target_include_directories(linux-defragger-operation-engine-cpp PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/native"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
@@ -190,6 +192,8 @@ target_link_libraries(linux-defragger-operation-engine-cpp PRIVATE
 
 add_executable(linux-defragger-mapper-cpp
     native/mapper.cpp)
+set_target_properties(linux-defragger-mapper-cpp PROPERTIES
+    OUTPUT_NAME linux-defragger-mapper)
 target_include_directories(linux-defragger-mapper-cpp PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/native"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
@@ -502,6 +506,15 @@ install(TARGETS linux-defragger-hfsplus-worker
         RUNTIME DESTINATION lib/linux-defragger/filesystems/hfsplus)
 install(TARGETS linux-defragger-hfs-analyser
         RUNTIME DESTINATION lib/linux-defragger/filesystems/hfs)
+
+# Native C++ application services replace the Python mapper, operation
+# dispatcher and privileged helper while preserving their established command
+# and JSON protocol contracts during the staged GUI migration.
+install(TARGETS
+        linux-defragger-operation-engine-cpp
+        linux-defragger-mapper-cpp
+        linux-defragger-privileged-helper-cpp
+        RUNTIME DESTINATION lib/linux-defragger)
 
 install(PROGRAMS
     gui/linux_defragger_gui.py

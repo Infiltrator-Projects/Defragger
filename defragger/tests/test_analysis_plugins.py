@@ -35,6 +35,18 @@ result = subprocess.run(
 listed = json.loads(result.stdout)["backends"]
 assert [item["id"] for item in listed] == [item["id"] for item in manifest]
 
+native_mapper = ROOT / "build" / "linux-defragger-mapper"
+if native_mapper.is_file():
+    native_result = subprocess.run(
+        [str(native_mapper), "--list-backends"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    native_listed = json.loads(native_result.stdout)["backends"]
+    assert native_listed == manifest, "C++ mapper manifest drifted from established plugin contract"
+
 invalid = subprocess.run(
     [sys.executable, str(mapper), "/dev/null", "--fstype", "ntfs", "--cells", "128"],
     text=True,
