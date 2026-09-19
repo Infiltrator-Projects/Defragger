@@ -7,7 +7,7 @@ if [ "${LD_INSTALLER_TEST_COMMAND:-0}" = 1 ]; then
     case "$command_name" in
         dpkg-query)
             case "$*" in
-                *'${Version}'*linux-defragger*)
+                *'${Version}'*infiltrator-defragmenter*)
                     [ -f "${LD_INSTALLER_TEST_STATE:?}" ] || exit 1
                     cat "$LD_INSTALLER_TEST_STATE"
                     ;;
