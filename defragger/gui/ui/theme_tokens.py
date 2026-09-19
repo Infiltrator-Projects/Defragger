@@ -3,6 +3,10 @@
 
 THEME_CONTRACT_VERSION = 1
 
+TYPOGRAPHY = {'ui_family': 'MB Corpo S Title WEB', 'brand_family': 'MB Corpo A Title Cond WEB', 'ui_regular_weight': 400, 'ui_bold_weight': 700, 'brand_weight': 400, 'font_files': {'brand_regular': 'mb_corpo_a_cond_regular.ttf', 'ui_bold': 'mb_corpo_s_bold.ttf', 'ui_regular': 'mb_corpo_s_regular.ttf'}}
+
+METRICS = {'small_radius': 6, 'control_radius': 10, 'card_radius': 12, 'panel_radius': 18, 'compact_spacing': 6, 'control_spacing': 10, 'section_spacing': 18, 'content_padding': 16, 'screen_padding': 20}
+
 DAY = {
     "background": "#FFFFFF",
     "panel": "#FFFFFF",
