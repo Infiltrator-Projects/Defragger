@@ -4,6 +4,14 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-177
+
+- Fixed XFS Defragment/Growth Defrag when a valid relayout needs more bnobt/cntbt/rmapbt blocks than the allocation group already has in its tree/AGFL reserve.
+- Allocation-tree growth now borrows only blocks that are already free in the source and remain free in the final plan, while excluding file targets and exact Growth Defrag reserve runs.
+- Regenerated XFS AG-owner reverse mappings from the final allocation-tree block set instead of retaining stale source tree ownership when tree blocks move.
+- Strengthened final XFS verification for allocation-tree/AGFL exclusion, AGF tree counters and AG-owner rmap ownership.
+- Added a permanent white-box regression reproducing the observed 40-tree-block requirement with only 13 initially reserved blocks.
+
 ## 1.8.0-176
 
 - Closed the mounted-image hard-link bypass in direct mount-source and loop-backing identity checks.

@@ -5,8 +5,8 @@ Status: **complete**
 Completed: 2026-08-25  
 Extended: 2026-09-19
 
-Applies to: release version 1.8.0-176
-Audited source commit: e6046a4e25c4c15b80212cc9fe6de9d4c2342090
+Applies to: release version 1.8.0-177
+Audited source commit: 844b0c30769dd5b6c26a13885ed8b4c1019cd5ac
 Audited release-governance commit: b5f891f623f37df16d0d902029a22ca715301581
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -75,7 +75,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-176 is the current audited release line. The baseline includes mounted-image inode matching, generic FAT geometry selection, bounded large-map capture, privileged image journals and native helper startup/Stop/completion fixes. Permanent regressions reproduce the forensic review's failure cases. The C++17 application-service and first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
+Version 1.8.0-177 is the current audited release line. In addition to the 1.8.0-176 forensic repairs, the XFS writer can grow bnobt/cntbt/rmapbt metadata when the final free-space shape requires more tree blocks than the source tree/AGFL reserve. Expansion is restricted to blocks that are already free in the source and remain free in the final plan; file targets and exact Growth Defrag reserve runs are excluded. AG-owner rmap records are regenerated from the final allocation-tree block set, and final verification checks tree/AGFL exclusion plus AGF and rmap ownership accounting. A permanent regression reproduces the observed 40-block tree requirement from a 13-block initial reserve. The C++17 application-service and first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 
