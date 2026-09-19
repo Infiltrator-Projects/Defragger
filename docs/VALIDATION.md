@@ -13,8 +13,8 @@ The project quality gate combines:
 - warnings-as-errors native builds;
 - parser, geometry, checksum and allocation-model tests;
 - disposable filesystem-image mutation tests;
-- target-safety, privilege, Stop and transaction regressions;
-- GUI/service and typed worker-protocol tests;
+- target-safety, privilege, Stop and transaction regressions, including a native privileged-helper closed-pipe test that verifies fail-safe supervisor shutdown;
+- GUI/service and typed worker-protocol tests, plus C++ mapper contract checks and real-fixture parity against native filesystem analysis;
 - architecture/Common/release-contract tests;
 - AddressSanitizer and UndefinedBehaviorSanitizer qualification;
 - package/native-installer construction from the exact tested source.
@@ -41,7 +41,7 @@ Manual evidence must be described at the level actually observed. A fixture, sim
 
 The exact revision intended for release must pass the required Project quality gate. Release assets must be derived from that revision, the audit must name the current version and exact audited source/governance baselines, and documentation must not advertise known-failing or merely planned write support as complete.
 
-A release gate also verifies the exact pinned Common dependency and rejects audited production or workflow drift beyond the recorded baselines.
+A release gate also verifies the exact pinned Common dependency and rejects audited production or workflow drift beyond the recorded baselines. The audited production set explicitly includes the C++ application-service sources under `defragger/native/`.
 
 ## Regression rule
 

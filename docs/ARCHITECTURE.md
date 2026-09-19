@@ -15,13 +15,16 @@ A dependency is chosen because its contract is stronger for the job, not because
 ```text
 GTK 3 presentation
         ↓
-MainWindow / coordinators / service models
+Python coordinators / service models (migration boundary)
         ↓
-filesystem plugin registry and worker protocol
+C++17 application services
+registry / mapper / operation dispatcher / privileged session
         ↓
-filesystem-neutral native safety/runtime core
+filesystem worker protocol
         ↓
-per-filesystem native analysers / planners / writers
+filesystem-neutral native C safety/runtime core
+        ↓
+per-filesystem native C analysers / planners / writers
         ↓
 raw image or unmounted block device
 
@@ -40,7 +43,8 @@ defragger/
 ├── gui/engine/             worker resolution and orchestration
 ├── gui/backends/           plugin contracts and single registry
 ├── gui/filesystems/        authoritative per-filesystem implementations
-├── src/core/               filesystem-neutral native safety/runtime services
+├── native/                 C++17 application services and protocol ownership
+├── src/core/               filesystem-neutral native C safety/runtime services
 ├── test_media/             destructive sacrificial-media utility
 ├── tests/                  native, filesystem, GUI, safety and release evidence
 ├── packaging/              Debian/native installer construction
@@ -49,7 +53,7 @@ defragger/
 
 ## Contracts and ownership
 
-`gui/backends/registry.py` is the only filesystem registry. Each filesystem package owns its probe, analyser, placement rules, writer and verifier. Native C below a filesystem package is an implementation detail of that package rather than a second plugin hierarchy.
+`native/runtime.cpp` is the native application registry used by the production C++ mapper and operation dispatcher. The existing Python registry remains only at the staged GTK/plugin compatibility boundary while that layer is migrated; automated manifest and real-fixture parity checks prevent the two representations from silently diverging. Each filesystem package still owns its probe, analyser, placement rules, writer and verifier, and native C below a filesystem package remains an implementation detail rather than a second filesystem engine.
 
 `src/core/` owns mechanics that are genuinely filesystem-neutral: exact raw I/O adaptation, target identity/capacity checks, overlap-aware mounted-target rejection, Stop state, resource defaults and machine-readable result emission. Filesystem geometry, metadata interpretation, transaction stages and recovery rules stay with the owning filesystem.
 
@@ -57,15 +61,17 @@ GTK objects stay in the presentation layer. Runner, policy and storage models ex
 
 ## Native language boundary
 
-C remains the primary implementation language for filesystem structures, codecs, planners and raw storage algorithms. Selective C++ is permitted behind a C ABI where deterministic ownership is itself part of the correctness argument.
+C and C++ are first-class implementation languages with different jobs. C remains the strongest fit for filesystem structures, codecs, raw parsers, planners, writers and the storage-safety core because those components map directly to fixed-layout data, kernel interfaces and explicit byte-oriented algorithms.
 
-The NTFS plan-database component is the first such boundary: `ntfs_plan_db.cpp` uses small non-inheriting RAII owners for SQLite statements, transaction rollback and the OpenSSL digest context, while `ntfs_plan.c`, `ntfs_worker.c` and the public NTFS native contract remain C-oriented. This is an ownership tool, not a second object model.
+C++17 is used where scoped ownership and stronger value types materially improve filesystem-neutral application work. The native registry, JSON/protocol model, allocation-map translation, operation dispatcher, bounded child-process capture and privileged helper session live in `defragger/native/`. The privileged helper uses `posix_spawn` rather than post-`fork` C++ work and owns its child process group explicitly.
+
+The NTFS plan database also uses narrow, non-inheriting RAII owners for SQLite statements, transaction rollback and OpenSSL digest state behind the existing C-facing filesystem implementation. None of these uses creates a class hierarchy around the raw filesystem engines. Working C is not rewritten merely because C++ is available, and C++ is not avoided where it gives a stronger ownership model.
 
 ## Target safety and privilege boundary
 
 Write-capable operations target only an unmounted block device or regular filesystem image. Selection is not treated as authority: the project revalidates target identity, capacity and mounted overlap across open/privilege boundaries before authoritative mutation.
 
-The privileged helper accepts a constrained command contract and a user-specific recovery namespace. Filesystem workers still perform their own target and format validation; privilege does not bypass safety policy.
+The privileged helper accepts a constrained command contract and a user-specific recovery namespace. It launches fixed commands with `posix_spawn` into a dedicated process group, ignores SIGPIPE in the supervisor, treats a closed GUI protocol pipe as a transport failure, requests the writer's cooperative SIGINT path and waits for the child to exit before the helper can terminate. Filesystem workers still perform their own target and format validation; privilege does not bypass safety policy.
 
 Paths and device-provided metadata are external input. A previously valid path may refer to a different object later, so persistent transactions bind to stable target and filesystem identity where the format exposes it.
 

@@ -136,6 +136,36 @@ same release identity.
 an explicit audit-baseline advance, but there is a traceable chain from source
 commit to tests, safety decision and distributed artifacts.
 
+## ADR-007 — Use C++17 for filesystem-neutral application services without rewriting strong C engines
+
+**Context.** The raw filesystem engines are deliberately C-oriented and already
+match fixed-layout data and low-level storage interfaces well. The application
+layer also needs typed registry data, JSON/protocol ownership, process lifetime
+management and a persistent privileged session, where scoped C++ ownership
+removes cleanup and post-`fork` hazards that are awkward to express safely in
+the previous Python orchestration.
+
+**Alternatives considered.**
+
+- retain Python as the permanent production application/control layer;
+- rewrite the filesystem engines into C++ for language uniformity;
+- keep the filesystem/storage boundary in C and move only the
+  filesystem-neutral application services to C++17.
+
+**Decision.** C remains authoritative for raw filesystem parsing, planning,
+mutation and the storage-safety core. C++17 owns selected application services:
+the native registry, map translation, operation dispatch, process/protocol
+values and privileged-helper lifetime. The privileged helper uses
+`posix_spawn` and explicit process-group ownership. The GTK/Python layer is a
+staged compatibility boundary until migrated, with automated parity checks
+where contracts temporarily exist in both languages.
+
+**Consequences.** The project gains stronger scoped ownership without imposing
+an object model on disk algorithms. During migration some compatibility
+metadata exists in both Python and C++; parity tests are mandatory until the
+Python representation is removed. Language choice remains evidence-driven
+rather than a purity rule.
+
 ## Review rule
 
 A future change should add or amend an ADR only when it changes one of these

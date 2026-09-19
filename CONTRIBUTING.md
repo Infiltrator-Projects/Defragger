@@ -6,7 +6,7 @@ Defragmenter combines GTK orchestration, filesystem-neutral safety/runtime code 
 
 - Keep GTK presentation in `gui/ui/` and raw/filesystem policy below the presentation layer.
 - Keep one filesystem registry and one authoritative implementation per filesystem.
-- Keep filesystem-neutral device/runtime mechanics in `src/core/`; keep format semantics with the owning filesystem package.
+- Keep filesystem-neutral raw device/runtime mechanics in `src/core/`; keep native application-service orchestration in `native/`; keep format semantics with the owning filesystem package.
 - Reuse the pinned Infiltratr Common API when it is the correct generic abstraction; improve Common first if Defragmenter has the stronger generic implementation.
 - Do not add external repair/defragmentation commands to production mutation paths.
 - Treat unsupported, ambiguous or malformed on-disk state as a fail-closed result.
@@ -16,7 +16,7 @@ Defragmenter combines GTK orchestration, filesystem-neutral safety/runtime code 
 
 ## Language and dependency policy
 
-C is the default for on-disk codecs, fixed-layout structures and direct storage work. Use C++ when RAII, scoped ownership or stronger local types make a resource-heavy native component safer or clearer; keep C-facing subsystem contracts stable where practical and do not introduce class hierarchies merely because C++ is available. Python is used for GTK/backend orchestration where it does not duplicate filesystem policy.
+C is the default for on-disk codecs, fixed-layout structures and direct storage work. Use C++17 when RAII, scoped ownership, stronger value types or explicit process/protocol ownership make a filesystem-neutral native component safer or clearer; do not introduce class hierarchies merely because C++ is available, and do not rewrite strong C for uniformity. Python is limited to the GTK presentation/compatibility boundary during the staged migration and must not become the authority for filesystem mutation or privileged process safety.
 
 Platform/system libraries are acceptable when their documented contract is the stronger engineering choice. Convenience alone is not a reason to move Defragmenter-owned semantics into a dependency.
 

@@ -4,15 +4,15 @@
 
 [![Project quality gate](https://github.com/Infiltrator-Projects/Defragmenter/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/Infiltrator-Projects/Defragmenter/actions/workflows/quality-gate.yml)
 
-Defragmenter is a C-first offline filesystem allocation analyser and defragmenter for Linux, with selective C++ used where deterministic RAII materially strengthens native resource ownership. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
+Defragmenter is a C-first offline filesystem allocation analyser and defragmenter for Linux. Native C owns the raw filesystem engines and storage-safety core; C++17 owns selected filesystem-neutral application services where RAII, stronger value types and explicit process/protocol ownership improve the implementation. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-172
+**Current version:** 1.8.0-173
 
 **Platform:** Linux
 
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** The version 1.8.0-172 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
+> **Safety status:** The version 1.8.0-173 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
 
 ## Engineering ethos
 
@@ -43,7 +43,7 @@ Unsupported layouts fail closed rather than being guessed. Write-capable engines
 
 The canonical implementation lives under `defragger/`.
 
-Filesystem implementations are organised below `defragger/gui/filesystems/<format>/`, with native C under `native/` where exact low-level analysis or mutation is required. Filesystem-neutral device safety, raw I/O, Stop handling and shared runtime support live under `defragger/src/core/`.
+Filesystem implementations are organised below `defragger/gui/filesystems/<format>/`, with native C under each filesystem's `native/` directory where exact low-level analysis or mutation is required. Filesystem-neutral device safety, raw I/O and Stop handling live under `defragger/src/core/`. The C++17 application-service layer in `defragger/native/` owns the native registry contract, allocation-map translation, operation dispatch and privileged helper session while the GTK presentation is migrated incrementally.
 
 The operating system supplies raw block I/O, but filesystem parsing, placement planning, staging and metadata updates are owned by the project. Architecture and regression tests reject known external filesystem mutation/repair orchestration and duplicate implementation paths.
 
@@ -60,7 +60,7 @@ cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
 ```
 
-The permanent GitHub quality gate performs a warnings-as-errors C build and runs the complete native, filesystem, GUI, architecture, safety and release regression suite.
+The permanent GitHub quality gate performs warnings-as-errors C/C++ builds and runs the complete native, filesystem, GUI, architecture, safety and release regression suite, including native-helper closed-pipe shutdown and C++ mapper fixture-parity checks.
 
 ## Release assets
 
