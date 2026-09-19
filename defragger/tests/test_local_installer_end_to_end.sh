@@ -29,11 +29,27 @@ if [ "${LD_INSTALLER_TEST_COMMAND:-0}" = 1 ]; then
             esac
             ;;
         cmake)
+            case " $* " in
+                *" -P "*)
+                    : "${LD_INSTALLER_TEST_REAL_CMAKE:?real cmake is required for script-mode package helpers}"
+                    exec "$LD_INSTALLER_TEST_REAL_CMAKE" "$@"
+                    ;;
+            esac
             if [ "${1:-}" = --install ]; then
                 : "${DESTDIR:?DESTDIR is required for the fake install}"
-                mkdir -p "$DESTDIR/usr/lib/linux-defragger/filesystems/fat"
+                : "${LD_INSTALLER_TEST_SOURCE_ROOT:?source root is required for the fake install}"
+                mkdir -p \
+                    "$DESTDIR/usr/lib/linux-defragger/filesystems/fat" \
+                    "$DESTDIR/usr/share/icons/hicolor/256x256/apps" \
+                    "$DESTDIR/usr/share/app-install/icons"
                 : >"$DESTDIR/usr/lib/linux-defragger/filesystems/fat/linux-defragger-fat-worker"
                 chmod 0755 "$DESTDIR/usr/lib/linux-defragger/filesystems/fat/linux-defragger-fat-worker"
+                cp "$LD_INSTALLER_TEST_SOURCE_ROOT/packaging/io.github.linuxdefragger.png" \
+                    "$DESTDIR/usr/lib/linux-defragger/defragmenter-icon.png"
+                cp "$LD_INSTALLER_TEST_SOURCE_ROOT/packaging/io.github.linuxdefragger.png" \
+                    "$DESTDIR/usr/share/icons/hicolor/256x256/apps/io.github.linuxdefragger.png"
+                cp "$LD_INSTALLER_TEST_SOURCE_ROOT/packaging/io.github.linuxdefragger.png" \
+                    "$DESTDIR/usr/share/app-install/icons/infiltrator-defragmenter.png"
             fi
             ;;
         sudo) shift 0; exec "$@" ;;
@@ -64,8 +80,11 @@ for command_name in dpkg-query dpkg cmake sudo gcc make makefs apt-get; do
         "$WORK/$command_name"
 done
 
+REAL_CMAKE=$(command -v cmake)
 LD_INSTALLER_TEST_COMMAND=1 \
 LD_INSTALLER_TEST_STATE="$WORK/installed-version" \
+LD_INSTALLER_TEST_REAL_CMAKE="$REAL_CMAKE" \
+LD_INSTALLER_TEST_SOURCE_ROOT="$ROOT" \
 PATH="$WORK:$PATH" \
     "$RUN" >"$WORK/output.log"
 
