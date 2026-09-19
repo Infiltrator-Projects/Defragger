@@ -53,7 +53,7 @@ int main() {
     ok = check(output == expected, "unsupported option filtering") && ok;
 
     const Json parsed = Json::parse(
-        R"({"text":"A\\nB","number":1234567890123,"truth":true,"array":[1,null]})");
+        R"({"text":"A\nB","number":1234567890123,"truth":true,"array":[1,null]})");
     ok = check(parsed.at("text").string() == "A\nB", "JSON string escape") && ok;
     ok = check(parsed.at("number").unsigned_value() == 1234567890123ULL,
                "JSON exact integer") && ok;
