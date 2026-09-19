@@ -831,7 +831,6 @@ int ldtm_gui_main(int argc, char **argv) {
     log_view = gtk_text_view_new();
     gtk_text_view_set_editable(GTK_TEXT_VIEW(log_view), FALSE);
     gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(log_view), FALSE);
-    gtk_text_view_set_monospace(GTK_TEXT_VIEW(log_view), TRUE);
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(log_view), GTK_WRAP_WORD_CHAR);
     gtk_text_view_set_left_margin(GTK_TEXT_VIEW(log_view), 6);
     gtk_text_view_set_right_margin(GTK_TEXT_VIEW(log_view), 6);

@@ -2,45 +2,25 @@
 #include "test_media.h"
 
 #include <gtk/gtk.h>
-#include <string.h>
 
-#define LDTM_MB_FONT "/usr/share/fonts/truetype/linux-defragger/mb_corpo_s_regular.ttf"
-
-static char *font_family(void) {
-    gchar *out = NULL;
-    gchar *err = NULL;
-    gint status = 0;
-    gchar *argv[] = {
-        (gchar *)"fc-scan",
-        (gchar *)"--format=%{family[0]}",
-        (gchar *)LDTM_MB_FONT,
-        NULL
-    };
-    if (g_file_test(LDTM_MB_FONT, G_FILE_TEST_IS_REGULAR) &&
-        g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
-                     &out, &err, &status, NULL) &&
-        status == 0 && out != NULL && *out != '\0') {
-        g_strstrip(out);
-        g_free(err);
-        return out;
-    }
-    g_free(out);
-    g_free(err);
-    return g_strdup("Sans");
-}
+#define LDTM_MB_BODY_FAMILY "MB Corpo S Title WEB"
+#define LDTM_MB_TITLE_FAMILY "MB Corpo A Title Cond WEB"
 
 void ldtm_apply_mb_theme(void) {
     GdkScreen *screen = gdk_screen_get_default();
     GtkCssProvider *provider;
-    char *family;
-    char *escaped;
     char *css;
     GError *error = NULL;
     if (screen == NULL) return;
-    family = font_family();
-    escaped = g_strescape(family, NULL);
+
+    /*
+     * Test Media is packaged with the same three verified MB Corpo faces as
+     * the main application. Keep typography deterministic with no generic or
+     * host-selected font escape hatch.
+     */
     css = g_strdup_printf(
-        "* { font-family: \"%s\", Sans; color: #edf0f2; }"
+        "* { font-family: \"%s\"; color: #edf0f2; }"
+        "headerbar .title, .titlebar .title { font-family: \"%s\"; font-weight: normal; }"
         "window, dialog, .background { background-color: #080a0b; }"
         "headerbar, .titlebar { background-image: none; background-color: #151719; border-bottom: 1px solid #34383c; color: #f5f6f7; box-shadow: none; }"
         "headerbar label, .titlebar label { color: #c8cdd1; font-weight: normal; }"
@@ -68,7 +48,8 @@ void ldtm_apply_mb_theme(void) {
         "scrollbar slider:hover { background-color: #858c92; }"
         "separator { background-color: #30353a; }"
         "tooltip { background-color: #1a1d20; color: #f1f2f3; border: 1px solid #5d646a; }",
-        escaped != NULL ? escaped : "Sans");
+        LDTM_MB_BODY_FAMILY, LDTM_MB_TITLE_FAMILY);
+
     provider = gtk_css_provider_new();
     if (gtk_css_provider_load_from_data(provider, css, -1, &error)) {
         gtk_style_context_add_provider_for_screen(
@@ -77,6 +58,4 @@ void ldtm_apply_mb_theme(void) {
     if (error != NULL) g_error_free(error);
     g_object_unref(provider);
     g_free(css);
-    g_free(escaped);
-    g_free(family);
 }

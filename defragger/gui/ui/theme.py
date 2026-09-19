@@ -11,7 +11,6 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 import os
-import subprocess
 
 import gi
 
@@ -21,7 +20,8 @@ from gi.repository import Gdk, Gtk
 
 from .theme_tokens import DAY, NIGHT
 
-_FONT = Path("/usr/share/fonts/truetype/linux-defragger/mb_corpo_s_regular.ttf")
+_MB_BODY_FAMILY = "MB Corpo S Title WEB"
+_MB_TITLE_FAMILY = "MB Corpo A Title Cond WEB"
 _CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "linux-defragger"
 _CONFIG_FILE = _CONFIG_DIR / "theme"
 
@@ -59,29 +59,17 @@ def save_theme_mode(mode: ThemeMode) -> None:
         pass
 
 
-def _mb_family() -> str:
-    if _FONT.is_file():
-        try:
-            result = subprocess.run(
-                ["fc-scan", "--format=%{family[0]}", str(_FONT)],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
-            family = result.stdout.strip()
-            if family:
-                return family.replace("\\", "\\\\").replace('"', '\\"')
-        except (OSError, subprocess.SubprocessError):
-            pass
-    return "Sans"
+def _base_css() -> str:
+    """Return the application typography contract.
 
-
-def _base_css(family: str) -> str:
+    Defragmenter ships the three approved MB Corpo faces in every supported
+    package. Keep typography deterministic and do not add generic/system
+    fallback families here.
+    """
     return f"""
-    * {{ font-family: "{family}", Sans; }}
+    * {{ font-family: "{_MB_BODY_FAMILY}"; }}
     .app-title, .about-title {{
-        font-family: "MB Corpo A Title Cond WEB", "{family}", Sans;
+        font-family: "{_MB_TITLE_FAMILY}";
         font-weight: normal;
     }}
     .app-title {{ font-size: 23pt; }}
@@ -188,8 +176,7 @@ def apply_theme(mode: ThemeMode | str | None = None) -> ThemeMode:
     if screen is None:
         return resolved
 
-    family = _mb_family()
-    css = _base_css(family)
+    css = _base_css()
     if resolved is ThemeMode.DAY:
         css += _day_css()
     elif resolved is ThemeMode.NIGHT:

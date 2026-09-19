@@ -460,6 +460,41 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
     assert "elif resolved is ThemeMode.NIGHT:" in theme_source
 
 
+def test_mb_typography_has_no_system_font_escape_hatches() -> None:
+    theme_source = (GUI / "ui" / "theme.py").read_text()
+    widgets_source = (GUI / "ui" / "widgets.py").read_text()
+    test_media_theme = (ROOT / "test_media" / "test_media_theme.c").read_text()
+    test_media_gui = (ROOT / "test_media" / "test_media_gui.c").read_text()
+    packaging = (ROOT / "packaging" / "build-deb.sh").read_text()
+    vendor = (ROOT / "packaging" / "vendor-mb-fonts.sh").read_text()
+
+    for required in (
+        'MB Corpo S Title WEB',
+        'MB Corpo A Title Cond WEB',
+    ):
+        assert required in theme_source
+        assert required in test_media_theme
+
+    assert 'cr.select_font_face("MB Corpo S Title WEB"' in widgets_source
+
+    for font_file in (
+        "mb_corpo_a_cond_regular.ttf",
+        "mb_corpo_s_bold.ttf",
+        "mb_corpo_s_regular.ttf",
+    ):
+        assert font_file in packaging
+        assert font_file in vendor
+
+    for source in (theme_source, test_media_theme):
+        assert "Sans" not in source
+        assert "system-ui" not in source
+        assert "monospace" not in source.lower()
+
+    assert "gtk_text_view_set_monospace" not in test_media_gui
+    assert "fc-scan" not in theme_source
+    assert "fc-scan" not in test_media_theme
+
+
 def test_main_window_remains_resizable_maximisable_and_workarea_bounded() -> None:
     window_source = (GUI / "ui" / "window.py").read_text()
     view_source = (GUI / "ui" / "window_view.py").read_text()
@@ -505,6 +540,7 @@ def main() -> None:
     test_about_dialog_matches_the_standard_project_identity()
     test_ui_polish_preserves_allocation_map_visual_contract()
     test_theme_modes_are_persistent_and_shared_across_windows()
+    test_mb_typography_has_no_system_font_escape_hatches()
     test_main_window_remains_resizable_maximisable_and_workarea_bounded()
     print("GUI model and worker-result contract tests passed")
 
