@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "json.hpp"
 
+#include <infiltratr/core.h>
 #include <infiltratr/escape.h>
 
-#include <cerrno>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
 #include <limits>
 #include <stdexcept>
 #include <system_error>
@@ -409,11 +408,8 @@ std::uint64_t Json::unsigned_value() const {
 
 double Json::real_value() const {
     const std::string text(number_text());
-    char* end = nullptr;
-    errno = 0;
-    const double value = std::strtod(text.c_str(), &end);
-    if (errno == ERANGE || end != text.c_str() + text.size() ||
-        !std::isfinite(value)) {
+    double value = 0.0;
+    if (!infiltratr_parse_double(text.c_str(), &value)) {
         throw std::runtime_error("JSON number is not a finite real value");
     }
     return value;
