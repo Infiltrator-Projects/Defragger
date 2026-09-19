@@ -103,6 +103,6 @@ Defragmentation changes filesystem allocation metadata and data placement. Keep 
 
 ## Licence
 
-Copyright © 2026 Shannon Smith.
+Copyright © 2016–2026 Shannon Smith.
 
 Defragmenter first-party code, scripts, tests, packaging and documentation are licensed under the GNU General Public License version 3 or, at your option, any later version (`GPL-3.0-or-later`). The canonical licence text is `LICENSE`.
