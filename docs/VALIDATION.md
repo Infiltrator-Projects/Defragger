@@ -35,6 +35,8 @@ The XFS metadata white-box suite includes the field-shaped allocation-tree press
 
 GUI contract tests also treat typography as release behaviour rather than decoration. They verify that the main application and Test Media reference only the MB Corpo A/S families, that the package still installs the A Condensed, S Regular and S Bold font files, and that generic/system font fallbacks or a forced host monospace log cannot be silently reintroduced.
 
+Common-integration regressions additionally bind CMake, the local installer and the submodule to the exact released Common 1.19.8 revision. They verify that C++ JSON real conversion uses Common's locale-independent parser, local allocation wrappers use Common checked size arithmetic, Test Media obtains typography/metrics through the native design API, and the GTK token generator plus font packager derive their shared design/provenance data from the pinned Common source rather than duplicated constants.
+
 Branding validation likewise treats the Defragmenter icon as an exact release asset. The architecture test verifies the approved 256×256 PNG's Git object identity and dimensions and checks that packaging installs it consistently for the desktop icon theme, Mint app-install catalogue and About/window private path.
 
 The mutation path is not accepted as its own sole oracle where a separate structural or payload check can be used.
