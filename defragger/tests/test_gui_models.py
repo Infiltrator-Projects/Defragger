@@ -419,7 +419,7 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
         '"Day"',
         '"Night"',
         "XDG_CONFIG_HOME",
-        "from .theme_tokens import DAY, NIGHT",
+        "from .theme_tokens import DAY, METRICS, NIGHT, TYPOGRAPHY",
     ):
         assert required in theme_source
 
@@ -446,6 +446,11 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
     assert namespace["DAY"] == design["theme"]["palettes"]["day"]
     assert namespace["NIGHT"] == design["theme"]["palettes"]["night"]
     assert namespace["THEME_CONTRACT_VERSION"] == design["theme"]["contract_version"]
+    assert namespace["TYPOGRAPHY"]["ui_family"] == design["typography"]["ui_family"]
+    assert namespace["TYPOGRAPHY"]["brand_family"] == design["typography"]["brand_family"]
+    assert namespace["TYPOGRAPHY"]["ui_bold_weight"] == design["typography"]["ui_bold_weight"]
+    assert namespace["TYPOGRAPHY"]["font_files"] == design["typography"]["font_files"]
+    assert namespace["METRICS"] == design["metrics"]
 
     assert 'Gtk.MenuItem.new_with_label("Theme")' in view_source
     assert "Gtk.RadioMenuItem" in view_source
@@ -466,19 +471,19 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
 def test_mb_typography_has_no_system_font_escape_hatches() -> None:
     theme_source = (GUI / "ui" / "theme.py").read_text()
     widgets_source = (GUI / "ui" / "widgets.py").read_text()
+    tokens_source = (GUI / "ui" / "theme_tokens.py").read_text()
+    generator_source = (ROOT / "tools" / "update-theme-tokens.py").read_text()
     test_media_theme = (ROOT / "test_media" / "test_media_theme.c").read_text()
     test_media_gui = (ROOT / "test_media" / "test_media_gui.c").read_text()
     packaging = (ROOT / "packaging" / "build-deb.sh").read_text()
     vendor = (ROOT / "packaging" / "vendor-mb-fonts.sh").read_text()
 
-    for required in (
-        'MB Corpo S Title WEB',
-        'MB Corpo A Title Cond WEB',
-    ):
-        assert required in theme_source
-        assert required in test_media_theme
-
-    assert 'cr.select_font_face("MB Corpo S Title WEB"' in widgets_source
+    assert "TYPOGRAPHY" in theme_source
+    assert 'TYPOGRAPHY["ui_family"]' in theme_source
+    assert 'TYPOGRAPHY["brand_family"]' in theme_source
+    assert 'TYPOGRAPHY["ui_family"]' in widgets_source
+    assert "infiltratr_typography()" in test_media_theme
+    assert "infiltratr_design_metrics()" in test_media_theme
 
     for font_file in (
         "mb_corpo_a_cond_regular.ttf",
@@ -486,7 +491,12 @@ def test_mb_typography_has_no_system_font_escape_hatches() -> None:
         "mb_corpo_s_regular.ttf",
     ):
         assert font_file in packaging
-        assert font_file in vendor
+        assert font_file in tokens_source
+
+    assert "shared/infiltratr-common/design/infiltrator-design-v1.json" in vendor
+    assert "MBLINK_COMMIT=" not in vendor
+    assert "ARCHIVE_SHA256=" not in vendor
+    assert 'data["typography"]' in generator_source
 
     for source in (theme_source, test_media_theme):
         assert "Sans" not in source
@@ -496,7 +506,6 @@ def test_mb_typography_has_no_system_font_escape_hatches() -> None:
     assert "gtk_text_view_set_monospace" not in test_media_gui
     assert "fc-scan" not in theme_source
     assert "fc-scan" not in test_media_theme
-
 
 def test_main_window_remains_resizable_maximisable_and_workarea_bounded() -> None:
     window_source = (GUI / "ui" / "window.py").read_text()
