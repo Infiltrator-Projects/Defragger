@@ -8,6 +8,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <charconv>
 #include <cstdio>
 #include <exception>
 #include <limits>
@@ -22,6 +23,23 @@ int usage() {
         "[PATH] [--fstype TYPE] [--cells N] [--probe] [--list-backends]\n",
         stderr);
     return 2;
+}
+
+bool parse_cell_count(std::string_view text, std::size_t& cells) {
+    if (text.empty() || text.front() == '-' || text.front() == '+')
+        return false;
+
+    unsigned long long value = 0U;
+    const char* begin = text.data();
+    const char* end = begin + text.size();
+    const auto parsed = std::from_chars(begin, end, value, 10);
+    if (parsed.ec != std::errc{} || parsed.ptr != end || value == 0U ||
+        value > static_cast<unsigned long long>(
+                    std::numeric_limits<std::size_t>::max())) {
+        return false;
+    }
+    cells = static_cast<std::size_t>(value);
+    return true;
 }
 
 defragger::Json probe_result(const defragger::BackendInfo& backend) {
@@ -69,18 +87,27 @@ int main(int argc, char** argv) {
         if (token == "--fstype") {
             if (++index >= argc) return usage();
             filesystem = argv[index];
+            if (filesystem.empty()) return usage();
+            continue;
+        }
+        constexpr std::string_view fstype_prefix = "--fstype=";
+        if (token.rfind(fstype_prefix, 0U) == 0U) {
+            filesystem = token.substr(fstype_prefix.size());
+            if (filesystem.empty()) return usage();
             continue;
         }
         if (token == "--cells") {
-            if (++index >= argc) return usage();
-            try {
-                const unsigned long long value = std::stoull(argv[index]);
-                cells = static_cast<std::size_t>(
-                    std::min<unsigned long long>(
-                        value,
-                        static_cast<unsigned long long>(
-                            std::numeric_limits<std::size_t>::max())));
-            } catch (...) {
+            if (++index >= argc ||
+                !parse_cell_count(argv[index], cells)) {
+                return usage();
+            }
+            continue;
+        }
+        constexpr std::string_view cells_prefix = "--cells=";
+        if (token.rfind(cells_prefix, 0U) == 0U) {
+            if (!parse_cell_count(
+                    std::string_view(token).substr(cells_prefix.size()),
+                    cells)) {
                 return usage();
             }
             continue;

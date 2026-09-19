@@ -47,6 +47,39 @@ if native_mapper.is_file():
     native_listed = json.loads(native_result.stdout)["backends"]
     assert native_listed == manifest, "C++ mapper manifest drifted from established plugin contract"
 
+    equals_form = subprocess.run(
+        [
+            str(native_mapper),
+            "--list-backends",
+            "--fstype=ntfs",
+            "--cells=128",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    assert json.loads(equals_form.stdout)["backends"] == manifest
+
+    for bad_cells in ("-1", "0", "128junk", "+128"):
+        rejected = subprocess.run(
+            [str(native_mapper), "--list-backends", "--cells", bad_cells],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert rejected.returncode == 2, (
+            f"C++ mapper accepted invalid --cells value {bad_cells!r}"
+        )
+
+    rejected_equals = subprocess.run(
+        [str(native_mapper), "--list-backends", "--cells=-1"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert rejected_equals.returncode == 2
+
 invalid = subprocess.run(
     [sys.executable, str(mapper), "/dev/null", "--fstype", "ntfs", "--cells", "128"],
     text=True,
