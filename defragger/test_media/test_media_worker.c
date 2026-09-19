@@ -7,7 +7,6 @@
 #include "infiltratr/posix_path.h"
 #include "infiltratr/posix_io.h"
 
-#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -186,10 +185,11 @@ static int extract_pair(const char *line, const char *key, char *value, size_t c
     if (found == NULL) return 0;
     cursor = found + strlen(needle);
     while (*cursor != '\0' && *cursor != '"' && used + 1U < capacity) {
+        unsigned char decoded = 0U;
         if (cursor[0] == '\\' && cursor[1] == 'x' &&
-            isxdigit((unsigned char)cursor[2]) && isxdigit((unsigned char)cursor[3])) {
-            char hex[3] = {cursor[2], cursor[3], '\0'};
-            value[used++] = (char)strtoul(hex, NULL, 16);
+            cursor[2] != '\0' && cursor[3] != '\0' &&
+            ldtm_decode_hex_byte(cursor[2], cursor[3], &decoded)) {
+            value[used++] = (char)decoded;
             cursor += 4;
         } else if (cursor[0] == '\\' && cursor[1] != '\0') {
             value[used++] = cursor[1];

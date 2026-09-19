@@ -60,6 +60,7 @@ LdtmFragmentProfile ldtm_fragment_profile(const LdtmFilesystemSpec *spec);
 uint64_t ldtm_target_payload_bytes(const LdtmFilesystemSpec *spec);
 int ldtm_build_sfdisk_script(char *buffer, size_t capacity);
 int ldtm_transport_is_field_media(int removable, const char *transport);
+int ldtm_decode_hex_byte(char high, char low, unsigned char *value);
 const char *ldtm_creator_program(const LdtmFilesystemSpec *spec);
 int ldtm_program_available(const char *program);
 int ldtm_spec_creator_available(const LdtmFilesystemSpec *spec,

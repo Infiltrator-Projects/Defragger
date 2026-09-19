@@ -230,6 +230,7 @@ def test_infiltratr_common_integration() -> None:
     local_installer = (ROOT / "packaging" / "build-local-run.sh").read_text()
     typography_vendor = (ROOT / "packaging" / "vendor-mb-fonts.cmake").read_text()
     assert "InfiltratrTypographyAssets.cmake" in typography_vendor
+    assert "Verified MB Corpo archive was not materialised" in typography_vendor
     assert 'COMMON_VERSION="1.19.8"' in local_installer
     assert 'COMMON_COMMIT="3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9"' in local_installer
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
@@ -293,6 +294,13 @@ def test_infiltratr_common_integration() -> None:
     exfat = (GUI / "filesystems" / "exfat" / "native" / "exfat_worker.c").read_text()
     assert "infiltratr_parse_binary_quantity_u64" in exfat
     assert "strtoull(" not in exfat
+    exfat_common = (GUI / "filesystems" / "exfat" / "native" / "exfat_common.c").read_text()
+    assert "infiltratr_load_le16" in exfat_common
+    assert "infiltratr_load_le32" in exfat_common
+    assert "infiltratr_load_le64" in exfat_common
+    for wrapper in ("static uint16_t read_le16", "static uint32_t read_le32",
+                    "static uint64_t read_le64"):
+        assert wrapper not in exfat_common
     ext_common = (GUI / "filesystems" / "ext4" / "native" / "ext_common.c").read_text()
     ext_catalog = (GUI / "filesystems" / "ext4" / "native" / "ext_catalog.c").read_text()
     assert "infiltratr_array_reserve" in ext_common
@@ -370,9 +378,13 @@ def test_infiltratr_common_integration() -> None:
     test_media_gui = (ROOT / "test_media" / "test_media_gui.c").read_text()
     test_media_amiga = (ROOT / "test_media" / "test_media_amiga_payload.c").read_text()
     assert "strtoull(" not in test_media_worker
+    assert "strtoul(" not in test_media_worker
     assert "atoi(" not in test_media_worker
     assert "strtoull(" not in test_media_gui
+    assert "strtoul(" not in test_media_gui
     assert "atoi(" not in test_media_gui
+    assert "ldtm_decode_hex_byte" in test_media_worker
+    assert "ldtm_decode_hex_byte" in test_media_gui
     assert "infiltratr_array_reserve" in test_media_worker
     assert "infiltratr_path_basename" in test_media_worker
     assert "infiltratr_string_starts_with" in test_media_worker

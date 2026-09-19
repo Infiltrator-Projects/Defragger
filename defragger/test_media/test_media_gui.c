@@ -66,10 +66,11 @@ static char *pair_value(const char *line, const char *key) {
     ++cursor;
     value = g_string_new(NULL);
     while (*cursor != '\0' && *cursor != '"') {
+        unsigned char decoded = 0U;
         if (cursor[0] == '\\' && cursor[1] == 'x' &&
-            g_ascii_isxdigit(cursor[2]) && g_ascii_isxdigit(cursor[3])) {
-            char hex[3] = {cursor[2], cursor[3], '\0'};
-            g_string_append_c(value, (char)strtoul(hex, NULL, 16));
+            cursor[2] != '\0' && cursor[3] != '\0' &&
+            ldtm_decode_hex_byte(cursor[2], cursor[3], &decoded)) {
+            g_string_append_c(value, (char)decoded);
             cursor += 4;
         } else if (cursor[0] == '\\' && cursor[1] != '\0') {
             g_string_append_c(value, cursor[1]);

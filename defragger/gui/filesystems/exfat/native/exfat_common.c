@@ -18,11 +18,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static uint16_t read_le16(const uint8_t *p) { return infiltratr_load_le16(p); }
-static uint32_t read_le32(const uint8_t *p) { return infiltratr_load_le32(p); }
-static uint64_t read_le64(const uint8_t *p) { return infiltratr_load_le64(p); }
 void exfat_set_error(char **error, const char *format, ...) { if (error == NULL || *error != NULL) return; va_list ap; va_start(ap, format); va_list copy; va_copy(copy, ap); int n=vsnprintf(NULL,0,format,copy); va_end(copy); if(n<0){va_end(ap);return;} *error=ld_xmalloc((size_t)n+1U); (void)vsnprintf(*error,(size_t)n+1U,format,ap); va_end(ap); }
-uint16_t exfat_u16(const void *data,size_t off){return read_le16((const uint8_t*)data+off);} uint32_t exfat_u32(const void *data,size_t off){return read_le32((const uint8_t*)data+off);} uint64_t exfat_u64(const void *data,size_t off){return read_le64((const uint8_t*)data+off);}
+uint16_t exfat_u16(const void *data,size_t off){return infiltratr_load_le16((const uint8_t*)data+off);} uint32_t exfat_u32(const void *data,size_t off){return infiltratr_load_le32((const uint8_t*)data+off);} uint64_t exfat_u64(const void *data,size_t off){return infiltratr_load_le64((const uint8_t*)data+off);}
 void exfat_put_u16(void *data,size_t off,uint16_t v){infiltratr_store_le16((uint8_t*)data+off,v);} void exfat_put_u32(void *data,size_t off,uint32_t v){infiltratr_store_le32((uint8_t*)data+off,v);}
 /*
  * exFAT entry-set checksum: bytes 2 and 3 of the primary entry contain the

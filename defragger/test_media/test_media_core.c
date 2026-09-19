@@ -131,6 +131,16 @@ int ldtm_transport_is_field_media(int removable, const char *transport) {
     return 1;
 }
 
+int ldtm_decode_hex_byte(char high, char low, unsigned char *value) {
+    char text[3] = {high, low, '\0'};
+    uint64_t parsed = 0U;
+    if (value == NULL || !infiltratr_parse_u64(text, 16U, &parsed) ||
+        parsed > UINT8_MAX)
+        return 0;
+    *value = (unsigned char)parsed;
+    return 1;
+}
+
 const char *ldtm_creator_program(const LdtmFilesystemSpec *spec) {
     if (spec == NULL) return NULL;
     switch (spec->creator) {
