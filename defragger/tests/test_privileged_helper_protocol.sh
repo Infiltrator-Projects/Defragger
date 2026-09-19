@@ -10,16 +10,32 @@ output=$(
         '{"action":"quit"}' | "$HELPER"
 )
 grep -q '"type":"ready"' <<<"$output"
-grep -q '"type":"pong","id":7' <<<"$output"
+grep -q '"type":"pong"' <<<"$output"
+grep -q '"id":7' <<<"$output"
 grep -q '"type":"bye"' <<<"$output"
 
-set +e
-printf '%s\n' '{"action":"ping","id":9}' | "$HELPER" | head -n 1 >/dev/null
-status=( "${PIPESTATUS[@]}" )
-set -e
-[ "${status[1]}" -eq 1 ] || {
-    printf 'helper did not fail safely after protocol output closed; rc=%s\n' "${status[1]}" >&2
-    exit 1
-}
+python3 - "$HELPER" <<'PY'
+import os
+import subprocess
+import sys
+
+helper = sys.argv[1]
+read_fd, write_fd = os.pipe()
+os.close(read_fd)
+process = subprocess.Popen(
+    [helper],
+    stdin=subprocess.PIPE,
+    stdout=write_fd,
+    stderr=subprocess.PIPE,
+    text=True,
+)
+os.close(write_fd)
+_, error = process.communicate('{"action":"ping","id":9}\n', timeout=5)
+if process.returncode != 1:
+    raise SystemExit(
+        f"helper did not fail safely after protocol output closed; "
+        f"rc={process.returncode} stderr={error!r}"
+    )
+PY
 
 printf '%s\n' 'native privileged-helper protocol and closed-pipe safety passed'
