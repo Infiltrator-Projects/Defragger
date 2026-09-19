@@ -27,7 +27,7 @@ The current split keeps raw filesystem writers and the storage-safety core in C.
 
 Platform libraries and in-process filesystem libraries are used when their documented contract is the stronger engineering choice. External command-line repair or defragmentation programs are not part of production mutation paths.
 
-The reusable first-party dependency is pinned to Infiltratr Common 1.19.6 at exact commit `a0e26896cc2a5674a138b29f009a7b30f0d636c6`. Generic parsing, arithmetic, byte-order, path, allocation-growth, JSON and exact-I/O mechanisms belong there when their contracts match. Filesystem geometry, placement, target safety and transaction/recovery policy remain local.
+The reusable first-party dependency is pinned to Infiltratr Common 1.19.8 at exact commit `3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9`. Generic parsing, arithmetic, byte-order, path, allocation-growth, JSON escaping/decimal conversion, exact I/O and neutral design/typography identity belong there when their contracts match. Defragmenter consumes those contracts directly and generates its GTK adapter from the pinned Common design data rather than carrying a second source of truth. Filesystem geometry, placement, target safety, transaction/recovery policy and domain-specific allocation-map meaning remain local.
 
 ## Failure philosophy
 
