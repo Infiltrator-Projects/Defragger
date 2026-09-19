@@ -6,8 +6,8 @@ Completed: 2026-08-25
 Extended: 2026-09-19
 
 Applies to: release version 1.8.0-172
-Audited source commit: ebb12a48ac693c46a3eebe04de21c496f97cc460
-Audited release-governance commit: 265a3dc8d6ceddd83f6c0e0cb4f38aea61254f94
+Audited source commit: 28f005f9f0ec7cb36c8eee156c4d1c39248e4e36
+Audited release-governance commit: 28f005f9f0ec7cb36c8eee156c4d1c39248e4e36
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -35,7 +35,7 @@ The completed audit covers these first-party write/recovery engines:
 
 - **FAT12/FAT16/FAT32** — native direct analysis, canonical relocation, exact Growth Defrag reserve and Recover.
 - **exFAT** — native catalogue/relayout, exact Growth Defrag reserve and Recover.
-- **NTFS** — native fail-closed preflight, canonical supported-subset relocation, exact Growth Defrag reserve and Recover.
+- **NTFS** — native fail-closed preflight, canonical supported-subset relocation, exact Growth Defrag reserve and Recover. Plan-database/digest resource ownership uses a narrow C++17 RAII unit behind the existing C ABI; raw planning, relocation and worker control remain C.
 - **EXT2/EXT3/EXT4** — native staged transaction using the linked libext2fs API in-process, followed by verification and Recover.
 - **XFS** — native raw userspace catalogue, planning, metadata rewrite, verification and Recover for the explicitly supported v5 contract.
 - **Amiga OFS/FFS** — native raw catalogue, relocation, verification and Recover.
