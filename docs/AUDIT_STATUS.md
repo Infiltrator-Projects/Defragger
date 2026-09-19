@@ -6,7 +6,7 @@ Completed: 2026-08-25
 Extended: 2026-09-19
 
 Applies to: release version 1.8.0-172
-Audited source commit: 358d100df8d2ffd18f0c3ed15357feb1bfd2761e
+Audited source commit: 5550f1fb629c9267fcfacd5588d43ab67b323615
 Audited release-governance commit: 0c72737a9a16f1fc46ed66f1ccb466ea3a45e5f2
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -73,7 +73,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-172 is the current audited release line. Documentation-only maintenance after the audited source baseline does not change the audited production/build/package paths; any later change beneath those paths requires a new source audit baseline before release.
+Version 1.8.0-172 is the current audited release line. The baseline also includes the packaging correction that installs only documentation contained in the self-contained application source tree. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 
