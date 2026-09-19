@@ -160,6 +160,7 @@ target_link_libraries(linux-defragger-core PUBLIC InfiltratrCommon::Common)
 # scoped state and RAII improve the implementation. Filesystem parsing and
 # mutation remain in the existing native C engines.
 add_library(linux-defragger-runtime-cpp STATIC
+    native/helper_policy.cpp
     native/json.cpp
     native/map.cpp
     native/process.cpp
@@ -172,7 +173,7 @@ target_compile_options(linux-defragger-runtime-cpp PRIVATE ${LD_WARNING_FLAGS})
 target_compile_definitions(linux-defragger-runtime-cpp PRIVATE
     _FILE_OFFSET_BITS=64 _GNU_SOURCE)
 target_link_libraries(linux-defragger-runtime-cpp PUBLIC
-    linux-defragger-core InfiltratrCommon::Common)
+    linux-defragger-core InfiltratrCommon::Common Threads::Threads)
 
 add_executable(linux-defragger-operation-engine-cpp
     native/operation_engine.cpp)
@@ -198,6 +199,21 @@ target_compile_definitions(linux-defragger-mapper-cpp PRIVATE
     _FILE_OFFSET_BITS=64 _GNU_SOURCE)
 target_link_libraries(linux-defragger-mapper-cpp PRIVATE
     linux-defragger-runtime-cpp linux-defragger-core)
+
+add_executable(linux-defragger-privileged-helper-cpp
+    native/privileged_helper.cpp)
+set_target_properties(linux-defragger-privileged-helper-cpp PROPERTIES
+    OUTPUT_NAME linux-defragger-privileged-helper)
+target_include_directories(linux-defragger-privileged-helper-cpp PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/native"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-privileged-helper-cpp PRIVATE
+    ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-privileged-helper-cpp PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-privileged-helper-cpp PRIVATE
+    linux-defragger-runtime-cpp linux-defragger-core Threads::Threads)
 
 # FAT remains native C, but it is a private implementation detail of the
 # authoritative gui/filesystems/fat plugin.  There is deliberately no second

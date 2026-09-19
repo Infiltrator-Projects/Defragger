@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "runtime.hpp"
+#include "helper_policy.hpp"
 #include "json.hpp"
 #include "process.hpp"
 
@@ -64,6 +65,27 @@ int main() {
     ok = check(command.return_code == 0, "process exit code") && ok;
     ok = check(command.standard_output == "native-cpp", "process stdout") && ok;
     ok = check(command.standard_error == "warning", "process stderr") && ok;
+
+    const HelperCommand helper = helper_command(
+        "operation-engine",
+        {"defrag", "/dev/test", "--filesystem", "ext4",
+         "--journal", "/var/lib/linux-defragger/state/1000/test.journal"},
+        1000U);
+    ok = check(
+        helper.executable ==
+            "/usr/lib/linux-defragger/linux-defragger-operation-engine",
+        "privileged operation-engine allowlist") && ok;
+    bool rejected_journal = false;
+    try {
+        (void)helper_command(
+            "operation-engine",
+            {"defrag", "/dev/test", "--filesystem", "ext4",
+             "--journal", "/tmp/not-allowed.journal"},
+            1000U);
+    } catch (const std::exception&) {
+        rejected_journal = true;
+    }
+    ok = check(rejected_journal, "privileged journal boundary") && ok;
 
     const std::string manifest = registry_manifest_json();
     ok = check(manifest.find("\"schema\":3") != std::string::npos,
