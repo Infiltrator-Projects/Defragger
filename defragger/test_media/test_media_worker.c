@@ -415,7 +415,7 @@ static int remove_flat_directory(const char *path) {
     if (directory == NULL) return -1;
     while ((entry = readdir(directory)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-        if (!infiltratr_path_join(child, sizeof(child), path, entry->d_name) != 0 || unlink(child)) {
+        if (!infiltratr_path_join(child, sizeof(child), path, entry->d_name) || unlink(child) != 0) {
             (void)closedir(directory);
             return -1;
         }
@@ -507,7 +507,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         char path[PATH_MAX];
         char name[64];
         (void)snprintf(name, sizeof(name), "anchor-%04u.bin", index);
-        if (!infiltratr_path_join(path, sizeof(path), anchors, name) != 0 || unlink(path)) goto cleanup;
+        if (!infiltratr_path_join(path, sizeof(path), anchors, name) || unlink(path) != 0) goto cleanup;
     }
     sync();
 
@@ -583,7 +583,7 @@ static int generate_fragmented_data(const LdtmFilesystemSpec *spec, const char *
         char path[PATH_MAX];
         char name[64];
         (void)snprintf(name, sizeof(name), "entry-%05u.txt", index);
-        if (!infiltratr_path_join(path, sizeof(path), directory_test, name) != 0 || unlink(path)) goto cleanup;
+        if (!infiltratr_path_join(path, sizeof(path), directory_test, name) || unlink(path) != 0) goto cleanup;
     }
     for (index = 0U; index < profile.directory_second; ++index) {
         char path[PATH_MAX];
