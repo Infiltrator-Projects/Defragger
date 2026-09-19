@@ -5,9 +5,9 @@ Status: **complete**
 Completed: 2026-08-25  
 Extended: 2026-09-19
 
-Applies to: release version 1.8.0-172
-Audited source commit: 09efe7eb19af1331f52b56de71564f51edfa441a
-Audited release-governance commit: 28f005f9f0ec7cb36c8eee156c4d1c39248e4e36
+Applies to: release version 1.8.0-173
+Audited source commit: b5f891f623f37df16d0d902029a22ca715301581
+Audited release-governance commit: b5f891f623f37df16d0d902029a22ca715301581
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
 
@@ -23,6 +23,7 @@ The enabled writers share the following release requirements:
 | Unsupported or corrupt metadata | complete pre-write validation and fail-closed feature checks | negative fixtures and filesystem-native tests | untested feature combinations remain unsupported |
 | Interrupted mutation | durable filesystem-specific transaction state before recovery can be required | transaction/fault-injection and Recover suites | hardware that lies about persistence is outside the model |
 | Unsafe Stop | cooperative Stop only at unchanged, valid or recoverable boundaries | worker/transaction Stop regressions | Stop is not an arbitrary mid-write abort |
+| Privileged supervisor loss | closed control output cannot abandon a root writer; the native helper owns a process group, detects transport failure, requests cooperative SIGINT and waits for exit | native helper protocol/closed-pipe regression plus safety tests | a compromised privileged OS is outside the model |
 | Silent payload/layout damage | reopened read-only verification before success | disposable-image verification and payload/layout checks | shared parser assumptions can still create common-mode risk |
 | Publication from unaudited source | exact source/governance baselines plus exact-head release gates | `tests/test_release_gate.py` and GitHub workflows | protects project publication, not downstream repackaging |
 | Destructive Test Media misuse | separate utility, system-disk refusal and repeated confirmation | Test Media safety tests | an explicitly selected sacrificial disk can still be erased |
@@ -55,7 +56,8 @@ The audited writers are expected to preserve these invariants:
 5. transaction state cannot silently regress or switch targets;
 6. Stop is observed only at a valid/recoverable boundary;
 7. success requires reopened verification of payload and layout;
-8. unsupported or structurally unsafe states do not write.
+8. unsupported or structurally unsafe states do not write;
+9. loss of the GUI/helper protocol cannot detach an active privileged writer from supervisor shutdown.
 
 Architecture ownership is defined in [ARCHITECTURE.md](ARCHITECTURE.md); design rationale is in [DESIGN.md](DESIGN.md).
 
@@ -73,7 +75,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-172 is the current audited release line. The baseline also includes the packaging correction that installs only documentation contained in the self-contained application source tree. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
+Version 1.8.0-173 is the current audited release line. The baseline includes the C++17 application-service migration, fail-safe privileged-helper shutdown, mapper fixture-parity qualification, and release-audit coverage for `defragger/native/`. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 
