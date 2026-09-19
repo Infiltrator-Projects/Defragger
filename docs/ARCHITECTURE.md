@@ -28,7 +28,7 @@ per-filesystem native C analysers / planners / writers
         ↓
 raw image or unmounted block device
 
-Infiltratr Common 1.19.8
+Infiltratr Common 1.19.10
         ↓
 checked arithmetic / parsing / endian / path / exact-I/O /
 allocation-growth / JSON / durable-file primitives
@@ -39,8 +39,8 @@ The source tree reflects those responsibilities:
 ```text
 defragger/
 ├── gui/ui/                 presentation and user interaction
-├── gui/core/               shared application protocol/transaction contracts
-├── gui/engine/             worker resolution and orchestration
+├── gui/core/               shared application protocol/data contracts
+├── gui/engine/             worker resolution, orchestration and read-only compatibility I/O
 ├── gui/backends/           plugin contracts and single registry
 ├── gui/filesystems/        authoritative per-filesystem implementations
 ├── native/                 C++17 application services and protocol ownership
@@ -112,11 +112,11 @@ The project assumes the kernel, libc, required libraries and storage hardware ho
 
 ## Common
 
-`shared/infiltratr-common` is pinned to Infiltratr Common 1.19.8 at exact commit `3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9`.
+`shared/infiltratr-common` is pinned to Infiltratr Common 1.19.10 at exact commit `33e69c0a462b56d388881d89c4eb49f72fa0b0fe`.
 
 Common is authoritative for reusable mechanisms whose semantics are genuinely generic. If Defragmenter has a stronger implementation of a generic primitive, the preferred direction is to improve Common until its contract preserves that correctness, performance and resilience, then remove the local duplicate.
 
-For this pin, Common also owns deterministic finite-decimal conversion used by the C++ JSON adapter, checked allocation sizing used by local runtime wrappers, native typography/structural design identity, and immutable MB Corpo asset provenance. The GTK adapter is generated from Common's design JSON; Test Media consumes the native design API. Defragmenter's no-font-fallback policy remains product-local because the package installs the verified Common-described faces itself.
+For this pin, Common also owns deterministic finite-decimal conversion used by the C++ JSON adapter, checked allocation sizing used by local runtime wrappers, native typography/structural design identity, immutable MB Corpo asset provenance and the complete layered Linux MBLINK Day/Night semantic role set. The GTK adapter is generated from Common's design JSON and consumes matching titlebar/connection/heading/summary/detail/note/state roles; Test Media consumes the same native design API directly. Defragmenter's no-font-fallback policy remains product-local because the package installs the verified Common-described faces itself. Python compatibility analysis remains read-only; generic durable publication/removal and exact write I/O are not duplicated there because authoritative mutation is native.
 
 Do not move filesystem policy, target-safety decisions or transaction semantics into Common merely to reduce line count.
 

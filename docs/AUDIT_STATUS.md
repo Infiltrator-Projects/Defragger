@@ -5,8 +5,8 @@ Status: **complete**
 Completed: 2026-08-25  
 Extended: 2026-09-20
 
-Applies to: release version 1.8.0-181
-Audited source commit: ab1a8bc1624baf8432ba54db976894228f844425
+Applies to: release version 1.8.0-182
+Audited source commit: 7fe66bcb602ddc18ec249b5aba44326ede6efeee
 Audited release-governance commit: b5f891f623f37df16d0d902029a22ca715301581
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
@@ -63,9 +63,9 @@ Architecture ownership is defined in [ARCHITECTURE.md](ARCHITECTURE.md); design 
 
 ## Dependency baseline
 
-The audited production tree consumes Infiltratr Common 1.19.8 at exact commit `3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9`. CMake, the native installer, submodule identity and release regressions verify the same released pin.
+The audited production tree consumes Infiltratr Common 1.19.10 at exact commit `33e69c0a462b56d388881d89c4eb49f72fa0b0fe`. CMake, the native installer, submodule identity and release regressions verify the same released pin.
 
-Common owns reusable mechanisms such as checked arithmetic, strict and locale-independent numeric parsing, endian access, bounded growth, path/string helpers, JSON escaping, exact I/O, neutral design metrics/typography identity and canonical MB Corpo asset provenance. Defragmenter retains filesystem structure, target-safety, placement, transaction, recovery, domain-specific allocation-map meaning and user-facing failure policy.
+Common owns reusable mechanisms such as checked arithmetic, strict and locale-independent numeric parsing, endian access, bounded growth, path/string helpers, JSON escaping, exact I/O, generic durable file publication/removal, neutral design metrics/typography identity and canonical MB Corpo asset provenance. Common 1.19.10 also owns the complete layered Linux MBLINK Day/Night semantic roles consumed by Defragmenter's generated GTK adapter and Test Media native theme. Defragmenter retains filesystem structure, target-safety, placement, transaction/recovery semantics, domain-specific allocation-map meaning and user-facing failure policy.
 
 ## Release controls and decision
 
@@ -75,7 +75,7 @@ The release workflow verifies the `protected-main` history rules, the current `m
 
 APT publication is a separate retryable workflow bound to the published release version and SHA.
 
-Version 1.8.0-181 is the current audited release line. It retains the XFS allocation-tree and MB-only typography corrections while closing the remaining application-icon delivery gap: About, process-wide GTK defaults and individual windows now share one deterministic resolver for the approved artwork, and Debian packaging fails closed if the private, hicolor or Mint app-install copies are missing or differ from that artwork. The reusable foundation remains Common 1.19.8 at the exact audited pin. Filesystem semantics, destructive-operation safety and recovery policy remain Defragmenter-owned, and the C++17 application-service plus first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
+Version 1.8.0-182 is the current audited release line. It advances the reusable foundation to Common 1.19.10 at the exact audited pin, consumes the complete shared Day/Night semantic role set in the GTK and Test Media adapters, and removes the remaining private About palette. The forensic pass also removes a dead Python transaction/journal durability implementation and unused Python raw-write capability; authoritative mutation remains in the native writers through Common exact-I/O and durable-file primitives. Filesystem semantics, destructive-operation safety and recovery policy remain Defragmenter-owned, and the C++17 application-service plus first-party filesystem writer contracts remain covered by the full quality gate. Any later change beneath audited production/build/package paths requires a new source audit baseline before release.
 
 ## Historical record
 

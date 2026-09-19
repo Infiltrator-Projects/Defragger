@@ -6,13 +6,13 @@
 
 Defragmenter is a C-first offline filesystem allocation analyser and defragmenter for Linux. Native C owns the raw filesystem engines and storage-safety core; C++17 owns selected filesystem-neutral application services where RAII, stronger value types and explicit process/protocol ownership improve the implementation. Write-capable engines operate directly on unmounted block devices or filesystem images and do not delegate production mutations to mounted kernel filesystem drivers or external repair/defragmentation tools.
 
-**Current version:** 1.8.0-181
+**Current version:** 1.8.0-182
 
 **Platform:** Linux
 
 **Licence:** GPL-3.0-or-later
 
-> **Safety status:** The version 1.8.0-181 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
+> **Safety status:** The version 1.8.0-182 filesystem-safety audit is complete. Defragment, Growth Defrag and Recover are enabled behind exact target confirmation, mounted-target refusal, durable filesystem-specific recovery and final verification. The separate Test Media utility is deliberately destructive and must be used only on sacrificial targets. See `docs/AUDIT_STATUS.md`.
 
 ## Engineering ethos
 
@@ -24,7 +24,7 @@ The project prefers the strongest justified method, not automatically the newest
 
 ## Appearance
 
-The main GTK application supports **Follow system**, **Day** and **Night** appearance modes. Follow system detects the host GTK/Mint light/dark preference and resolves it to the exact Common Day or Night palette; it does not inherit an unrelated toolkit palette. Day is the white Infiltrator palette and Night is the MB graphite/black palette with the canonical blue accent. The selected mode is persisted per user and synchronised across open windows.
+The main GTK application supports **Follow system**, **Day** and **Night** appearance modes. Follow system detects the host GTK/Mint light/dark preference and resolves it to the exact Common Day or Night palette; it does not inherit an unrelated toolkit palette. Common 1.19.10 supplies the complete layered Linux MBLINK reference face for Night — including titlebar, connection, heading, summary, detail, note, state-border and hover-accent roles — while Day supplies the matching white semantic palette. Defragmenter maps those neutral roles into its GTK selectors without redefining a private palette. The selected mode is persisted per user and synchronised across open windows.
 
 Typography is deliberately closed to the three packaged MB Corpo faces: MB Corpo A Condensed for primary titles, MB Corpo S Regular for normal interface text and MB Corpo S Bold for emphasis. Defragmenter and Test Media do not request generic system or monospace fallback families; the Debian and local installers ship and register the same verified font bundle used by MBLINK.
 
@@ -51,7 +51,7 @@ Filesystem implementations are organised below `defragger/gui/filesystems/<forma
 
 The operating system supplies raw block I/O, but filesystem parsing, placement planning, staging and metadata updates are owned by the project. Architecture and regression tests reject known external filesystem mutation/repair orchestration and duplicate implementation paths.
 
-Shared first-party primitives are consumed from the exact pinned Common 1.19.8 dependency; filesystem-specific rules remain in Defragmenter. Common supplies the generic numeric, arithmetic, byte-order, I/O, design/typography and font-provenance contracts used here, while Defragmenter keeps filesystem interpretation, target safety, placement and recovery semantics local.
+Shared first-party primitives are consumed from the exact pinned Common 1.19.10 dependency; filesystem-specific rules remain in Defragmenter. Common supplies the generic numeric, arithmetic, byte-order, exact-I/O, durable-file, design/typography and font-provenance contracts used here, while Defragmenter keeps filesystem interpretation, target safety, placement and recovery semantics local. The forensic Common pass also removed an unused Python transaction/journal implementation and unused Python raw-write path so mutation has one authoritative native durability/I/O stack instead of a second compatibility implementation.
 
 ## Build and test
 

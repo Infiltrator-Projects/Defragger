@@ -36,8 +36,8 @@ Unsupported or structurally ambiguous layouts fail closed.
 ## Source layout
 
 - `gui/ui/` — GTK presentation, coordinators and user interaction.
-- `gui/core/` — shared application protocol and transaction contracts.
-- `gui/engine/` — worker discovery/orchestration.
+- `gui/core/` — shared application protocol/data contracts.
+- `gui/engine/` — worker discovery/orchestration plus read-only compatibility I/O.
 - `gui/backends/` — plugin declarations and the single registry.
 - `gui/filesystems/<format>/` — authoritative filesystem implementations; private native C lives below `native/`.
 - `src/core/` — filesystem-neutral native safety/runtime services.

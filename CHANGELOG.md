@@ -4,6 +4,14 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-182
+
+- Advanced the exact Infiltratr Common dependency from 1.19.8 to released 1.19.10 at commit `33e69c0a462b56d388881d89c4eb49f72fa0b0fe` across the submodule, CMake build and local installer.
+- Regenerated the complete Common Day/Night adapter and mapped the new titlebar, connection, heading, summary, kicker, detail-label, note, status-border and hover-accent roles into the main GTK application and Test Media.
+- Removed the About dialog's private Night colour constants so About follows the same Common-resolved Day/Night palette as the rest of Defragmenter.
+- Removed the unused Python transaction/journal durability layer and unused Python raw-write/sync path; production mutation continues through the native writers using Common exact I/O and durable file publication/removal.
+- Strengthened architecture, GUI and release regressions so the exact 1.19.10 pin, full generated palette, semantic-role consumption and read-only Python compatibility boundary cannot silently drift.
+
 ## 1.8.0-181
 
 - Replaced the single hard-coded runtime icon path with one deterministic resolver shared by the About dialog, process-wide GTK defaults and each Defragmenter window.
