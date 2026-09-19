@@ -52,11 +52,14 @@ install -m 0644 "$FONT_WORK/mb_corpo_s_regular.ttf" "$STAGE/root/usr/share/fonts
 mkdir -p "$STAGE/root/DEBIAN"
 INSTALLED_SIZE=$(du -sk "$STAGE/root/usr" | awk '{print $1}')
 {
-    printf 'Package: linux-defragger\n'
+    printf 'Package: infiltrator-defragmenter\n'
     printf 'Version: %s\n' "$PACKAGE_VERSION"
     printf 'Section: utils\n'
     printf 'Priority: optional\n'
     printf 'Architecture: %s\n' "$ARCH"
+    printf 'Provides: linux-defragger\n'
+    printf 'Breaks: linux-defragger (<< 1.8.0-172)\n'
+    printf 'Replaces: linux-defragger (<< 1.8.0-172)\n'
     printf 'Maintainer: Shannon Smith\n'
     printf 'X-Linux-Defragger-Build: %s\n' "$BUILD_FLAVOR"
     printf 'Depends: python3, python3-gi, python3-cairo, gir1.2-gtk-3.0, libgtk-3-0t64, fontconfig, policykit-1, ca-certificates, desktop-file-utils, udisks2, util-linux, makefs, libext2fs2, libsqlite3-0, libssl3t64\n'
