@@ -4,7 +4,7 @@
 THEME_CONTRACT_VERSION = 1
 
 DAY = {
-    "background": "#F4F5F7",
+    "background": "#FFFFFF",
     "panel": "#FFFFFF",
     "card": "#F8F9FA",
     "surface": "#ECEFF2",
@@ -18,7 +18,7 @@ DAY = {
     "button_foreground": "#FFFFFF",
     "selection_background": "#DDE2E7",
     "selection_foreground": "#111418",
-    "neutral_accent": "#6F7881",
+    "neutral_accent": "#00ADEF",
     "success": "#3A8A58",
     "warning": "#9A6500",
     "fault": "#B54848",
@@ -45,7 +45,7 @@ NIGHT = {
     "button_foreground": "#111418",
     "selection_background": "#2B3137",
     "selection_foreground": "#EEF1F3",
-    "neutral_accent": "#BEC7CF",
+    "neutral_accent": "#00ADEF",
     "success": "#63AB7C",
     "warning": "#D19E47",
     "fault": "#C96B6B",
