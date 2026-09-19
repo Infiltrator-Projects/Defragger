@@ -405,6 +405,8 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
     theme_source = (GUI / "ui" / "theme.py").read_text()
     tokens_source = (GUI / "ui" / "theme_tokens.py").read_text()
     generator_source = (ROOT / "tools" / "update-theme-tokens.py").read_text()
+    about_source = (GUI / "ui" / "about.py").read_text()
+    test_media_theme = (ROOT / "test_media" / "test_media_theme.c").read_text()
     view_source = (GUI / "ui" / "window_view.py").read_text()
     application_source = (GUI / "ui" / "application.py").read_text()
 
@@ -432,6 +434,8 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
         assert forbidden_private_palette not in theme_source, (
             f"Defragger reintroduced private theme truth: {forbidden_private_palette}"
         )
+    assert "#050608" not in about_source.lower()
+    assert "#eef1f3" not in about_source.lower()
 
     common_design = ROOT / "shared" / "infiltratr-common" / "design" / "infiltrator-design-v1.json"
     assert common_design.is_file()
@@ -451,6 +455,34 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
     assert namespace["TYPOGRAPHY"]["ui_bold_weight"] == design["typography"]["ui_bold_weight"]
     assert namespace["TYPOGRAPHY"]["font_files"] == design["typography"]["font_files"]
     assert namespace["METRICS"] == design["metrics"]
+
+    for role in (
+        "titlebar",
+        "connection",
+        "connection_border",
+        "heading",
+        "summary",
+        "kicker",
+        "detail_label",
+        "note",
+        "status_border",
+        "accent_hover",
+    ):
+        assert f'p["{role}"]' in theme_source, (
+            f"GTK theme does not consume Common 1.19.10 role {role}"
+        )
+    for role in (
+        "titlebar_rgb",
+        "connection_rgb",
+        "connection_border_rgb",
+        "heading_rgb",
+        "summary_rgb",
+        "detail_label_rgb",
+        "note_rgb",
+        "status_border_rgb",
+        "accent_hover_rgb",
+    ):
+        assert f"palette->{role}" in test_media_theme
 
     assert 'Gtk.MenuItem.new_with_label("Theme")' in view_source
     assert "Gtk.RadioMenuItem" in view_source

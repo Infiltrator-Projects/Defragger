@@ -215,12 +215,12 @@ def test_build_and_path_registry_install_native_workers() -> None:
 
 def test_infiltratr_common_integration() -> None:
     common = ROOT / "shared" / "infiltratr-common"
-    assert (common / "VERSION").read_text().strip() == "1.19.8"
+    assert (common / "VERSION").read_text().strip() == "1.19.10"
     gitmodules = (ROOT / ".gitmodules").read_text()
     assert "shared/infiltratr-common" in gitmodules
     assert "Infiltrator-Libraries.git" in gitmodules
     cmake = _cmake_source()
-    assert "3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9" in cmake
+    assert "33e69c0a462b56d388881d89c4eb49f72fa0b0fe" in cmake
     assert "add_subdirectory(" in cmake
     assert "InfiltratrCommon::Common" in cmake
     assert "set(INFILTRATR_COMMON_BUILD_TESTS OFF)" in cmake
@@ -231,8 +231,8 @@ def test_infiltratr_common_integration() -> None:
     typography_vendor = (ROOT / "packaging" / "vendor-mb-fonts.cmake").read_text()
     assert "InfiltratrTypographyAssets.cmake" in typography_vendor
     assert "Verified MB Corpo archive was not materialised" in typography_vendor
-    assert 'COMMON_VERSION="1.19.8"' in local_installer
-    assert 'COMMON_COMMIT="3bfcb6f76ca44ac33bc2fee54fb114caa0eca5f9"' in local_installer
+    assert 'COMMON_VERSION="1.19.10"' in local_installer
+    assert 'COMMON_COMMIT="33e69c0a462b56d388881d89c4eb49f72fa0b0fe"' in local_installer
     device = (ROOT / "src" / "core" / "ld_device.c").read_text()
     assert "infiltratr_realpath_copy" in device
     assert "infiltratr_read_u64_file" in device
@@ -340,6 +340,20 @@ def test_infiltratr_common_integration() -> None:
     assert "infiltratr_typography()" in test_media_theme
     assert "infiltratr_design_metrics()" in test_media_theme
     assert "infiltratr_theme_resolve" in test_media_theme
+    for role in (
+        "titlebar_rgb",
+        "connection_rgb",
+        "connection_border_rgb",
+        "heading_rgb",
+        "summary_rgb",
+        "detail_label_rgb",
+        "note_rgb",
+        "status_border_rgb",
+        "accent_hover_rgb",
+    ):
+        assert f"palette->{role}" in test_media_theme, (
+            f"Test Media does not consume Common 1.19.10 role {role}"
+        )
 
     protocol = (ROOT / "src" / "core" / "ld_protocol.c").read_text()
     assert "infiltratr_escape_json" in protocol
