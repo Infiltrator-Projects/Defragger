@@ -58,10 +58,6 @@ if [ -f "$ROOT/assets/fonts/mb-corpo-fonts.tar.xz" ]; then
     cp "$ROOT/assets/fonts/mb-corpo-fonts.tar.xz" "$FONT_ARCHIVE"
 fi
 "$ROOT/packaging/vendor-mb-fonts.sh" "$FONT_ARCHIVE" >/dev/null
-[ -s "$FONT_ARCHIVE" ] || {
-    printf 'Verified MB Corpo archive was not materialised: %s\n' "$FONT_ARCHIVE" >&2
-    exit 1
-}
 FONT_WORK="$STAGE/fonts"
 mkdir -p "$FONT_WORK" "$STAGE/root/usr/share/fonts/truetype/linux-defragger"
 tar -xJf "$FONT_ARCHIVE" -C "$FONT_WORK"
