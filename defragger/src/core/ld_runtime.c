@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ld_runtime.h"
 
+#include <infiltratr/arithmetic.h>
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,7 +47,12 @@ char *ld_xstrdup(const char *text) {
 }
 
 char *ld_xstrndup(const char *text, size_t length) {
-    char *copy = ld_xmalloc(length + 1);
+    size_t allocation = 0U;
+    if (!infiltratr_size_add_checked(length, 1U, &allocation)) {
+        errno = EOVERFLOW;
+        ld_die_errno("strndup size");
+    }
+    char *copy = ld_xmalloc(allocation);
     memcpy(copy, text, length);
     copy[length] = '\0';
     return copy;
