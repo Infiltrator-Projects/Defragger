@@ -6,7 +6,7 @@ Completed: 2026-08-25
 Extended: 2026-09-19
 
 Applies to: release version 1.8.0-172
-Audited source commit: 5550f1fb629c9267fcfacd5588d43ab67b323615
+Audited source commit: e31601822d264f0cd977b6763b3d89f01a6175b2
 Audited release-governance commit: 265a3dc8d6ceddd83f6c0e0cb4f38aea61254f94
 
 Audited writer IDs: fat12, fat16, fat32, exfat, ntfs, ext4, xfs, affs, sfs, hfsplus
