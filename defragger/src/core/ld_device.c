@@ -207,10 +207,142 @@ bool ld_device_number_is_mounted(dev_t device_number) {
     return mounted;
 }
 
+static void ld_decode_mount_field(char *value) {
+    if (value == NULL) return;
+    char *read_cursor = value;
+    char *write_cursor = value;
+    while (*read_cursor != '\0') {
+        if (read_cursor[0] == '\\' &&
+            read_cursor[1] >= '0' && read_cursor[1] <= '7' &&
+            read_cursor[2] >= '0' && read_cursor[2] <= '7' &&
+            read_cursor[3] >= '0' && read_cursor[3] <= '7') {
+            const unsigned decoded =
+                (unsigned)(read_cursor[1] - '0') * 64U +
+                (unsigned)(read_cursor[2] - '0') * 8U +
+                (unsigned)(read_cursor[3] - '0');
+            *write_cursor++ = (char)decoded;
+            read_cursor += 4;
+        } else {
+            *write_cursor++ = *read_cursor++;
+        }
+    }
+    *write_cursor = '\0';
+}
+
+static bool ld_mount_source_matches_regular_file(const char *real_path) {
+    FILE *file = fopen("/proc/self/mountinfo", "r");
+    if (file == NULL) ld_die_errno("open /proc/self/mountinfo");
+
+    char *line = NULL;
+    size_t capacity = 0U;
+    bool mounted = false;
+    while (getline(&line, &capacity, file) >= 0) {
+        char *separator = strstr(line, " - ");
+        if (separator == NULL) continue;
+        char *cursor = separator + 3;
+        char *filesystem_end = strchr(cursor, ' ');
+        if (filesystem_end == NULL) continue;
+        cursor = filesystem_end + 1;
+        char *source_end = strchr(cursor, ' ');
+        if (source_end == NULL) continue;
+        *source_end = '\0';
+        ld_decode_mount_field(cursor);
+
+        char *resolved = realpath(cursor, NULL);
+        if (resolved != NULL) {
+            mounted = strcmp(resolved, real_path) == 0;
+            free(resolved);
+        }
+        *source_end = ' ';
+        if (mounted) break;
+    }
+    free(line);
+    fclose(file);
+    return mounted;
+}
+
+static bool ld_loop_backing_file_matches(const char *sysfs_path,
+                                         const char *real_path) {
+    char backing_path[PATH_MAX];
+    int length = snprintf(backing_path, sizeof(backing_path),
+                          "%s/loop/backing_file", sysfs_path);
+    if (length < 0 || (size_t)length >= sizeof(backing_path)) return false;
+
+    char raw[PATH_MAX];
+    if (!infiltratr_read_text_file(backing_path, raw, sizeof(raw))) return false;
+    size_t raw_length = strlen(raw);
+    while (raw_length > 0U &&
+           (raw[raw_length - 1U] == '\n' || raw[raw_length - 1U] == '\r')) {
+        raw[--raw_length] = '\0';
+    }
+    if (raw_length == 0U) return false;
+
+    char candidate[PATH_MAX];
+    if (raw[0] == '/') {
+        length = snprintf(candidate, sizeof(candidate), "%s", raw);
+    } else {
+        length = snprintf(candidate, sizeof(candidate), "/%s", raw);
+    }
+    if (length < 0 || (size_t)length >= sizeof(candidate)) return false;
+
+    char *resolved = realpath(candidate, NULL);
+    if (resolved == NULL) return false;
+    const bool match = strcmp(resolved, real_path) == 0;
+    free(resolved);
+    return match;
+}
+
+static bool ld_regular_file_loop_is_mounted(const char *real_path) {
+    DIR *directory = opendir("/sys/dev/block");
+    if (directory == NULL) return false;
+
+    bool mounted = false;
+    struct dirent *entry = NULL;
+    while ((entry = readdir(directory)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+        dev_t device = 0;
+        if (!ld_parse_device_number(entry->d_name, &device)) continue;
+
+        char sysfs_path[PATH_MAX];
+        if (!ld_resolve_sysfs_device(device, sysfs_path, sizeof(sysfs_path)))
+            continue;
+        if (ld_loop_backing_file_matches(sysfs_path, real_path) &&
+            ld_device_number_is_mounted(device)) {
+            mounted = true;
+            break;
+        }
+    }
+    closedir(directory);
+    return mounted;
+}
+
 bool ld_path_is_mounted(const char *path) {
+    if (path == NULL) {
+        errno = EINVAL;
+        ld_die_errno("stat device");
+    }
+
+    char *resolved = realpath(path, NULL);
+    if (resolved == NULL) ld_die_errno("realpath target");
+
     struct stat status;
-    if (stat(path, &status) != 0) ld_die_errno("stat device");
-    return S_ISBLK(status.st_mode) && ld_device_number_is_mounted(status.st_rdev);
+    if (stat(resolved, &status) != 0) {
+        const int failure = errno;
+        free(resolved);
+        errno = failure;
+        ld_die_errno("stat device");
+    }
+
+    bool mounted = false;
+    if (S_ISBLK(status.st_mode)) {
+        mounted = ld_device_number_is_mounted(status.st_rdev);
+    } else if (S_ISREG(status.st_mode)) {
+        mounted = ld_mount_source_matches_regular_file(resolved) ||
+                  ld_regular_file_loop_is_mounted(resolved);
+    }
+
+    free(resolved);
+    return mounted;
 }
 
 /*

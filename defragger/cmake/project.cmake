@@ -156,6 +156,34 @@ target_compile_options(linux-defragger-core PRIVATE ${LD_WARNING_FLAGS})
 target_compile_definitions(linux-defragger-core PUBLIC _FILE_OFFSET_BITS=64 _GNU_SOURCE)
 target_link_libraries(linux-defragger-core PUBLIC InfiltratrCommon::Common)
 
+# C++17 owns application-level contracts and orchestration where value types,
+# scoped state and RAII improve the implementation. Filesystem parsing and
+# mutation remain in the existing native C engines.
+add_library(linux-defragger-runtime-cpp STATIC
+    native/runtime.cpp)
+target_include_directories(linux-defragger-runtime-cpp PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/native"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-runtime-cpp PRIVATE ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-runtime-cpp PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-runtime-cpp PUBLIC
+    linux-defragger-core InfiltratrCommon::Common)
+
+add_executable(linux-defragger-operation-engine-cpp
+    native/operation_engine.cpp)
+target_include_directories(linux-defragger-operation-engine-cpp PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/native"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${LD_GENERATED_DIR}")
+target_compile_options(linux-defragger-operation-engine-cpp PRIVATE
+    ${LD_WARNING_FLAGS})
+target_compile_definitions(linux-defragger-operation-engine-cpp PRIVATE
+    _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+target_link_libraries(linux-defragger-operation-engine-cpp PRIVATE
+    linux-defragger-runtime-cpp linux-defragger-core)
+
 # FAT remains native C, but it is a private implementation detail of the
 # authoritative gui/filesystems/fat plugin.  There is deliberately no second
 # native filesystem registry or plugin ABI.
@@ -475,6 +503,23 @@ install(FILES LICENSE
         DESTINATION share/doc/linux-defragger RENAME COPYING.GPL-3.0)
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(linux-defragger-cpp-runtime-test
+        tests/test_cpp_runtime.cpp)
+    target_include_directories(linux-defragger-cpp-runtime-test PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/native"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+        "${LD_GENERATED_DIR}")
+    target_compile_options(linux-defragger-cpp-runtime-test PRIVATE
+        ${LD_WARNING_FLAGS})
+    target_compile_definitions(linux-defragger-cpp-runtime-test PRIVATE
+        _FILE_OFFSET_BITS=64 _GNU_SOURCE)
+    target_link_libraries(linux-defragger-cpp-runtime-test PRIVATE
+        linux-defragger-runtime-cpp linux-defragger-core)
+    add_test(NAME linux-defragger-cpp-runtime
+        COMMAND linux-defragger-cpp-runtime-test)
+    add_test(NAME linux-defragger-operation-engine-cpp-manifest
+        COMMAND linux-defragger-operation-engine-cpp --list-plugins)
+
     add_executable(linux-defragger-apfs-native-test
         tests/test_apfs_native.c)
     target_include_directories(linux-defragger-apfs-native-test PRIVATE
