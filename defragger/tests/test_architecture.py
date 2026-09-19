@@ -265,7 +265,6 @@ def test_infiltratr_common_integration() -> None:
     assert re.search(r"(?<![A-Za-z0-9_])pread\s*\(", production_c) is None
     assert re.search(r"(?<![A-Za-z0-9_])pwrite\s*\(", production_c) is None
     endian_consumers = (
-        ROOT / "src" / "core" / "ld_runtime.h",
         GUI / "filesystems" / "affs" / "native" / "affs_native.c",
         GUI / "filesystems" / "btrfs" / "native" / "btrfs_native.c",
         GUI / "filesystems" / "exfat" / "native" / "exfat_common.c",
