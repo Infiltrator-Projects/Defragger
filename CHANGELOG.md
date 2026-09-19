@@ -4,6 +4,12 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-181
+
+- Replaced the single hard-coded runtime icon path with one deterministic resolver shared by the About dialog, process-wide GTK defaults and each Defragmenter window.
+- The resolver now tries the packaged private artwork, the installed 256×256 hicolor artwork and the source-tree artwork before falling back to the icon theme, preventing the missing-image placeholder seen when one installation path is unavailable.
+- Debian package construction now fails if the private application icon, hicolor desktop icon or Mint app-install icon is missing or differs byte-for-byte from the approved artwork; the package regression exercises that contract.
+
 ## 1.8.0-180
 
 - Advanced the exact Infiltratr Common dependency from 1.19.6 to released 1.19.8.
