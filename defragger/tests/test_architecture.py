@@ -713,7 +713,7 @@ def test_test_media_companion_is_all_c() -> None:
 
     architecture_doc = (REPO_ROOT / "docs" / "ARCHITECTURE.md").read_text()
     deb_builder = (ROOT / "packaging" / "build-deb.sh").read_text()
-    assert "per-filesystem native analysers / planners / writers" in architecture_doc
+    assert "per-filesystem native C analysers / planners / writers" in architecture_doc
     assert "Amiga SFS0 and HFS+/HFSX filesystems" in deb_builder
     assert "install(FILES README.md" in cmake
     assert "docs/AUDIT_STATUS.md" not in cmake
