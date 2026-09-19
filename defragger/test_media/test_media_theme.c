@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "test_media.h"
 
-#include <gtk/gtk.h>
+#include <infiltratr/design.h>
 
-#define LDTM_MB_BODY_FAMILY "MB Corpo S Title WEB"
-#define LDTM_MB_TITLE_FAMILY "MB Corpo A Title Cond WEB"
+#include <gtk/gtk.h>
 
 void ldtm_apply_mb_theme(void) {
     GdkScreen *screen = gdk_screen_get_default();
     GtkCssProvider *provider;
     char *css;
     GError *error = NULL;
-    if (screen == NULL) return;
+    const InfiltratrTypography *typography = infiltratr_typography();
+    const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
+    if (screen == NULL || typography == NULL || metrics == NULL) return;
 
     /*
-     * Test Media is packaged with the same three verified MB Corpo faces as
-     * the main application. Keep typography deterministic with no generic or
-     * host-selected font escape hatch.
+     * Common owns family identity and neutral structural metrics. Test Media
+     * packages the verified faces and deliberately omits platform fallbacks.
      */
     css = g_strdup_printf(
         "* { font-family: \"%s\"; color: #edf0f2; }"
@@ -29,7 +29,7 @@ void ldtm_apply_mb_theme(void) {
         "menuitem { padding: 7px 11px; }"
         "menuitem:hover { background-color: #282c30; }"
         "frame > border { background-color: #0b0d0f; border: 1px solid #2c3135; border-radius: 5px; }"
-        "button { background-image: none; background-color: #191c1f; color: #dde1e4; border: 1px solid #5f666c; border-radius: 3px; padding: 7px 13px; min-height: 27px; box-shadow: none; text-shadow: none; }"
+        "button { background-image: none; background-color: #191c1f; color: #dde1e4; border: 1px solid #5f666c; border-radius: %upx; padding: 7px 13px; min-height: 27px; box-shadow: none; text-shadow: none; }"
         "button:hover { background-color: #24282c; border-color: #9da3a8; color: #ffffff; }"
         "button:active, button:checked { background-color: #30353a; border-color: #b6bbc0; }"
         "button:disabled { color: #555d63; border-color: #2a2e31; background-color: #101214; }"
@@ -48,7 +48,7 @@ void ldtm_apply_mb_theme(void) {
         "scrollbar slider:hover { background-color: #858c92; }"
         "separator { background-color: #30353a; }"
         "tooltip { background-color: #1a1d20; color: #f1f2f3; border: 1px solid #5d646a; }",
-        LDTM_MB_BODY_FAMILY, LDTM_MB_TITLE_FAMILY);
+        typography->ui_family, typography->brand_family, metrics->small_radius);
 
     provider = gtk_css_provider_new();
     if (gtk_css_provider_load_from_data(provider, css, -1, &error)) {
