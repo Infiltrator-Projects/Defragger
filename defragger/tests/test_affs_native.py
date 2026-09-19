@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = Path(os.environ.get("LINUX_DEFRAGGER_BUILD_DIR", ROOT / "build"))
 WORKER = BUILD / "linux-defragger-affs-worker"
+MAPPER = BUILD / "linux-defragger-mapper"
 BLOCK_SIZE = 512
 
 
@@ -35,6 +36,17 @@ def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def analyse(path: Path) -> dict:
     return json.loads(run("analyse-json", path).stdout)
+
+
+def map_cpp(path: Path) -> dict:
+    completed = subprocess.run(
+        [str(MAPPER), str(path), "--fstype", "affs", "--cells", "128"],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return json.loads(completed.stdout)
 
 
 def fixture(name: str, directory: str | Path) -> Path:
@@ -133,9 +145,14 @@ def test_mutation_paths(work: Path) -> None:
         before = analyse(path)
         assert before["variant"] == variant
         assert before["fragmented_files"] > 0
+        mapped_before = map_cpp(path)
+        assert mapped_before["filesystem"] == "affs"
+        assert mapped_before["total_units"] == before["total_blocks"]
+        assert mapped_before["fragmented_files"] == before["fragmented_files"]
         mutate(path, operation)
         after = analyse(path)
         assert after["fragmented_files"] == 0
+        assert map_cpp(path)["fragmented_files"] == 0
         run("identify", path)
 
 
@@ -264,6 +281,7 @@ def test_legacy_recovery_journal_fails_closed(work: Path) -> None:
 
 def main() -> None:
     assert WORKER.is_file(), f"missing native Amiga worker: {WORKER}"
+    assert MAPPER.is_file(), f"missing C++ mapper: {MAPPER}"
     with tempfile.TemporaryDirectory(prefix="linux-defragger-affs-") as directory:
         work = Path(directory)
         test_mutation_paths(work)

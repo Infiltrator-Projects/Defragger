@@ -14,8 +14,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = Path(os.environ.get("LINUX_DEFRAGGER_BUILD_DIR", ROOT / "build"))
+MAPPER = BUILD / "linux-defragger-mapper"
 sys.path.insert(0, str(ROOT / "tests"))
 from ntfs_test_fixture import make_image as make_ntfs_image  # noqa: E402
+
+
+def map_json(filesystem: str, image: Path, cells: int = 128) -> dict:
+    completed = subprocess.run(
+        [str(MAPPER), str(image), "--fstype", filesystem, "--cells", str(cells)],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return json.loads(completed.stdout)
 
 
 def run_json(worker: Path, image: Path) -> dict:
@@ -67,6 +79,10 @@ def test_exfat(work: Path) -> None:
     subprocess.run([sys.executable, str(ROOT / "tests" / "make_exfat_image.py"), str(image)], check=True)
     before = run_json(worker, image)
     assert before["fragmented_files"] > 0 and before["fragmented_directories"] > 0
+    mapped_before = map_json("exfat", image)
+    assert mapped_before["filesystem"] == "exfat"
+    assert mapped_before["total_units"] == before["total_clusters"]
+    assert mapped_before["fragmented_files"] == before["fragmented_files"]
     serial = before["serial"]
     output = mutate(worker, image, "defrag", work / "exfat-defrag.journal")
     assert "exFAT unified workspace layout:" in output, output
@@ -74,6 +90,8 @@ def test_exfat(work: Path) -> None:
     packed = run_json(worker, image)
     assert packed["serial"] == serial
     assert_clean(packed, growth=False)
+    assert map_json("ntfs", image)["fragmented_files"] == 0
+    assert map_json("exfat", image)["fragmented_files"] == 0
     output = mutate(worker, image, "growth-defrag", work / "exfat-growth.journal")
     assert "exFAT unified workspace layout:" in output, output
     assert "internally verified native-C exFAT working image" not in output, output
@@ -88,6 +106,10 @@ def test_ntfs(work: Path) -> None:
     make_ntfs_image(image, fragmented_data=True, directory_data=True)
     before = run_json(worker, image)
     assert before["fragmented_files"] > 0
+    mapped_before = map_json("ntfs", image)
+    assert mapped_before["filesystem"] == "ntfs"
+    assert mapped_before["total_units"] == before["total_clusters"]
+    assert mapped_before["fragmented_files"] == before["fragmented_files"]
     serial = before["serial"]
     output = mutate(worker, image, "defrag", work / "ntfs-defrag.journal")
     assert "NTFS unified workspace layout:" in output, output
@@ -157,6 +179,10 @@ def test_ext(work: Path) -> None:
     subprocess.run([str(fixture), str(image)], check=True)
     before = run_json(worker, image)
     assert before["fragmented_files"] > 0 or before["fragmented_directories"] > 0
+    mapped_before = map_json("ext4", image)
+    assert mapped_before["filesystem"] in {"ext2", "ext3", "ext4"}
+    assert mapped_before["total_units"] == before["total_blocks"]
+    assert mapped_before["fragmented_files"] == before["fragmented_files"]
     identity = before["uuid"]
     output = mutate(worker, image, "defrag", work / "ext-defrag.journal")
     assert "EXT unified workspace layout:" in output, output
@@ -165,6 +191,7 @@ def test_ext(work: Path) -> None:
     packed = run_json(worker, image)
     assert packed["uuid"] == identity
     assert_clean(packed, growth=False)
+    assert map_json("ext4", image)["fragmented_files"] == 0
     output = mutate(worker, image, "growth-defrag", work / "ext-growth.journal")
     assert "EXT unified workspace layout:" in output, output
     assert "EXT workspace staging complete:" in output, output
@@ -176,7 +203,8 @@ def test_ext(work: Path) -> None:
 
 def main() -> None:
     for name in ("linux-defragger-ext-worker", "linux-defragger-ntfs-worker",
-                 "linux-defragger-exfat-worker", "linux-defragger-ext-fixture"):
+                 "linux-defragger-exfat-worker", "linux-defragger-ext-fixture",
+                 "linux-defragger-mapper"):
         assert (BUILD / name).is_file(), f"missing native test executable: {name}"
     with tempfile.TemporaryDirectory(prefix="linux-defragger-native83-") as directory:
         work = Path(directory)

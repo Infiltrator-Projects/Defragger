@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = Path(os.environ.get("LINUX_DEFRAGGER_BUILD_DIR", ROOT / "build"))
 WORKER = BUILD / "linux-defragger-hfsplus-worker"
+MAPPER = BUILD / "linux-defragger-mapper"
 FIXTURE = ROOT / "tests" / "make_hfsplus_fixture.py"
 sys.path.insert(0, str(ROOT / "tests"))
 import make_hfsplus_fixture as fixture  # noqa: E402
@@ -38,6 +39,17 @@ def run(*args: object, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def analyse(path: Path) -> dict:
     return json.loads(run("analyse-json", path).stdout)
+
+
+def map_cpp(path: Path) -> dict:
+    completed = subprocess.run(
+        [str(MAPPER), str(path), "--fstype", "hfsplus", "--cells", "128"],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return json.loads(completed.stdout)
 
 
 def make(path: Path, *options: str) -> None:
@@ -148,9 +160,14 @@ def test_hfsplus_defrag(work: Path) -> None:
     assert before["variant"] == "HFS+"
     assert before["regular_files"] == 2
     assert before["fragmented_files"] == 2
+    mapped_before = map_cpp(image)
+    assert mapped_before["filesystem"] == "hfsplus"
+    assert mapped_before["total_units"] == before["total_blocks"]
+    assert mapped_before["fragmented_files"] == before["fragmented_files"]
     mutate(image, "defrag")
     verify(image)
     assert analyse(image)["fragmented_files"] == 0
+    assert map_cpp(image)["fragmented_files"] == 0
 
 
 def test_hfsx_growth(work: Path) -> None:
@@ -321,6 +338,7 @@ def test_legacy_recovery_journal_fails_closed(work: Path) -> None:
 
 def main() -> None:
     assert WORKER.is_file(), f"missing native HFS+ worker: {WORKER}"
+    assert MAPPER.is_file(), f"missing C++ mapper: {MAPPER}"
     with tempfile.TemporaryDirectory(prefix="linux-defragger-hfsplus-") as directory:
         work = Path(directory)
         test_hfsplus_defrag(work)

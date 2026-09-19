@@ -13,6 +13,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+BUILD = Path(os.environ.get("LINUX_DEFRAGGER_BUILD_DIR", ROOT / "build"))
+MAPPER = BUILD / "linux-defragger-mapper"
 GUI = ROOT / "gui"
 if str(GUI) not in sys.path:
     sys.path.insert(0, str(GUI))
@@ -135,6 +137,18 @@ def test_gui_adapter_uses_native_analysis() -> None:
         _minimal_xfs(image)
         assert BACKEND.probe(str(image)) is True
         result = BACKEND.map(str(image), 32)
+        mapped = subprocess.run(
+            [str(MAPPER), str(image), "--fstype", "xfs", "--cells", "32"],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        native_map = json.loads(mapped.stdout)
+        assert native_map["filesystem"] == result["filesystem"]
+        assert native_map["total_units"] == result["total_units"]
+        assert native_map["free_bytes"] == result["free_bytes"]
+        assert native_map["fragmented_files"] == result["fragmented_files"]
         assert result["filesystem"] == "xfs"
         assert result["map_accuracy"] == "exact"
         assert result["total_units"] == 256
@@ -163,6 +177,7 @@ def test_no_python_xfs_engine_remains() -> None:
 
 
 def main() -> None:
+    assert MAPPER.is_file(), f"missing C++ mapper: {MAPPER}"
     test_worker_identify_and_analysis()
     test_gui_adapter_uses_native_analysis()
     test_no_python_xfs_engine_remains()
