@@ -367,10 +367,9 @@ Json map_xfs(const BackendInfo& backend, const std::string& path,
             "allocation_groups", "bnobt_blocks", "fdblocks",
             "inodes_scanned", "malformed_inodes", "realtime_inodes",
             "inobt_blocks", "bmap_blocks"});
-    if (const Json* value = details.find("agblocks") != details.end()
-                                ? &details.find("agblocks")->second : nullptr) {
-        details["allocation_group_blocks"] = *value;
-        details.erase("agblocks");
+    if (const auto found = details.find("agblocks"); found != details.end()) {
+        details["allocation_group_blocks"] = found->second;
+        details.erase(found);
     }
     if (const auto found = details.find("fdblocks"); found != details.end()) {
         details["superblock_free_blocks"] = found->second;
