@@ -4,6 +4,12 @@ This changelog records user-visible, compatibility, architecture and validation 
 
 ## Unreleased
 
+## 1.8.0-184
+
+- Fixed the About dialog's missing-image placeholder by clearing GTK3's default `logo-icon-name` before assigning the approved Defragmenter pixbuf; GTK3 gives the named-icon property precedence over `logo`.
+- Kept the existing deterministic private/hicolor/source artwork resolver and the single approved 256×256 icon asset; no substitute artwork or duplicate icon payload was introduced.
+- Added a regression that requires the GTK3 precedence override to occur before `dialog.set_logo(logo)`, preventing the same placeholder regression from returning.
+
 ## 1.8.0-183
 
 - Completed a second forensic Common 1.19.10 reuse pass without moving filesystem semantics or recovery policy out of Defragmenter.
