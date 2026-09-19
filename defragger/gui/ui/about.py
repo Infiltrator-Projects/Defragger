@@ -107,6 +107,10 @@ def show_common_about(parent: Gtk.Window, info: AboutInfo) -> None:
         dialog.set_license(info.license_name)
     logo = _about_logo()
     if logo is not None:
+        # GtkAboutDialog's logo-icon-name defaults to "image-missing" in GTK3
+        # and overrides the pixbuf logo. Clear it before installing the
+        # approved artwork so the real Defragmenter icon is actually shown.
+        dialog.set_logo_icon_name(None)
         dialog.set_logo(logo)
     dialog.run()
     dialog.destroy()
