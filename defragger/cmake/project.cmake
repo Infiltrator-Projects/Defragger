@@ -160,6 +160,8 @@ target_link_libraries(linux-defragger-core PUBLIC InfiltratrCommon::Common)
 # scoped state and RAII improve the implementation. Filesystem parsing and
 # mutation remain in the existing native C engines.
 add_library(linux-defragger-runtime-cpp STATIC
+    native/json.cpp
+    native/process.cpp
     native/runtime.cpp)
 target_include_directories(linux-defragger-runtime-cpp PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/native"

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "runtime.hpp"
+#include "json.hpp"
+#include "process.hpp"
 
 #include <cstdio>
 #include <string>
@@ -48,6 +50,20 @@ int main() {
     const auto output = without_options(input, blocked);
     const std::vector<std::string> expected{"--keep", "a", "--tail"};
     ok = check(output == expected, "unsupported option filtering") && ok;
+
+    const Json parsed = Json::parse(
+        R"({"text":"A\\nB","number":1234567890123,"truth":true,"array":[1,null]})");
+    ok = check(parsed.at("text").string() == "A\nB", "JSON string escape") && ok;
+    ok = check(parsed.at("number").unsigned_value() == 1234567890123ULL,
+               "JSON exact integer") && ok;
+    ok = check(Json::parse(parsed.dump()).at("truth").boolean(),
+               "JSON round trip") && ok;
+
+    const CommandResult command =
+        run_capture({"/bin/sh", "-c", "printf native-cpp; printf warning >&2"});
+    ok = check(command.return_code == 0, "process exit code") && ok;
+    ok = check(command.standard_output == "native-cpp", "process stdout") && ok;
+    ok = check(command.standard_error == "warning", "process stderr") && ok;
 
     const std::string manifest = registry_manifest_json();
     ok = check(manifest.find("\"schema\":3") != std::string::npos,
