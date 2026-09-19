@@ -454,10 +454,13 @@ def test_theme_modes_are_persistent_and_shared_across_windows() -> None:
     assert "sync_theme_menu" in view_source
     assert "apply_theme(load_theme_mode())" in application_source
 
-    # Follow-system must leave host colours authoritative rather than
-    # reapplying a Common palette when the operating system owns appearance.
-    assert "if resolved is ThemeMode.DAY:" in theme_source
-    assert "elif resolved is ThemeMode.NIGHT:" in theme_source
+    # Follow-system is policy, not a third palette: host light/dark state
+    # must resolve to the exact Common Day or Night palette and update live.
+    assert "def _system_prefers_dark()" in theme_source
+    assert "notify::gtk-theme-name" in theme_source
+    assert "notify::gtk-application-prefer-dark-theme" in theme_source
+    assert "resolved is ThemeMode.SYSTEM and _system_prefers_dark()" in theme_source
+    assert "_night_css() if effective is ThemeMode.NIGHT else _day_css()" in theme_source
 
 
 def test_mb_typography_has_no_system_font_escape_hatches() -> None:
