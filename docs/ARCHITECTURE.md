@@ -112,7 +112,7 @@ The project assumes the kernel, libc, required libraries and storage hardware ho
 
 ## Common
 
-`shared/infiltratr-common` is pinned to Infiltratr Common 1.19.6 at exact commit `4964786ebf1e66dfdb9309c3813dcb17bce19eb5`.
+`shared/infiltratr-common` is pinned to Infiltratr Common 1.19.6 at exact commit `a0e26896cc2a5674a138b29f009a7b30f0d636c6`.
 
 Common is authoritative for reusable mechanisms whose semantics are genuinely generic. If Defragmenter has a stronger implementation of a generic primitive, the preferred direction is to improve Common until its contract preserves that correctness, performance and resilience, then remove the local duplicate.
 
