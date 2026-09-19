@@ -658,7 +658,7 @@ def test_user_facing_branding_is_defragmenter() -> None:
         text=True,
     ).strip() == "6c860b623ef3e9608e8d5bbde5fa91cb4fe6783f"
     png = icon_path.read_bytes()
-    assert png[:8] == b"\\x89PNG\\r\\n\\x1a\\n"
+    assert png[:8] == bytes((0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
     assert int.from_bytes(png[16:20], "big") == 256
     assert int.from_bytes(png[20:24], "big") == 256
     assert not (ROOT / "packaging" / "io.github.linuxdefragger.svg").exists()
