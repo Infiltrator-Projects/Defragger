@@ -27,11 +27,24 @@ KEYS = (
 def render() -> str:
     data = json.loads(COMMON.read_text(encoding="utf-8"))
     theme = data["theme"]
+    typography = data["typography"]
+    metrics = data["metrics"]
     lines = [
         "# SPDX-License-Identifier: GPL-3.0-or-later",
         '"""Generated from Infiltratr Common design tokens. Do not edit."""',
         "",
         f"THEME_CONTRACT_VERSION = {int(theme['contract_version'])}",
+        "",
+        "TYPOGRAPHY = " + repr({
+            "ui_family": typography["ui_family"],
+            "brand_family": typography["brand_family"],
+            "ui_regular_weight": int(typography["ui_regular_weight"]),
+            "ui_bold_weight": int(typography["ui_bold_weight"]),
+            "brand_weight": int(typography["brand_weight"]),
+            "font_files": dict(typography["font_files"]),
+        }),
+        "",
+        "METRICS = " + repr({key: int(value) for key, value in metrics.items()}),
         "",
     ]
     for name, mode in (("DAY", "day"), ("NIGHT", "night")):
